@@ -1,0 +1,90 @@
+// NOVA Database Schema
+// Human Energy Intelligence System
+// SQLite version for local development
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// User Domain
+// ============================================
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String
+  metadata  String   @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  profile      Profile?
+  dailyEntries DailyEntry[]
+
+  @@map("users")
+}
+
+// ============================================
+// Profile Domain
+// ============================================
+
+model Profile {
+  id        String   @id @default(uuid())
+  userId    String   @unique @map("user_id")
+  weight    Float
+  height    Float
+  age       Int
+  sex       String   // male, female, other
+  objective String   // weight_loss, muscle_gain, maintenance, energy, sleep, stress
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("profiles")
+}
+
+// ============================================
+// Daily Entry Domain
+// ============================================
+
+model DailyEntry {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  date       DateTime
+  type       String   // food, exercise, sleep, mood, energy, custom
+  data       String   @default("{}")
+  novaPoints Int      @default(0) @map("nova_points")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Indexes
+  @@index([userId, date])
+  @@index([userId, type])
+  @@map("daily_entries")
+}
+
+// ============================================
+// Agent Domain
+// ============================================
+
+model Agent {
+  id        String   @id @default(uuid())
+  type      String   // coach, analyst, planner, motivator
+  config    String   @default("{}")
+  status    String   @default("active") // active, inactive, learning
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("agents")
+}

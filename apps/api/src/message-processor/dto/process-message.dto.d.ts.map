@@ -1,0 +1,1 @@
+{"version":3,"file":"process-message.dto.d.ts","sourceRoot":"","sources":["process-message.dto.ts"],"names":[],"mappings":"AAQA,OAAO,KAAK,EAAE,WAAW,EAAE,MAAM,aAAa,CAAC;AAE/C,qBAAa,iBAAiB;IAG5B,MAAM,EAAE,MAAM,CAAC;IAKf,OAAO,EAAE,MAAM,CAAC;IAIhB,QAAQ,CAAC,EAAE,MAAM,CAAC;IAIlB,WAAW,CAAC,EAAE,WAAW,CAAC;CAC3B"}

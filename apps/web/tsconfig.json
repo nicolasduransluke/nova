@@ -1,0 +1,15 @@
+{
+  "extends": "@nova/config/typescript/nextjs.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@nova/types": ["../../packages/types/src"],
+      "@nova/ui": ["../../packages/ui/src"],
+      "@nova/utils": ["../../packages/utils/src"]
+    },
+    "types": ["jest", "node", "@testing-library/jest-dom"]
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "jest.setup.ts"],
+  "exclude": ["node_modules"]
+}

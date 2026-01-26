@@ -1,0 +1,7 @@
+{
+  "extends": "@nova/config/typescript/nextjs.json",
+  "compilerOptions": {
+    "outDir": "./dist"
+  },
+  "include": ["src/**/*"]
+}
