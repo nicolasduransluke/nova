@@ -2,7 +2,12 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { OrchestratorService, OrchestratorDependencies } from './orchestrator.service';
 import { ClaudeClientService } from '../claude-client/claude-client.service';
 import { MetabolicAgentService } from './metabolic-agent.service';
+import { NutritionAgentService } from './nutrition-agent.service';
+import { TrainingAgentService } from './training-agent.service';
+import { SleepAgentService } from './sleep-agent.service';
+import { EnergyAgentService } from './energy-agent.service';
 import { IntegratorAgentService } from './integrator-agent.service';
+import { AgentRegistryService } from './agent-registry.service';
 import type { User, Profile, DailyEntry, Message } from '@nova/types';
 
 describe('OrchestratorService', () => {
@@ -53,7 +58,12 @@ describe('OrchestratorService', () => {
         OrchestratorService,
         ClaudeClientService,
         MetabolicAgentService,
+        NutritionAgentService,
+        TrainingAgentService,
+        SleepAgentService,
+        EnergyAgentService,
         IntegratorAgentService,
+        AgentRegistryService,
       ],
     }).compile();
 

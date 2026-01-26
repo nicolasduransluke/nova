@@ -62,8 +62,66 @@ export interface CreateDailyEntryDTO {
 }
 
 // Agent Domain
-export type AgentType = 'coach' | 'analyst' | 'planner' | 'motivator';
+export type AgentType =
+  | 'metabolic'
+  | 'nutrition'
+  | 'training'
+  | 'sleep'
+  | 'energy'
+  | 'integrator'
+  | 'coach'
+  | 'analyst'
+  | 'planner'
+  | 'motivator';
+
 export type AgentStatus = 'active' | 'inactive' | 'learning';
+
+// Specialized Agent Input Types
+export interface NutritionData {
+  meals?: Array<{
+    name: string;
+    calories?: number;
+    protein?: number;
+    carbs?: number;
+    fat?: number;
+    time?: string;
+  }>;
+  totalCalories?: number;
+  totalProtein?: number;
+  totalCarbs?: number;
+  totalFat?: number;
+}
+
+export interface TrainingData {
+  type?: 'strength' | 'cardio' | 'flexibility' | 'sports' | 'mixed';
+  duration?: number; // minutes
+  exercises?: Array<{
+    name: string;
+    sets?: number;
+    reps?: number;
+    weight?: number;
+    duration?: number;
+  }>;
+  intensity?: 'low' | 'moderate' | 'high' | 'very_high';
+  caloriesBurned?: number;
+}
+
+export interface SleepData {
+  duration?: number; // hours
+  quality?: number; // 1-5
+  bedtime?: string;
+  wakeTime?: string;
+  interruptions?: number;
+  notes?: string;
+}
+
+export interface EnergyData {
+  level?: number; // 1-5
+  time?: 'morning' | 'afternoon' | 'evening' | 'night';
+  mood?: 'great' | 'good' | 'neutral' | 'low' | 'bad';
+  stressLevel?: number; // 1-5
+  notes?: string;
+}
 
 export interface Agent {
   id: string;

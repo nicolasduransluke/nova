@@ -12,8 +12,8 @@ import type {
   Message,
 } from '@nova/types';
 import { ClaudeClientService } from '../claude-client/claude-client.service';
-import { MetabolicAgentService } from './metabolic-agent.service';
 import { IntegratorAgentService, IntegratorInput } from './integrator-agent.service';
+import { AgentRegistryService } from './agent-registry.service';
 import { AgentInput } from './base-agent.abstract';
 
 export interface OrchestratorDependencies {
@@ -31,7 +31,7 @@ export class OrchestratorService {
 
   constructor(
     private readonly claudeClient: ClaudeClientService,
-    private readonly metabolicAgent: MetabolicAgentService,
+    private readonly agentRegistry: AgentRegistryService,
     private readonly integratorAgent: IntegratorAgentService,
   ) {}
 
@@ -139,34 +139,16 @@ export class OrchestratorService {
     intent: MessageIntent,
     input: AgentInput,
   ): Promise<AgentOutput[]> {
-    const outputs: AgentOutput[] = [];
+    const startTime = Date.now();
 
-    // Route based on intent
-    const agentRouting: Record<MessageIntent, (() => Promise<AgentOutput>)[]> = {
-      weight_log: [() => this.metabolicAgent.process(input)],
-      meal_log: [], // Would route to nutrition agent in future
-      workout_log: [], // Would route to activity agent in future
-      sleep_log: [], // Would route to recovery agent in future
-      energy_check: [], // Would route to energy agent in future
-      question: [], // Questions go directly to integrator
-      greeting: [], // Greetings go directly to integrator
-      general: [], // General messages go directly to integrator
-    };
+    // Use comprehensive processing which combines intent-based and content-based routing
+    const outputs = await this.agentRegistry.processComprehensive(intent, input);
 
-    const agentCalls = agentRouting[intent] || [];
-
-    // Execute agent calls in parallel
-    if (agentCalls.length > 0) {
-      const results = await Promise.allSettled(agentCalls.map((call) => call()));
-
-      results.forEach((result, index) => {
-        if (result.status === 'fulfilled') {
-          outputs.push(result.value);
-        } else {
-          this.logger.error(`Agent ${index} failed: ${result.reason}`);
-        }
-      });
-    }
+    const duration = Date.now() - startTime;
+    this.logger.debug(
+      `Agents processed in ${duration}ms. ` +
+      `Outputs: ${outputs.length} (agents: ${outputs.map(o => o.agentType).join(', ')})`,
+    );
 
     return outputs;
   }
