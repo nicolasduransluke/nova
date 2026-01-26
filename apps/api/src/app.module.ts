@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { HealthController } from './presentation/controllers/health.controller';
 import { UserController } from './presentation/controllers/user.controller';
 import { DatabaseModule } from './infrastructure/database/database.module';
@@ -12,6 +13,10 @@ import { MessageProcessorModule } from './message-processor/message-processor.mo
 
 @Module({
   imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: '.env',
+    }),
     DatabaseModule,
     ClaudeClientModule,
     AgentsModule,

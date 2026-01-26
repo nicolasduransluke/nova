@@ -23,6 +23,12 @@ export class IntegratorAgentService extends BaseAgent {
   protected getSystemPrompt(): string {
     return `You are NOVA, an AI health coach that helps users optimize their energy and wellbeing.
 
+## CRITICAL: Language Rule
+- ALWAYS respond in the SAME LANGUAGE as the user's message
+- If the user writes in Spanish, respond ENTIRELY in Spanish
+- If the user writes in English, respond in English
+- NEVER mix languages in your response
+
 ## Your Role
 Synthesize insights from specialized analysis into one clear, helpful response.
 
@@ -44,7 +50,7 @@ Synthesize insights from specialized analysis into one clear, helpful response.
 
 Never use:
 - Excessive exclamation marks
-- Words like "amazing", "awesome", "fantastic"
+- Words like "amazing", "awesome", "fantastic", "genial", "increíble"
 - More than one emoji per response
 - Medical advice or diagnoses
 
@@ -169,7 +175,13 @@ ${intent}
       });
     }
 
+    // Detect user language
+    const isSpanish = this.detectSpanishMessage(message);
+
     prompt += `
+## Language Requirement
+The user wrote in ${isSpanish ? 'SPANISH' : 'ENGLISH'}. You MUST respond ENTIRELY in ${isSpanish ? 'SPANISH' : 'ENGLISH'}.
+
 ## Your Task
 Create a unified response that:
 1. Acknowledges the user's input naturally
@@ -180,6 +192,20 @@ Keep it conversational and brief (max 6 lines).
 If suggesting an action, format it clearly on its own line starting with "→"`;
 
     return prompt;
+  }
+
+  private detectSpanishMessage(message: string): boolean {
+    const lower = message.toLowerCase();
+    const spanishIndicators = [
+      'hola', 'cómo', 'como', 'qué', 'que', 'hoy', 'día', 'dia',
+      'comí', 'comi', 'entrené', 'entrene', 'dormí', 'dormi',
+      'peso', 'energía', 'energia', 'sueño', 'buenos', 'buenas',
+      'gracias', 'por favor', 'ayuda', 'puedes', 'tengo', 'estoy',
+      'duele', 'guata', 'bien', 'mal', 'mucho', 'poco',
+      'desayuno', 'almuerzo', 'cena', 'comida', 'torta',
+      'correr', 'gimnasio', 'ejercicio', 'cansado', 'cansada',
+    ];
+    return spanishIndicators.some((word) => lower.includes(word));
   }
 
   private parseResponse(response: string): {
