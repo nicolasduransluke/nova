@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Message, User, MessageType, PendingEntry, DailySummary } from '@nova/types';
+import type { Message, User, MessageType, DailySummary } from '@nova/types';
 import { generateId } from '@nova/utils';
 
 export interface ChatState {
@@ -9,7 +9,6 @@ export interface ChatState {
   currentUser: User | null;
   isLoading: boolean;
   error: string | null;
-  pendingEntry: PendingEntry | null;
   dailySummary: DailySummary | null;
 }
 
@@ -57,7 +56,6 @@ export const useChatStore = create<ChatStore>()(
       currentUser: null,
       isLoading: false,
       error: null,
-      pendingEntry: null,
       dailySummary: null,
 
       // Actions
@@ -98,7 +96,7 @@ export const useChatStore = create<ChatStore>()(
       },
 
       clearMessages: () => {
-        set({ messages: [], pendingEntry: null, dailySummary: null });
+        set({ messages: [], dailySummary: null });
       },
 
       setError: (error) => {
@@ -106,7 +104,7 @@ export const useChatStore = create<ChatStore>()(
       },
 
       sendUserMessage: async (content, imageUrl, explicitType) => {
-        const { addMessage, setAgentTyping, currentUser, pendingEntry } = get();
+        const { addMessage, setAgentTyping, currentUser } = get();
 
         const type = explicitType || detectMessageType(content, !!imageUrl);
 
@@ -125,10 +123,6 @@ export const useChatStore = create<ChatStore>()(
             userId: currentUser?.id || 'demo-user-001',
             content,
           };
-
-          if (pendingEntry) {
-            body.pendingEntryId = pendingEntry.id;
-          }
 
           const response = await fetch(`${API_URL}/api/messages/process/sync`, {
             method: 'POST',
@@ -149,17 +143,9 @@ export const useChatStore = create<ChatStore>()(
               sender: 'agent',
             });
 
-            // Update pending entry and daily summary from response
-            const responseData = data.data.response;
-
-            if (responseData.pendingEntry) {
-              set({ pendingEntry: responseData.pendingEntry });
-            } else if (data.data.intent === 'confirmation') {
-              set({ pendingEntry: null });
-            }
-
-            if (responseData.dailySummary) {
-              set({ dailySummary: responseData.dailySummary });
+            // Update daily summary from response
+            if (data.data.response.dailySummary) {
+              set({ dailySummary: data.data.response.dailySummary });
             }
           } else {
             addMessage({

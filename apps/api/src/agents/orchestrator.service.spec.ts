@@ -57,24 +57,10 @@ describe('OrchestratorService', () => {
       description: 'test',
       calories: 500,
       items: [{ name: 'test', calories: 500 }],
-      confirmed: false,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }),
-    updateCalorieEntry: jest.fn().mockResolvedValue({
-      id: 'calorie-1',
-      userId: 'user-1',
-      date: new Date(),
-      type: 'intake',
-      description: 'test',
-      calories: 500,
-      items: [{ name: 'test', calories: 500 }],
       confirmed: true,
       createdAt: new Date(),
       updatedAt: new Date(),
     }),
-    deleteCalorieEntry: jest.fn().mockResolvedValue(undefined),
-    getPendingCalorieEntry: jest.fn().mockResolvedValue(null),
     getTodayCalorieEntries: jest.fn().mockResolvedValue([]),
     createWeightLog: jest.fn().mockResolvedValue({
       id: 'weight-1',
@@ -192,7 +178,7 @@ describe('OrchestratorService', () => {
       expect(result.response.tone).toBe('calm');
     });
 
-    it('should process meal log and create pending entry', async () => {
+    it('should process meal log and create confirmed entry', async () => {
       const request = {
         userId: 'user-1',
         content: 'Almorcé pollo con arroz',
@@ -202,8 +188,9 @@ describe('OrchestratorService', () => {
 
       expect(result.success).toBe(true);
       expect(result.intent).toBe('meal_log');
-      expect(mockDependencies.createCalorieEntry).toHaveBeenCalled();
-      expect(result.response.pendingEntry).toBeDefined();
+      expect(mockDependencies.createCalorieEntry).toHaveBeenCalledWith(
+        expect.objectContaining({ confirmed: true }),
+      );
     });
 
     it('should process activity log', async () => {

@@ -244,7 +244,6 @@ export interface FinalResponse {
   tone: ResponseTone;
   actionItems?: string[];
   nextSteps?: string[];
-  pendingEntry?: PendingEntry;
   dailySummary?: DailySummary;
 }
 
@@ -253,7 +252,6 @@ export interface ProcessMessageRequest {
   content: string;
   imageUrl?: string;
   messageType?: MessageType;
-  pendingEntryId?: string;
 }
 
 export interface ProcessMessageResponse {

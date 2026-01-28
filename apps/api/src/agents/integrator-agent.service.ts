@@ -5,7 +5,6 @@ import type {
   FinalResponse,
   ResponseTone,
   MessageIntent,
-  PendingEntry,
   DailySummary,
 } from '@nova/types';
 import { BaseAgent, AgentInput } from './base-agent.abstract';
@@ -14,7 +13,6 @@ import { ClaudeClientService, ClaudeMessage } from '../claude-client/claude-clie
 export interface IntegratorInput extends AgentInput {
   intent: MessageIntent;
   agentOutputs: AgentOutput[];
-  pendingEntry?: PendingEntry;
   dailySummary?: DailySummary;
 }
 
@@ -91,7 +89,6 @@ Always ground responses in the user's actual data.`;
       tone,
       actionItems,
       nextSteps,
-      pendingEntry: input.pendingEntry,
       dailySummary: input.dailySummary,
     };
   }

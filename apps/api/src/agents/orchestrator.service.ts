@@ -2,7 +2,6 @@ import { Injectable, Logger } from '@nestjs/common';
 import type {
   AgentContext,
   AgentOutput,
-  FinalResponse,
   MessageIntent,
   ProcessMessageRequest,
   ProcessMessageResponse,
@@ -12,7 +11,6 @@ import type {
   Message,
   CalorieEntry,
   CalorieEntryItem,
-  PendingEntry,
   DailySummary,
   WeightLog,
 } from '@nova/types';
@@ -37,12 +35,6 @@ export interface OrchestratorDependencies {
     items: CalorieEntryItem[];
     confirmed: boolean;
   }) => Promise<CalorieEntry>;
-  updateCalorieEntry: (
-    id: string,
-    data: Partial<{ calories: number; items: string; confirmed: boolean }>,
-  ) => Promise<CalorieEntry>;
-  deleteCalorieEntry: (id: string) => Promise<void>;
-  getPendingCalorieEntry: (userId: string) => Promise<CalorieEntry | null>;
   getTodayCalorieEntries: (userId: string) => Promise<CalorieEntry[]>;
   createWeightLog: (data: { userId: string; weight: number; date: Date }) => Promise<WeightLog>;
   getRecentWeightLogs: (userId: string, limit: number) => Promise<WeightLog[]>;
@@ -70,32 +62,9 @@ export class OrchestratorService {
       // Step 1: Build context
       const context = await this.buildContext(request.userId, deps);
 
-      // Step 2: Check for pending entry
-      const pendingEntry = await deps.getPendingCalorieEntry(request.userId);
-
-      // Check if pending entry is stale (> 10 minutes)
-      if (pendingEntry) {
-        const age = Date.now() - new Date(pendingEntry.createdAt).getTime();
-        if (age > 10 * 60 * 1000) {
-          await deps.deleteCalorieEntry(pendingEntry.id);
-          this.logger.debug('Deleted stale pending entry');
-        }
-      }
-
-      // Step 3: Classify intent
+      // Step 2: Classify intent
       const intent = await this.classifyMessage(request.content);
       this.logger.debug(`Classified intent: ${intent}`);
-
-      // Step 4: Handle confirmation flow
-      if (pendingEntry && intent === 'confirmation') {
-        return this.handleConfirmation(request, context, pendingEntry, deps);
-      }
-
-      // If there's a pending entry and user sends a new log, auto-delete the pending
-      if (pendingEntry && (intent === 'meal_log' || intent === 'activity_log')) {
-        await deps.deleteCalorieEntry(pendingEntry.id);
-        this.logger.debug('Auto-deleted previous pending entry');
-      }
 
       // Step 5: Extract data from message
       const extractedData = await this.claudeClient.extractDataFromMessage(
@@ -109,7 +78,29 @@ export class OrchestratorService {
         { context, message: request.content, extractedData },
       );
 
-      // Step 7: Get today's calorie entries for daily summary
+      // Step 7: If meal_log or activity_log, create CalorieEntry (auto-confirmed)
+      if (intent === 'meal_log' || intent === 'activity_log') {
+        const items: CalorieEntryItem[] = (extractedData.items as CalorieEntryItem[]) ||
+          agentOutputs.find((o) => o.dataPoints.items)?.dataPoints.items as CalorieEntryItem[] || [];
+        const totalCalories = (extractedData.totalCalories as number) ||
+          (extractedData.caloriesBurned as number) ||
+          agentOutputs.find((o) => o.dataPoints.totalCalories)?.dataPoints.totalCalories as number ||
+          agentOutputs.find((o) => o.dataPoints.caloriesBurned)?.dataPoints.caloriesBurned as number || 0;
+
+        const entryType = intent === 'meal_log' ? 'intake' : 'burn';
+
+        await deps.createCalorieEntry({
+          userId: request.userId,
+          date: new Date(),
+          type: entryType,
+          description: request.content,
+          calories: Math.round(totalCalories),
+          items,
+          confirmed: true,
+        });
+      }
+
+      // Step 8: Get today's calorie entries for daily summary (after creating entry)
       const todayEntries = await deps.getTodayCalorieEntries(request.userId);
       const todayIntake = todayEntries
         .filter((e) => e.type === 'intake')
@@ -123,39 +114,6 @@ export class OrchestratorService {
         todayIntake,
         todayBurn,
       );
-
-      // Step 8: If meal_log or activity_log, create pending CalorieEntry
-      let newPendingEntry: PendingEntry | undefined;
-
-      if (intent === 'meal_log' || intent === 'activity_log') {
-        const items: CalorieEntryItem[] = (extractedData.items as CalorieEntryItem[]) ||
-          agentOutputs.find((o) => o.dataPoints.items)?.dataPoints.items as CalorieEntryItem[] || [];
-        const totalCalories = (extractedData.totalCalories as number) ||
-          (extractedData.caloriesBurned as number) ||
-          agentOutputs.find((o) => o.dataPoints.totalCalories)?.dataPoints.totalCalories as number ||
-          agentOutputs.find((o) => o.dataPoints.caloriesBurned)?.dataPoints.caloriesBurned as number || 0;
-
-        const entryType = intent === 'meal_log' ? 'intake' : 'burn';
-
-        const created = await deps.createCalorieEntry({
-          userId: request.userId,
-          date: new Date(),
-          type: entryType,
-          description: request.content,
-          calories: Math.round(totalCalories),
-          items,
-          confirmed: false,
-        });
-
-        newPendingEntry = {
-          id: created.id,
-          type: created.type,
-          description: created.description,
-          calories: created.calories,
-          items: created.items,
-          createdAt: created.createdAt,
-        };
-      }
 
       // Step 9: Handle weight_log
       if (intent === 'weight_log' && extractedData.weight) {
@@ -173,7 +131,6 @@ export class OrchestratorService {
         extractedData,
         intent,
         agentOutputs,
-        pendingEntry: newPendingEntry,
         dailySummary,
       };
 
@@ -201,75 +158,6 @@ export class OrchestratorService {
         processedAt: new Date(),
       };
     }
-  }
-
-  private async handleConfirmation(
-    request: ProcessMessageRequest,
-    context: AgentContext,
-    pendingEntry: CalorieEntry,
-    deps: OrchestratorDependencies,
-  ): Promise<ProcessMessageResponse> {
-    const confirmation = await this.claudeClient.parseConfirmation(
-      request.content,
-      {
-        id: pendingEntry.id,
-        type: pendingEntry.type,
-        description: pendingEntry.description,
-        calories: pendingEntry.calories,
-        items: pendingEntry.items,
-        createdAt: pendingEntry.createdAt,
-      },
-    );
-
-    let responseMessage: string;
-
-    if (confirmation.action === 'confirm') {
-      await deps.updateCalorieEntry(pendingEntry.id, { confirmed: true });
-      responseMessage = pendingEntry.type === 'intake'
-        ? `Registrado: ${pendingEntry.calories} kcal consumidas.`
-        : `Registrado: ${pendingEntry.calories} kcal quemadas.`;
-    } else if (confirmation.action === 'adjust' && confirmation.adjustedCalories) {
-      const updatedItems = confirmation.adjustedItems || pendingEntry.items;
-      await deps.updateCalorieEntry(pendingEntry.id, {
-        calories: confirmation.adjustedCalories,
-        items: JSON.stringify(updatedItems),
-        confirmed: true,
-      });
-      responseMessage = `Ajustado y registrado: ${confirmation.adjustedCalories} kcal.`;
-    } else {
-      // reject
-      await deps.deleteCalorieEntry(pendingEntry.id);
-      responseMessage = 'Entrada eliminada. Puedes registrar de nuevo cuando quieras.';
-    }
-
-    // Get updated daily summary
-    const todayEntries = await deps.getTodayCalorieEntries(request.userId);
-    const todayIntake = todayEntries
-      .filter((e) => e.type === 'intake')
-      .reduce((sum, e) => sum + e.calories, 0);
-    const todayBurn = todayEntries
-      .filter((e) => e.type === 'burn')
-      .reduce((sum, e) => sum + e.calories, 0);
-
-    const dailySummary = this.metabolicAgent.calculateDailySummary(
-      context.profile,
-      todayIntake,
-      todayBurn,
-    );
-
-    // Append daily summary context to message
-    responseMessage += `\n\nHoy: ${dailySummary.intake} kcal consumidas | ${dailySummary.burn} kcal quemadas | Déficit: ${dailySummary.deficit} kcal`;
-
-    return {
-      success: true,
-      response: {
-        message: responseMessage,
-        tone: 'calm',
-        dailySummary,
-      },
-      intent: 'confirmation',
-      processedAt: new Date(),
-    };
   }
 
   private async buildContext(

@@ -111,30 +111,6 @@ describe('IntegratorAgentService', () => {
       expect(response.message).toBeTruthy();
     });
 
-    it('should include pending entry in response when provided', async () => {
-      const pendingEntry = {
-        id: 'pending-1',
-        type: 'intake' as const,
-        description: 'pollo con arroz',
-        calories: 450,
-        items: [{ name: 'pollo', calories: 250 }, { name: 'arroz', calories: 200 }],
-        createdAt: new Date(),
-      };
-
-      const input: IntegratorInput = {
-        context: mockContext,
-        message: 'Almorcé pollo con arroz',
-        extractedData: {},
-        intent: 'meal_log',
-        agentOutputs: [],
-        pendingEntry,
-      };
-
-      const response = await service.integrate(input);
-
-      expect(response.pendingEntry).toEqual(pendingEntry);
-    });
-
     it('should include daily summary when provided', async () => {
       const dailySummary = {
         date: new Date(),

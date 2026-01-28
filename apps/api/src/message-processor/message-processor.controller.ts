@@ -33,7 +33,6 @@ export class MessageProcessorController {
         content: dto.content,
         imageUrl: dto.imageUrl,
         messageType: dto.messageType,
-        pendingEntryId: dto.pendingEntryId,
       });
 
       const processingTime = Date.now() - startTime;
@@ -70,7 +69,6 @@ export class MessageProcessorController {
         content: dto.content,
         imageUrl: dto.imageUrl,
         messageType: dto.messageType,
-        pendingEntryId: dto.pendingEntryId,
       });
 
       return {

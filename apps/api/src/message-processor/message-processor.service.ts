@@ -154,55 +154,6 @@ export class MessageProcessorService {
         };
       },
 
-      updateCalorieEntry: async (
-        id: string,
-        data: Partial<{ calories: number; items: string; confirmed: boolean }>,
-      ): Promise<CalorieEntry> => {
-        const updated = await this.prisma.calorieEntry.update({
-          where: { id },
-          data,
-        });
-
-        return {
-          id: updated.id,
-          userId: updated.userId,
-          date: updated.date,
-          type: updated.type as CalorieEntry['type'],
-          description: updated.description,
-          calories: updated.calories,
-          items: JSON.parse(updated.items as string),
-          confirmed: updated.confirmed,
-          createdAt: updated.createdAt,
-          updatedAt: updated.updatedAt,
-        };
-      },
-
-      deleteCalorieEntry: async (id: string): Promise<void> => {
-        await this.prisma.calorieEntry.delete({ where: { id } });
-      },
-
-      getPendingCalorieEntry: async (userId: string): Promise<CalorieEntry | null> => {
-        const entry = await this.prisma.calorieEntry.findFirst({
-          where: { userId, confirmed: false },
-          orderBy: { createdAt: 'desc' },
-        });
-
-        if (!entry) return null;
-
-        return {
-          id: entry.id,
-          userId: entry.userId,
-          date: entry.date,
-          type: entry.type as CalorieEntry['type'],
-          description: entry.description,
-          calories: entry.calories,
-          items: JSON.parse(entry.items as string),
-          confirmed: entry.confirmed,
-          createdAt: entry.createdAt,
-          updatedAt: entry.updatedAt,
-        };
-      },
-
       getTodayCalorieEntries: async (userId: string): Promise<CalorieEntry[]> => {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
@@ -212,7 +163,6 @@ export class MessageProcessorService {
         const entries = await this.prisma.calorieEntry.findMany({
           where: {
             userId,
-            confirmed: true,
             date: { gte: today, lt: tomorrow },
           },
         });

@@ -195,10 +195,10 @@ describe('ChatStore', () => {
       const { result } = renderHook(() => useChatStore());
 
       await act(async () => {
-        await result.current.sendUserMessage('I slept 8 hours');
+        await result.current.sendUserMessage('I weigh 75 kg');
       });
 
-      expect(result.current.messages[0].type).toBe('sleep');
+      expect(result.current.messages[0].type).toBe('weight');
     });
 
     it('handles image messages', async () => {
