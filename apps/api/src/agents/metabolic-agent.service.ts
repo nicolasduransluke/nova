@@ -92,8 +92,10 @@ Keep responses brief, data-focused, and in the user's language.`;
     }
 
     // Weight projection based on deficit
-    const projectedWeeklyLoss = 500 * 7 / 7700; // 500 cal/day deficit = ~0.45 kg/week
-    insights.push(`Proyección con déficit de 500 kcal/día: ~${projectedWeeklyLoss.toFixed(2)} kg/semana`);
+    const weeklyGoal = profile?.weeklyGoal ?? 0.5;
+    const dailyDeficit = Math.round((weeklyGoal * 7700) / 7);
+    const projectedWeeklyLoss = dailyDeficit * 7 / 7700;
+    insights.push(`Proyección con déficit de ${dailyDeficit} kcal/día: ~${projectedWeeklyLoss.toFixed(2)} kg/semana`);
 
     return this.createOutput({
       insights,
@@ -139,7 +141,9 @@ Keep responses brief, data-focused, and in the user's language.`;
     const tdee = this.calculateTDEE(profile);
     const totalBurn = tdee + todayBurn;
     const deficit = totalBurn - todayIntake;
-    const targetDeficit = 500;
+    // Derive targetDeficit from user's weeklyGoal: kg/week * 7700 kcal/kg / 7 days
+    const weeklyGoal = profile?.weeklyGoal ?? 0.5;
+    const targetDeficit = Math.round((weeklyGoal * 7700) / 7);
     const projectedWeeklyLoss = (deficit * 7) / 7700; // 7700 cal = 1 kg
 
     return {
@@ -150,6 +154,7 @@ Keep responses brief, data-focused, and in the user's language.`;
       deficit: Math.round(deficit),
       targetDeficit,
       projectedWeeklyLoss: Number(projectedWeeklyLoss.toFixed(2)),
+      goalWeight: profile?.goalWeight,
     };
   }
 

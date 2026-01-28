@@ -7,7 +7,7 @@ export interface DailySummaryCardProps {
 }
 
 export function DailySummaryCard({ summary, compact = false }: DailySummaryCardProps) {
-  const { intake, burn, tdee, deficit, targetDeficit, projectedWeeklyLoss } = summary;
+  const { intake, burn, tdee, deficit, targetDeficit, projectedWeeklyLoss, goalWeight } = summary;
   const totalBurn = tdee + burn;
   const progress = totalBurn > 0 ? Math.min((intake / totalBurn) * 100, 100) : 0;
   const isOnTrack = deficit >= targetDeficit * 0.8;
@@ -80,7 +80,10 @@ export function DailySummaryCard({ summary, compact = false }: DailySummaryCardP
         {isOnTrack ? (
           <p>En camino a perder ~{Math.abs(projectedWeeklyLoss).toFixed(1)} kg/semana</p>
         ) : (
-          <p>Meta de déficit: {targetDeficit} kcal/día para perder ~0.5 kg/semana</p>
+          <p>Meta de déficit: {targetDeficit} kcal/día para perder ~{((targetDeficit * 7) / 7700).toFixed(1)} kg/semana</p>
+        )}
+        {goalWeight != null && (
+          <p className="mt-1">Meta de peso: {goalWeight} kg</p>
         )}
       </div>
     </div>

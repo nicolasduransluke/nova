@@ -45,6 +45,8 @@ model Profile {
   sex           String   // male, female, other
   objective     String   // weight_loss, muscle_gain, maintenance, energy, sleep, stress
   activityLevel String   @default("moderate") @map("activity_level") // sedentary, light, moderate, active, very_active
+  goalWeight    Float?   @map("goal_weight") // target weight in kg
+  weeklyGoal    Float?   @default(0.5) @map("weekly_goal") // kg/week to lose
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 

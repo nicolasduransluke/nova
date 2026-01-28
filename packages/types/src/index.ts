@@ -28,6 +28,8 @@ export interface Profile {
   sex: Sex;
   objective: Objective;
   activityLevel: ActivityLevel;
+  goalWeight?: number; // target weight in kg
+  weeklyGoal?: number; // kg/week to lose (default 0.5)
   createdAt: Date;
   updatedAt: Date;
 }
@@ -110,6 +112,27 @@ export interface CreateWeightLogDTO {
   date: Date;
 }
 
+// History Domain
+export interface HistoryDayEntry {
+  id: string;
+  type: CalorieEntryType;
+  description: string;
+  calories: number;
+  items: CalorieEntryItem[];
+  createdAt: string;
+}
+
+export interface HistoryDay {
+  date: string;
+  summary: DailySummary;
+  entries: HistoryDayEntry[];
+}
+
+export interface WeightEntry {
+  date: string;
+  weight: number;
+}
+
 // Agent Domain
 export type AgentType =
   | 'metabolic'
@@ -146,6 +169,7 @@ export interface DailySummary {
   deficit: number;
   targetDeficit: number;
   projectedWeeklyLoss: number; // kg
+  goalWeight?: number; // target weight in kg
 }
 
 // API Response Types
@@ -216,6 +240,7 @@ export type MessageIntent =
   | 'meal_log'
   | 'activity_log'
   | 'weight_log'
+  | 'goal_set'
   | 'confirmation'
   | 'question'
   | 'greeting'

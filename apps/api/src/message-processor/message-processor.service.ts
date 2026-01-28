@@ -60,6 +60,8 @@ export class MessageProcessorService {
           sex: profile.sex as Profile['sex'],
           objective: profile.objective as Profile['objective'],
           activityLevel: (profile.activityLevel || 'moderate') as Profile['activityLevel'],
+          goalWeight: profile.goalWeight ?? undefined,
+          weeklyGoal: profile.weeklyGoal ?? undefined,
           createdAt: profile.createdAt,
           updatedAt: profile.updatedAt,
         };
@@ -201,6 +203,39 @@ export class MessageProcessorService {
           weight: created.weight,
           date: created.date,
           createdAt: created.createdAt,
+        };
+      },
+
+      updateProfile: async (userId: string, data: { goalWeight?: number; weeklyGoal?: number }): Promise<Profile> => {
+        const updated = await this.prisma.profile.upsert({
+          where: { userId },
+          update: data,
+          create: {
+            id: generateId(),
+            userId,
+            weight: 70,
+            height: 170,
+            age: 30,
+            sex: 'male',
+            objective: 'weight_loss',
+            activityLevel: 'moderate',
+            ...data,
+          },
+        });
+
+        return {
+          id: updated.id,
+          userId: updated.userId,
+          weight: updated.weight,
+          height: updated.height,
+          age: updated.age,
+          sex: updated.sex as Profile['sex'],
+          objective: updated.objective as Profile['objective'],
+          activityLevel: (updated.activityLevel || 'moderate') as Profile['activityLevel'],
+          goalWeight: updated.goalWeight ?? undefined,
+          weeklyGoal: updated.weeklyGoal ?? undefined,
+          createdAt: updated.createdAt,
+          updatedAt: updated.updatedAt,
         };
       },
 

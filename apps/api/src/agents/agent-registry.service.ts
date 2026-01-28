@@ -19,6 +19,7 @@ export class AgentRegistryService {
     meal_log: ['nutrition'],
     activity_log: ['activity'],
     weight_log: ['metabolic'],
+    goal_set: [], // Handled by orchestrator directly
     confirmation: [], // Handled by orchestrator directly
     question: ['metabolic'],
     greeting: [],

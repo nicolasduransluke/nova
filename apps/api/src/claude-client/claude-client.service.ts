@@ -118,7 +118,7 @@ export class ClaudeClientService implements OnModuleInit {
     this.logger.debug(`Keyword intent: ${keywordIntent} for "${message}"`);
 
     // For data-logging intents, keywords are reliable — use them directly
-    if (['meal_log', 'activity_log', 'weight_log', 'confirmation'].includes(keywordIntent)) {
+    if (['meal_log', 'activity_log', 'weight_log', 'goal_set', 'confirmation'].includes(keywordIntent)) {
       return keywordIntent;
     }
 
@@ -131,6 +131,7 @@ export class ClaudeClientService implements OnModuleInit {
 - meal_log: User is sharing what they ate or drank
 - activity_log: User is reporting exercise/physical activity
 - weight_log: User is reporting their weight
+- goal_set: User is setting or changing their weight goal or weekly loss target
 - question: User is asking a question about their progress or the system
 - greeting: User is saying hello or greeting
 - general: Any other type of message
@@ -150,7 +151,7 @@ Respond with ONLY the category name, nothing else.`;
       this.logger.debug(`Gemini intent: raw="${response.trim()}" cleaned="${cleaned}"`);
 
       const validIntents: MessageIntent[] = [
-        'meal_log', 'activity_log', 'weight_log',
+        'meal_log', 'activity_log', 'weight_log', 'goal_set',
         'question', 'greeting', 'general',
       ];
 
@@ -179,6 +180,7 @@ Respond with ONLY the category name, nothing else.`;
       weight_log: `Extract weight data from this message. Return JSON with: { "weight": number (in kg), "unit": "kg" or "lb" }`,
       meal_log: `Extract meal data from this message. Return JSON with: { "items": [{"name": "food item", "calories": estimated_calories}], "totalCalories": sum_of_calories }. Estimate calories using Latin American portion sizes. Be conservative (slightly overestimate).`,
       activity_log: `Extract activity data from this message. Return JSON with: { "activity": "activity name", "durationMinutes": number, "caloriesBurned": estimated_calories_burned }`,
+      goal_set: `Extract weight goal data from this message. Return JSON with: { "goalWeight": number or null (target weight in kg), "weeklyGoal": number or null (kg per week to lose) }. If the user mentions pounds, convert to kg.`,
     };
 
     const extractionPrompt = extractionPrompts[intent];
@@ -420,6 +422,13 @@ Determine the user's intention. Return ONLY valid JSON:
       return 'confirmation';
     }
 
+    // Goal setting (check before weight_log since both may contain "kg")
+    const goalPatterns = ['mi meta', 'my goal', 'quiero llegar', 'quiero pesar', 'goal weight',
+      'target weight', 'quiero perder', 'want to lose', 'por semana', 'per week',
+      'weekly goal', 'meta de peso', 'objetivo de peso'];
+    if (goalPatterns.some((p) => lower.includes(p)))
+      return 'goal_set';
+
     // Weight logging
     if (lower.includes('kg') || lower.includes('lb') || lower.includes('weigh') ||
         lower.includes('peso') || lower.includes('kilos'))
@@ -587,6 +596,27 @@ Determine the user's intention. Return ONLY valid JSON:
           caloriesBurned,
           items: [{ name: `${activity} (${durationMinutes} min)`, calories: caloriesBurned }],
         };
+      }
+
+      case 'goal_set': {
+        let goalWeight: number | null = null;
+        let weeklyGoal: number | null = null;
+
+        // Try to extract goal weight: "llegar a 70 kg", "goal weight 70", "quiero pesar 65"
+        const goalWeightMatch = message.match(/(?:llegar a|pesar|goal weight|target weight|meta.*?)\s*(\d+\.?\d*)\s*(kg|lb|kilos)?/i);
+        if (goalWeightMatch) {
+          const val = parseFloat(goalWeightMatch[1]);
+          const unit = goalWeightMatch[2]?.toLowerCase();
+          goalWeight = unit === 'lb' ? val * 0.453592 : val;
+        }
+
+        // Try to extract weekly goal: "perder 0.5 por semana", "lose 1 kg per week"
+        const weeklyMatch = message.match(/(?:perder|lose|bajar)\s*(\d+\.?\d*)\s*(?:kg|kilos?)?\s*(?:por semana|per week|a la semana|semanal)/i);
+        if (weeklyMatch) {
+          weeklyGoal = parseFloat(weeklyMatch[1]);
+        }
+
+        return { goalWeight, weeklyGoal };
       }
 
       default:
