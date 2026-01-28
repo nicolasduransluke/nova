@@ -7,10 +7,11 @@ export interface DailySummaryCardProps {
 }
 
 export function DailySummaryCard({ summary, compact = false }: DailySummaryCardProps) {
-  const { intake, burn, tdee, deficit, targetDeficit, projectedWeeklyLoss, goalWeight, weightProgress } = summary;
+  const { intake, burn, tdee, deficit, targetDeficit, goalWeight, currentWeight, weightProgress } = summary;
   const totalBurn = tdee + burn;
   const progress = totalBurn > 0 ? Math.min((intake / totalBurn) * 100, 100) : 0;
   const isOnTrack = deficit >= targetDeficit * 0.8;
+  const tomorrowWeight = currentWeight != null ? currentWeight - (deficit / 7700) : null;
 
   if (compact) {
     return (
@@ -73,12 +74,17 @@ export function DailySummaryCard({ summary, compact = false }: DailySummaryCardP
         TDEE base: {tdee} kcal
       </p>
 
-      {/* Projection */}
+      {/* Tomorrow projection */}
       <div className="mt-4 text-center text-sm text-indigo-200">
-        {isOnTrack ? (
-          <p>En camino a perder ~{Math.abs(projectedWeeklyLoss).toFixed(1)} kg/semana</p>
+        {tomorrowWeight != null ? (
+          <p>
+            Mañana: <span className={`font-medium ${deficit > 0 ? 'text-green-400' : 'text-red-400'}`}>~{tomorrowWeight.toFixed(1)} kg</span>
+            {deficit > 0 && currentWeight != null && (
+              <span className="text-indigo-300 ml-1">({(deficit / 7700).toFixed(2)} kg menos)</span>
+            )}
+          </p>
         ) : (
-          <p>Meta de déficit: {targetDeficit} kcal/día para perder ~{((targetDeficit * 7) / 7700).toFixed(1)} kg/semana</p>
+          <p>Registra tu peso para ver la proyección de mañana</p>
         )}
         {goalWeight != null && !weightProgress && (
           <p className="mt-1">Meta de peso: {goalWeight} kg</p>
