@@ -99,9 +99,15 @@ export class HistoryService {
       orderBy: { date: 'asc' },
     });
 
-    return logs.map((log) => ({
-      date: log.date.toISOString().split('T')[0],
-      weight: log.weight,
-    }));
+    // Group by day, keep only the last entry per day
+    const byDay = new Map<string, number>();
+    for (const log of logs) {
+      const dateKey = log.date.toISOString().split('T')[0];
+      byDay.set(dateKey, log.weight);
+    }
+
+    return Array.from(byDay.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, weight]) => ({ date, weight }));
   }
 }
