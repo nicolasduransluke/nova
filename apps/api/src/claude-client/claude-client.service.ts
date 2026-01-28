@@ -130,6 +130,16 @@ User message: "${message}"
 
 Respond with ONLY the category name, nothing else.`;
 
+    const validIntents: MessageIntent[] = [
+      'meal_log',
+      'activity_log',
+      'weight_log',
+      'confirmation',
+      'question',
+      'greeting',
+      'general',
+    ];
+
     try {
       const response = await this.generateResponse(prompt, {
         systemPrompt: 'You are a message classifier. Respond with only the category name.',
@@ -137,22 +147,28 @@ Respond with ONLY the category name, nothing else.`;
         temperature: 0,
       });
 
-      const intent = response.trim().toLowerCase() as MessageIntent;
-      const validIntents: MessageIntent[] = [
-        'meal_log',
-        'activity_log',
-        'weight_log',
-        'confirmation',
-        'question',
-        'greeting',
-        'general',
-      ];
+      // Clean response: remove punctuation, markdown, whitespace
+      const cleaned = response.trim().toLowerCase().replace(/[^a-z_]/g, '');
+      this.logger.debug(`Intent classification: raw="${response.trim()}" cleaned="${cleaned}"`);
 
-      return validIntents.includes(intent) ? intent : 'general';
+      const intent = cleaned as MessageIntent;
+      if (validIntents.includes(intent)) {
+        return intent;
+      }
+
+      // Check if the cleaned response contains a valid intent
+      const found = validIntents.find((vi) => cleaned.includes(vi));
+      if (found) {
+        this.logger.debug(`Intent found via partial match: ${found}`);
+        return found;
+      }
     } catch (error) {
-      this.logger.error(`Intent classification failed: ${error}`);
-      return 'general';
+      this.logger.error(`Intent classification via API failed: ${error}`);
     }
+
+    // Fallback to mock classifier
+    this.logger.debug(`Falling back to keyword-based intent classification for: "${message}"`);
+    return this.getMockIntent(message);
   }
 
   async extractDataFromMessage(
@@ -188,10 +204,14 @@ Respond with ONLY valid JSON, nothing else.`;
       });
 
       const cleaned = response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      return JSON.parse(cleaned);
+      const parsed = JSON.parse(cleaned);
+      this.logger.debug(`Extracted data via API: ${JSON.stringify(parsed)}`);
+      return parsed;
     } catch (error) {
-      this.logger.error(`Data extraction failed: ${error}`);
-      return {};
+      this.logger.error(`Data extraction via API failed: ${error}`);
+      // Fallback to mock extractor
+      this.logger.debug(`Falling back to keyword-based data extraction`);
+      return this.getMockExtractedData(message, intent);
     }
   }
 
