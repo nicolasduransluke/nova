@@ -113,15 +113,24 @@ export class ClaudeClientService implements OnModuleInit {
   }
 
   async classifyIntent(message: string): Promise<MessageIntent> {
+    // Always use keyword-based classifier first — it's reliable for meal/activity/weight
+    const keywordIntent = this.getMockIntent(message);
+    this.logger.debug(`Keyword intent: ${keywordIntent} for "${message}"`);
+
+    // For data-logging intents, keywords are reliable — use them directly
+    if (['meal_log', 'activity_log', 'weight_log', 'confirmation'].includes(keywordIntent)) {
+      return keywordIntent;
+    }
+
+    // For ambiguous intents (question, greeting, general), try Gemini for better classification
     if (!process.env.GOOGLE_API_KEY) {
-      return this.getMockIntent(message);
+      return keywordIntent;
     }
 
     const prompt = `Classify the following user message into exactly ONE of these categories:
 - meal_log: User is sharing what they ate or drank
 - activity_log: User is reporting exercise/physical activity
 - weight_log: User is reporting their weight
-- confirmation: User is confirming, adjusting, or rejecting a previous estimate (yes/no/ok/dale/sí/ponle/bórralo)
 - question: User is asking a question about their progress or the system
 - greeting: User is saying hello or greeting
 - general: Any other type of message
@@ -130,16 +139,6 @@ User message: "${message}"
 
 Respond with ONLY the category name, nothing else.`;
 
-    const validIntents: MessageIntent[] = [
-      'meal_log',
-      'activity_log',
-      'weight_log',
-      'confirmation',
-      'question',
-      'greeting',
-      'general',
-    ];
-
     try {
       const response = await this.generateResponse(prompt, {
         systemPrompt: 'You are a message classifier. Respond with only the category name.',
@@ -147,28 +146,25 @@ Respond with ONLY the category name, nothing else.`;
         temperature: 0,
       });
 
-      // Clean response: remove punctuation, markdown, whitespace
       const cleaned = response.trim().toLowerCase().replace(/[^a-z_]/g, '');
-      this.logger.debug(`Intent classification: raw="${response.trim()}" cleaned="${cleaned}"`);
+      this.logger.debug(`Gemini intent: raw="${response.trim()}" cleaned="${cleaned}"`);
 
-      const intent = cleaned as MessageIntent;
-      if (validIntents.includes(intent)) {
-        return intent;
+      const validIntents: MessageIntent[] = [
+        'meal_log', 'activity_log', 'weight_log',
+        'question', 'greeting', 'general',
+      ];
+
+      if (validIntents.includes(cleaned as MessageIntent)) {
+        return cleaned as MessageIntent;
       }
 
-      // Check if the cleaned response contains a valid intent
       const found = validIntents.find((vi) => cleaned.includes(vi));
-      if (found) {
-        this.logger.debug(`Intent found via partial match: ${found}`);
-        return found;
-      }
+      if (found) return found;
     } catch (error) {
-      this.logger.error(`Intent classification via API failed: ${error}`);
+      this.logger.error(`Gemini intent classification failed: ${error}`);
     }
 
-    // Fallback to mock classifier
-    this.logger.debug(`Falling back to keyword-based intent classification for: "${message}"`);
-    return this.getMockIntent(message);
+    return keywordIntent;
   }
 
   async extractDataFromMessage(
