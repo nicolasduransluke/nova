@@ -17,6 +17,10 @@ export function DailySummaryCard({ summary, compact = false }: DailySummaryCardP
   const dynamicWeeksToGoal = weightProgress && weeklyLossAtCurrentRate > 0
     ? Math.round(weightProgress.remaining / weeklyLossAtCurrentRate)
     : null;
+  // Deficit progress
+  const deficitProgress = targetDeficit > 0 ? Math.min((deficit / targetDeficit) * 100, 150) : 0;
+  // Remaining calories to eat
+  const remainingToEat = totalBurn - targetDeficit - intake;
 
   if (compact) {
     return (
@@ -40,42 +44,47 @@ export function DailySummaryCard({ summary, compact = false }: DailySummaryCardP
     <div className="bg-white/10 backdrop-blur-lg border border-white/20 rounded-xl p-6">
       <h3 className="text-white font-semibold text-lg mb-4">Resumen del Día</h3>
 
-      {/* Progress bar */}
+      {/* Deficit progress */}
       <div className="mb-4">
         <div className="flex justify-between text-sm text-indigo-200 mb-1">
-          <span>{Math.round(progress)}%</span>
-          <span>Meta de consumo: {totalBurn - targetDeficit} kcal</span>
+          <span>Meta de déficit: {targetDeficit} kcal</span>
+          <span>Logrado: <span className={deficit >= targetDeficit ? 'text-green-400' : 'text-white'}>{deficit} kcal</span></span>
         </div>
         <div className="w-full bg-white/10 rounded-full h-3">
           <div
             className={`h-3 rounded-full transition-all ${
-              progress > 90 ? 'bg-red-500' : progress > 70 ? 'bg-yellow-500' : 'bg-green-500'
+              deficitProgress >= 100 ? 'bg-green-500' : deficitProgress >= 70 ? 'bg-yellow-500' : 'bg-red-400'
             }`}
-            style={{ width: `${Math.min(progress, 100)}%` }}
+            style={{ width: `${Math.min(deficitProgress, 100)}%` }}
           />
         </div>
+        <p className="text-center text-xs text-indigo-300 mt-1">
+          {deficitProgress >= 100 ? '¡Meta cumplida!' : `${Math.round(deficitProgress)}% de tu meta`}
+        </p>
       </div>
 
-      {/* Stats grid */}
-      <div className="grid grid-cols-3 gap-4 text-center">
-        <div>
+      {/* Main stats: Consumido y Ejercicio */}
+      <div className="grid grid-cols-2 gap-4 text-center mb-4">
+        <div className="bg-white/5 rounded-lg p-3">
           <p className="text-2xl font-bold text-white">{intake}</p>
           <p className="text-xs text-indigo-300">Consumido</p>
         </div>
-        <div>
-          <p className="text-2xl font-bold text-white">{burn}</p>
-          <p className="text-xs text-indigo-300">Quemado</p>
-        </div>
-        <div>
-          <p className={`text-2xl font-bold ${deficit > 0 ? 'text-green-400' : 'text-red-400'}`}>
-            {deficit}
-          </p>
-          <p className="text-xs text-indigo-300">Déficit</p>
+        <div className="bg-white/5 rounded-lg p-3">
+          <p className="text-2xl font-bold text-green-400">{burn}</p>
+          <p className="text-xs text-indigo-300">Ejercicio</p>
         </div>
       </div>
 
+      {/* Remaining budget - secondary */}
+      <div className="text-center mb-2">
+        <p className="text-indigo-300 text-sm">
+          Te quedan por comer: <span className={`font-bold ${remainingToEat > 0 ? 'text-white' : 'text-red-400'}`}>{remainingToEat > 0 ? remainingToEat : 0} kcal</span>
+          {remainingToEat < 0 && <span className="text-red-400 text-xs ml-1">(excedido por {Math.abs(remainingToEat)})</span>}
+        </p>
+      </div>
+
       {/* TDEE context */}
-      <p className="mt-2 text-center text-xs text-indigo-400">
+      <p className="text-center text-xs text-indigo-400">
         TDEE base: {tdee} kcal
       </p>
 
