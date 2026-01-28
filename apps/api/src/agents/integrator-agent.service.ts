@@ -6,6 +6,7 @@ import type {
   ResponseTone,
   MessageIntent,
   DailySummary,
+  CalorieEntryItem,
 } from '@nova/types';
 import { BaseAgent, AgentInput } from './base-agent.abstract';
 import { ClaudeClientService, ClaudeMessage } from '../claude-client/claude-client.service';
@@ -57,8 +58,15 @@ Be calm, data-driven, brief. No hype language.`;
     );
 
     const tone = this.determineTone(input);
-    const conversationHistory = this.buildConversationHistory(input.context);
 
+    // For meal/activity logs, build response directly from data (don't rely on LLM)
+    if (input.intent === 'meal_log' || input.intent === 'activity_log') {
+      const message = this.buildDataResponse(input);
+      return { message, tone, dailySummary: input.dailySummary };
+    }
+
+    // For other intents, use LLM
+    const conversationHistory = this.buildConversationHistory(input.context);
     const prompt = this.buildIntegrationPrompt(input);
 
     const response = await this.claudeClient.generateResponse(prompt, {
@@ -77,6 +85,69 @@ Be calm, data-driven, brief. No hype language.`;
       nextSteps,
       dailySummary: input.dailySummary,
     };
+  }
+
+  private buildDataResponse(input: IntegratorInput): string {
+    const isSpanish = this.detectSpanishMessage(input.message);
+    const { intent, agentOutputs, dailySummary } = input;
+
+    // Extract items from agent outputs or extracted data
+    const items: CalorieEntryItem[] = this.extractItems(input);
+    const totalCalories = items.reduce((sum, i) => sum + i.calories, 0);
+
+    const lines: string[] = [];
+
+    if (intent === 'meal_log') {
+      lines.push(isSpanish ? 'Registrado:' : 'Logged:');
+      if (items.length > 0) {
+        items.forEach((item) => {
+          lines.push(`- ${item.name}: ~${item.calories} kcal`);
+        });
+        lines.push('');
+        lines.push(isSpanish
+          ? `Total: ~${totalCalories} kcal`
+          : `Total: ~${totalCalories} kcal`);
+      }
+    } else {
+      // activity_log
+      lines.push(isSpanish ? 'Actividad registrada:' : 'Activity logged:');
+      if (items.length > 0) {
+        items.forEach((item) => {
+          lines.push(`- ${item.name}: ~${item.calories} kcal`);
+        });
+        lines.push('');
+        lines.push(isSpanish
+          ? `Total quemado: ~${totalCalories} kcal`
+          : `Total burned: ~${totalCalories} kcal`);
+      }
+    }
+
+    if (dailySummary) {
+      lines.push('');
+      lines.push(isSpanish
+        ? `Hoy: ${dailySummary.intake} kcal consumidas | ${dailySummary.burn} kcal quemadas | Déficit: ${dailySummary.deficit} kcal`
+        : `Today: ${dailySummary.intake} kcal consumed | ${dailySummary.burn} kcal burned | Deficit: ${dailySummary.deficit} kcal`);
+    }
+
+    return lines.join('\n');
+  }
+
+  private extractItems(input: IntegratorInput): CalorieEntryItem[] {
+    // Try extracted data first
+    const extractedItems = input.extractedData?.items as CalorieEntryItem[] | undefined;
+    if (extractedItems && extractedItems.length > 0) {
+      return extractedItems;
+    }
+
+    // Try agent outputs
+    for (const output of input.agentOutputs) {
+      const agentItems = output.dataPoints?.items as CalorieEntryItem[] | undefined;
+      if (agentItems && agentItems.length > 0) {
+        return agentItems;
+      }
+    }
+
+    return [];
   }
 
   private determineTone(input: IntegratorInput): ResponseTone {
