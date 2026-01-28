@@ -6,6 +6,7 @@ export interface ChatHeaderProps {
   avatarUrl?: string;
   onBack?: () => void;
   onSettings?: () => void;
+  onProfile?: () => void;
 }
 
 export function ChatHeader({
@@ -14,6 +15,7 @@ export function ChatHeader({
   avatarUrl,
   onBack,
   onSettings,
+  onProfile,
 }: ChatHeaderProps) {
   return (
     <header
@@ -75,6 +77,35 @@ export function ChatHeader({
           {subtitle}
         </p>
       </div>
+
+      {onProfile && (
+        <button
+          type="button"
+          onClick={onProfile}
+          className="
+            p-2 rounded-full
+            text-gray-600 dark:text-gray-300
+            hover:bg-gray-100 dark:hover:bg-gray-800
+            transition-colors
+          "
+          aria-label="Profile"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+          </svg>
+        </button>
+      )}
 
       {onSettings && (
         <button

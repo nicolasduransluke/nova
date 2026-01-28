@@ -117,8 +117,8 @@ export class ClaudeClientService implements OnModuleInit {
     const keywordIntent = this.getMockIntent(message);
     this.logger.debug(`Keyword intent: ${keywordIntent} for "${message}"`);
 
-    // For data-logging intents, keywords are reliable — use them directly
-    if (['meal_log', 'activity_log', 'weight_log', 'goal_set', 'confirmation'].includes(keywordIntent)) {
+    // For data-logging intents and explicit questions, keywords are reliable — use them directly
+    if (['meal_log', 'activity_log', 'weight_log', 'goal_set', 'confirmation', 'question'].includes(keywordIntent)) {
       return keywordIntent;
     }
 
@@ -421,6 +421,22 @@ Determine the user's intention. Return ONLY valid JSON:
     if (confirmWords.some((w) => lower === w || lower.startsWith(w + ' ') || lower.startsWith(w + ','))) {
       return 'confirmation';
     }
+
+    // Questions about food/exercise (check BEFORE meal/activity detection)
+    const questionPatterns = [
+      'qué podría', 'que podría', 'qué podria', 'que podria',
+      'qué debería', 'que debería', 'qué deberia', 'que deberia',
+      'qué puedo', 'que puedo', 'qué como', 'que como',
+      'what should', 'what could', 'what can i', 'how much should',
+      'cuánto puedo', 'cuanto puedo', 'cuántas calorías', 'cuantas calorias',
+      'recomienda', 'me recomiendas', 'sugieres', 'suggest', 'recommend',
+      'qué porción', 'que porción', 'qué porcion', 'que porcion',
+      'cuánto debería', 'cuanto debería', 'cuánto deberia', 'cuanto deberia',
+      'es buena idea', 'is it ok', 'está bien si', 'esta bien si',
+      'puedo comer', 'debería comer', 'deberia comer',
+    ];
+    if (questionPatterns.some((p) => lower.includes(p)))
+      return 'question';
 
     // Goal setting (check before weight_log since both may contain "kg")
     const goalPatterns = ['mi meta', 'my goal', 'quiero llegar', 'quiero pesar', 'goal weight',

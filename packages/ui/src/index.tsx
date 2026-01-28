@@ -3,6 +3,7 @@ import React from 'react';
 // Daily Summary & Weight Chart Components
 export { DailySummaryCard, type DailySummaryCardProps } from './components/DailySummary';
 export { WeightChart, type WeightChartProps, type WeightDataPoint } from './components/WeightChart';
+export { UserProfile, type UserProfileProps } from './components/UserProfile';
 
 // Chat Components
 export {

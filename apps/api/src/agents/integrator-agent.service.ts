@@ -294,7 +294,37 @@ DO NOT say you couldn't detect data. The data IS in the agent analysis above. US
       weightTask += ` Show trend if available. Keep it brief.`;
       prompt += weightTask;
     } else if (intent === 'question') {
-      prompt += `Answer using the data available. Focus on deficit progress and daily summary.`;
+      const remainingToEat = dailySummary ? (dailySummary.tdee + dailySummary.burn - dailySummary.targetDeficit - dailySummary.intake) : null;
+      const isFoodQuestion = message.toLowerCase().match(/almorzar|cenar|desayunar|comer|snack|merienda|lunch|dinner|breakfast|eat|porción|porcion/);
+      const isAskingAboutSpecificFood = message.toLowerCase().match(/frutos?\s*secos?|nueces|almendras|galletas?|chocolate|pizza|helado|pan\b|queso|yogur?t?|fruta|banana|manzana|chips|papas?|torta|postre|dulces?|refresco|soda|cerveza|vino|nuts|cookies?|ice cream|candy|maní|mani|cacahuate|snack/);
+
+      if (isFoodQuestion && remainingToEat != null) {
+        if (isAskingAboutSpecificFood) {
+          prompt += `The user is asking about a SPECIFIC food: "${message}". Their remaining calorie budget is ${remainingToEat} kcal.
+
+Your response MUST:
+1. Give the typical calories PER PORTION of that specific food (e.g., "30g de frutos secos = ~180 kcal")
+2. Recommend a reasonable portion size based on their budget
+3. Say how much budget they'd have left after eating it
+4. If it's a high-calorie food, suggest a lighter alternative if appropriate
+
+Be specific to what they asked about. Don't give generic meal suggestions.`;
+        } else {
+          prompt += `The user is asking what they can eat. Their remaining calorie budget is ${remainingToEat} kcal.
+
+Your response MUST:
+1. State how many calories they have left to eat
+2. Suggest 2-3 SPECIFIC meal options with estimated calories that fit their budget, for example:
+   - Light option (~300-400 kcal): e.g., grilled chicken salad, vegetable soup
+   - Medium option (~500-600 kcal): e.g., rice with beans and meat, pasta with vegetables
+   - Heavier option (~700-800 kcal): e.g., full plate with protein, carbs, and sides
+3. Mention how much budget they'd have left after each option
+
+Be a helpful coach - give concrete, actionable suggestions, not just numbers.`;
+        }
+      } else {
+        prompt += `Answer using the data available. Focus on deficit progress and daily summary. Be helpful and specific.`;
+      }
     } else {
       // greeting or general
       let generalTask = `Respond naturally.`;
