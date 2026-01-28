@@ -12,6 +12,11 @@ export function DailySummaryCard({ summary, compact = false }: DailySummaryCardP
   const progress = totalBurn > 0 ? Math.min((intake / totalBurn) * 100, 100) : 0;
   const isOnTrack = deficit >= targetDeficit * 0.8;
   const tomorrowWeight = currentWeight != null ? currentWeight - (deficit / 7700) : null;
+  // Dynamic weeks to goal based on today's deficit
+  const weeklyLossAtCurrentRate = (deficit * 7) / 7700;
+  const dynamicWeeksToGoal = weightProgress && weeklyLossAtCurrentRate > 0
+    ? Math.round(weightProgress.remaining / weeklyLossAtCurrentRate)
+    : null;
 
   if (compact) {
     return (
@@ -111,11 +116,15 @@ export function DailySummaryCard({ summary, compact = false }: DailySummaryCardP
               Tendencia: {weightProgress.trend === 'down' ? 'bajando' : weightProgress.trend === 'up' ? 'subiendo' : 'estable'}
             </p>
           )}
-          {weightProgress.estimatedWeeks != null && weightProgress.estimatedWeeks > 0 && (
+          {dynamicWeeksToGoal != null && dynamicWeeksToGoal > 0 ? (
             <p className="text-sm text-indigo-200 mt-1">
-              Meta estimada en ~{weightProgress.estimatedWeeks} semanas
+              A este ritmo: <span className={`font-medium ${isOnTrack ? 'text-green-400' : 'text-yellow-400'}`}>~{dynamicWeeksToGoal} semanas</span>
             </p>
-          )}
+          ) : deficit <= 0 && weightProgress.remaining > 0 ? (
+            <p className="text-sm text-red-400 mt-1">
+              Sin déficit no hay progreso
+            </p>
+          ) : null}
         </div>
       )}
     </div>
