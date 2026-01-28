@@ -38,7 +38,7 @@ export interface OrchestratorDependencies {
   getTodayCalorieEntries: (userId: string) => Promise<CalorieEntry[]>;
   createWeightLog: (data: { userId: string; weight: number; date: Date }) => Promise<WeightLog>;
   getRecentWeightLogs: (userId: string, limit: number) => Promise<WeightLog[]>;
-  updateProfile: (userId: string, data: { goalWeight?: number; weeklyGoal?: number }) => Promise<Profile>;
+  updateProfile: (userId: string, data: { goalWeight?: number; weeklyGoal?: number; targetWeeks?: number }) => Promise<Profile>;
 }
 
 @Injectable()
@@ -133,9 +133,22 @@ export class OrchestratorService {
       // Step 8b: Handle goal_set (before summary so new goal is reflected)
       if (intent === 'goal_set') {
         const goalWeight = extractedData.goalWeight as number | null;
-        const weeklyGoal = extractedData.weeklyGoal as number | null;
-        const updateData: { goalWeight?: number; weeklyGoal?: number } = {};
+        let weeklyGoal = extractedData.weeklyGoal as number | null;
+        const targetWeeks = extractedData.targetWeeks as number | null;
+        const updateData: { goalWeight?: number; weeklyGoal?: number; targetWeeks?: number } = {};
         if (goalWeight != null) updateData.goalWeight = goalWeight;
+        if (targetWeeks != null) updateData.targetWeeks = targetWeeks;
+
+        // If targetWeeks is provided, calculate weeklyGoal from remaining weight
+        if (targetWeeks != null && targetWeeks > 0) {
+          const effectiveGoalWeight = goalWeight ?? context.profile?.goalWeight;
+          const currentWeight = lastWeightLog?.weight ?? context.profile?.weight;
+          if (effectiveGoalWeight != null && currentWeight != null) {
+            const remaining = Math.abs(currentWeight - effectiveGoalWeight);
+            weeklyGoal = Number((remaining / targetWeeks).toFixed(2));
+          }
+        }
+
         if (weeklyGoal != null) updateData.weeklyGoal = weeklyGoal;
         if (Object.keys(updateData).length > 0) {
           const updatedProfile = await deps.updateProfile(request.userId, updateData);

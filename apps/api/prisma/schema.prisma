@@ -47,6 +47,7 @@ model Profile {
   activityLevel String   @default("moderate") @map("activity_level") // sedentary, light, moderate, active, very_active
   goalWeight    Float?   @map("goal_weight") // target weight in kg
   weeklyGoal    Float?   @default(0.5) @map("weekly_goal") // kg/week to lose
+  targetWeeks   Int?     @map("target_weeks") // weeks to reach goal weight
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 

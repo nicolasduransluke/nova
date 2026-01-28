@@ -152,13 +152,19 @@ Keep responses brief, data-focused, and in the user's language.`;
     let weightProgress: WeightProgress | undefined;
     if (lastWeight != null && effectiveGoalWeight != null) {
       const startingWeight = profile?.weight;
+      const remaining = Number((lastWeight - effectiveGoalWeight).toFixed(1));
+      let estimatedWeeks: number | undefined;
+      if (remaining > 0 && weeklyGoal > 0) {
+        estimatedWeeks = Math.round(remaining / weeklyGoal);
+      }
       weightProgress = {
         current: lastWeight,
         goal: effectiveGoalWeight,
-        remaining: Number((lastWeight - effectiveGoalWeight).toFixed(1)),
+        remaining,
         change: startingWeight != null
           ? Number((lastWeight - startingWeight).toFixed(1))
           : undefined,
+        estimatedWeeks,
       };
     }
 

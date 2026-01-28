@@ -30,6 +30,7 @@ export interface Profile {
   activityLevel: ActivityLevel;
   goalWeight?: number; // target weight in kg
   weeklyGoal?: number; // kg/week to lose (default 0.5)
+  targetWeeks?: number; // weeks to reach goal weight
   createdAt: Date;
   updatedAt: Date;
 }
@@ -167,6 +168,7 @@ export interface WeightProgress {
   remaining: number;
   change?: number; // kg changed from starting weight (negative = lost)
   trend?: 'up' | 'down' | 'stable';
+  estimatedWeeks?: number; // estimated weeks to reach goal at current weeklyGoal
 }
 
 export interface DailySummary {

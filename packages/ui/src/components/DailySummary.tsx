@@ -107,6 +107,11 @@ export function DailySummaryCard({ summary, compact = false }: DailySummaryCardP
               Tendencia: {weightProgress.trend === 'down' ? 'bajando' : weightProgress.trend === 'up' ? 'subiendo' : 'estable'}
             </p>
           )}
+          {weightProgress.estimatedWeeks != null && weightProgress.estimatedWeeks > 0 && (
+            <p className="text-sm text-indigo-200 mt-1">
+              Meta estimada en ~{weightProgress.estimatedWeeks} semanas
+            </p>
+          )}
         </div>
       )}
     </div>

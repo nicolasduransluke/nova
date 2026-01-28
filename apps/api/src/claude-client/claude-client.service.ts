@@ -180,7 +180,7 @@ Respond with ONLY the category name, nothing else.`;
       weight_log: `Extract weight data from this message. Return JSON with: { "weight": number (in kg), "unit": "kg" or "lb" }`,
       meal_log: `Extract meal data from this message. Return JSON with: { "items": [{"name": "food item", "calories": estimated_calories}], "totalCalories": sum_of_calories }. Estimate calories using Latin American portion sizes. Be conservative (slightly overestimate).`,
       activity_log: `Extract activity data from this message. Return JSON with: { "activity": "activity name", "durationMinutes": number, "caloriesBurned": estimated_calories_burned }`,
-      goal_set: `Extract weight goal data from this message. Return JSON with: { "goalWeight": number or null (target weight in kg), "weeklyGoal": number or null (kg per week to lose) }. If the user mentions pounds, convert to kg.`,
+      goal_set: `Extract weight goal data from this message. Return JSON with: { "goalWeight": number or null (target weight in kg), "weeklyGoal": number or null (kg per week to lose), "targetWeeks": number or null (weeks to reach goal) }. If the user mentions pounds, convert to kg.`,
     };
 
     const extractionPrompt = extractionPrompts[intent];
@@ -601,6 +601,7 @@ Determine the user's intention. Return ONLY valid JSON:
       case 'goal_set': {
         let goalWeight: number | null = null;
         let weeklyGoal: number | null = null;
+        let targetWeeks: number | null = null;
 
         // Try to extract goal weight: "llegar a 70 kg", "goal weight 70", "quiero pesar 65"
         const goalWeightMatch = message.match(/(?:llegar a|pesar|goal weight|target weight|meta.*?)\s*(\d+\.?\d*)\s*(kg|lb|kilos)?/i);
@@ -616,7 +617,13 @@ Determine the user's intention. Return ONLY valid JSON:
           weeklyGoal = parseFloat(weeklyMatch[1]);
         }
 
-        return { goalWeight, weeklyGoal };
+        // Try to extract target weeks: "en 20 semanas", "in 20 weeks"
+        const weeksMatch = message.match(/(?:en\s+)?(\d+)\s*semanas?|(\d+)\s*weeks?/i);
+        if (weeksMatch) {
+          targetWeeks = parseInt(weeksMatch[1] || weeksMatch[2], 10);
+        }
+
+        return { goalWeight, weeklyGoal, targetWeeks };
       }
 
       default:

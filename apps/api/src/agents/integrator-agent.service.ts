@@ -219,6 +219,9 @@ ${intent}
 - Goal: ${dailySummary.goalWeight} kg
 - Remaining: ${remaining} kg
 `;
+      if (dailySummary.weightProgress?.estimatedWeeks != null && dailySummary.weightProgress.estimatedWeeks > 0) {
+        prompt += `- Estimated weeks to goal: ${dailySummary.weightProgress.estimatedWeeks}\n`;
+      }
     } else if (lastWeightLog) {
       prompt += `
 ## Weight Info
@@ -272,6 +275,16 @@ DO NOT say you couldn't detect data. The data IS in the agent analysis above. US
 2. Show calories burned from the agent analysis above
 3. Show today's totals from "Today's Progress" above (consumed/burned/deficit)
 DO NOT say you couldn't detect data. The data IS in the agent analysis above. USE IT.`;
+    } else if (intent === 'goal_set') {
+      let goalTask = `Acknowledge the goal update.`;
+      if (dailySummary?.weightProgress?.estimatedWeeks != null && dailySummary.weightProgress.estimatedWeeks > 0) {
+        goalTask += ` The estimated timeline to reach the goal is ~${dailySummary.weightProgress.estimatedWeeks} weeks. Mention this timeline.`;
+      }
+      if (context.profile?.targetWeeks) {
+        goalTask += ` The user set a target of ${context.profile.targetWeeks} weeks.`;
+      }
+      goalTask += ` Keep it brief and encouraging.`;
+      prompt += goalTask;
     } else if (intent === 'weight_log') {
       let weightTask = `Acknowledge the weight entry.`;
       if (lastWeightLog && dailySummary?.goalWeight != null) {

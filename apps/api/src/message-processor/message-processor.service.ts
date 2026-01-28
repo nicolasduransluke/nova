@@ -62,6 +62,7 @@ export class MessageProcessorService {
           activityLevel: (profile.activityLevel || 'moderate') as Profile['activityLevel'],
           goalWeight: profile.goalWeight ?? undefined,
           weeklyGoal: profile.weeklyGoal ?? undefined,
+          targetWeeks: profile.targetWeeks ?? undefined,
           createdAt: profile.createdAt,
           updatedAt: profile.updatedAt,
         };
@@ -206,7 +207,7 @@ export class MessageProcessorService {
         };
       },
 
-      updateProfile: async (userId: string, data: { goalWeight?: number; weeklyGoal?: number }): Promise<Profile> => {
+      updateProfile: async (userId: string, data: { goalWeight?: number; weeklyGoal?: number; targetWeeks?: number }): Promise<Profile> => {
         const updated = await this.prisma.profile.upsert({
           where: { userId },
           update: data,
@@ -234,6 +235,7 @@ export class MessageProcessorService {
           activityLevel: (updated.activityLevel || 'moderate') as Profile['activityLevel'],
           goalWeight: updated.goalWeight ?? undefined,
           weeklyGoal: updated.weeklyGoal ?? undefined,
+          targetWeeks: updated.targetWeeks ?? undefined,
           createdAt: updated.createdAt,
           updatedAt: updated.updatedAt,
         };
