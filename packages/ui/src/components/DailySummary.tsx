@@ -22,9 +22,6 @@ export function DailySummaryCard({ summary, compact = false }: DailySummaryCardP
           <span className="text-gray-600 dark:text-gray-400">
             Quemado: <strong className="text-gray-900 dark:text-white">{burn}</strong>
           </span>
-          <span className="text-gray-600 dark:text-gray-400">
-            TDEE: <strong className="text-gray-900 dark:text-white">{tdee}</strong>
-          </span>
         </div>
         <span className={`font-bold ${deficit > 0 ? 'text-green-600' : 'text-red-500'}`}>
           Déficit: {deficit} kcal
@@ -54,7 +51,7 @@ export function DailySummaryCard({ summary, compact = false }: DailySummaryCardP
       </div>
 
       {/* Stats grid */}
-      <div className="grid grid-cols-4 gap-4 text-center">
+      <div className="grid grid-cols-3 gap-4 text-center">
         <div>
           <p className="text-2xl font-bold text-white">{intake}</p>
           <p className="text-xs text-indigo-300">Consumido</p>
@@ -64,16 +61,17 @@ export function DailySummaryCard({ summary, compact = false }: DailySummaryCardP
           <p className="text-xs text-indigo-300">Quemado</p>
         </div>
         <div>
-          <p className="text-2xl font-bold text-white">{tdee}</p>
-          <p className="text-xs text-indigo-300">TDEE</p>
-        </div>
-        <div>
           <p className={`text-2xl font-bold ${deficit > 0 ? 'text-green-400' : 'text-red-400'}`}>
             {deficit}
           </p>
           <p className="text-xs text-indigo-300">Déficit</p>
         </div>
       </div>
+
+      {/* TDEE context */}
+      <p className="mt-2 text-center text-xs text-indigo-400">
+        TDEE base: {tdee} kcal
+      </p>
 
       {/* Projection */}
       <div className="mt-4 text-center text-sm text-indigo-200">
