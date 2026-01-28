@@ -117,7 +117,34 @@ export class OrchestratorService {
         });
       }
 
-      // Step 8: Get today's calorie entries for daily summary (after creating entry)
+      // Step 8a: Handle weight_log (before summary so new weight is reflected)
+      if (intent === 'weight_log' && extractedData.weight) {
+        const newWeight = extractedData.weight as number;
+        await deps.createWeightLog({
+          userId: request.userId,
+          weight: newWeight,
+          date: new Date(),
+        });
+        // Update lastWeightLog so daily summary and integrator use the new weight
+        lastWeightLog = { weight: newWeight, date: new Date(), daysSince: 0 };
+        needsWeightPrompt = false;
+      }
+
+      // Step 8b: Handle goal_set (before summary so new goal is reflected)
+      if (intent === 'goal_set') {
+        const goalWeight = extractedData.goalWeight as number | null;
+        const weeklyGoal = extractedData.weeklyGoal as number | null;
+        const updateData: { goalWeight?: number; weeklyGoal?: number } = {};
+        if (goalWeight != null) updateData.goalWeight = goalWeight;
+        if (weeklyGoal != null) updateData.weeklyGoal = weeklyGoal;
+        if (Object.keys(updateData).length > 0) {
+          const updatedProfile = await deps.updateProfile(request.userId, updateData);
+          // Refresh context profile for summary calculation
+          context.profile = updatedProfile;
+        }
+      }
+
+      // Step 9: Get today's calorie entries for daily summary
       const todayEntries = await deps.getTodayCalorieEntries(request.userId);
       const todayIntake = todayEntries
         .filter((e) => e.type === 'intake')
@@ -133,29 +160,6 @@ export class OrchestratorService {
         lastWeightLog?.weight,
         context.profile?.goalWeight,
       );
-
-      // Step 9: Handle weight_log
-      if (intent === 'weight_log' && extractedData.weight) {
-        await deps.createWeightLog({
-          userId: request.userId,
-          weight: extractedData.weight as number,
-          date: new Date(),
-        });
-      }
-
-      // Step 9b: Handle goal_set
-      if (intent === 'goal_set') {
-        const goalWeight = extractedData.goalWeight as number | null;
-        const weeklyGoal = extractedData.weeklyGoal as number | null;
-        const updateData: { goalWeight?: number; weeklyGoal?: number } = {};
-        if (goalWeight != null) updateData.goalWeight = goalWeight;
-        if (weeklyGoal != null) updateData.weeklyGoal = weeklyGoal;
-        if (Object.keys(updateData).length > 0) {
-          const updatedProfile = await deps.updateProfile(request.userId, updateData);
-          // Refresh context profile for summary calculation
-          context.profile = updatedProfile;
-        }
-      }
 
       // Step 10: Integrate responses
       const integratorInput: IntegratorInput = {
