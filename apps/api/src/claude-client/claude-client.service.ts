@@ -388,12 +388,28 @@ Determine the user's intention. Return ONLY valid JSON:
       return 'weight_log';
 
     // Meal logging
-    if (lower.includes('ate') || lower.includes('meal') || lower.includes('food') ||
-        lower.includes('breakfast') || lower.includes('lunch') || lower.includes('dinner') ||
-        lower.includes('comí') || lower.includes('comi') || lower.includes('comida') ||
-        lower.includes('desayuno') || lower.includes('almuerzo') || lower.includes('cena') ||
-        lower.includes('pollo') || lower.includes('arroz') ||
-        lower.includes('huevos') || lower.includes('pan'))
+    const mealVerbs = [
+      'ate', 'eaten', 'eating', 'meal', 'food', 'snack',
+      'breakfast', 'lunch', 'dinner',
+      'comí', 'comi', 'comida', 'comiendo', 'merendé', 'merende',
+      'desayuné', 'desayune', 'desayuno', 'almorcé', 'almorce', 'almuerzo',
+      'cené', 'cene', 'cena', 'merienda', 'tomé', 'tome',
+    ];
+    const foodItems = [
+      'pollo', 'arroz', 'huevos', 'pan', 'pasta', 'pizza', 'tortilla',
+      'carne', 'pescado', 'ensalada', 'sopa', 'frijoles', 'sandwich',
+      'torta', 'yogurt', 'cereal', 'fruta', 'leche', 'queso', 'café',
+      'plátano', 'platano', 'banana', 'manzana', 'naranja', 'avena',
+      'tacos', 'burrito', 'empanada', 'arepa', 'pupusa', 'tamales',
+      'galletas', 'chocolate', 'helado', 'jugo', 'licuado', 'batido',
+      'aguacate', 'avocado', 'atún', 'atun', 'tuna', 'jamón', 'jamon',
+      'papas', 'papa', 'patata', 'camote', 'yuca', 'choclo', 'elote',
+      'lentejas', 'garbanzos', 'quinoa', 'granola', 'nueces', 'almendras',
+      'mantequilla', 'mermelada', 'miel', 'azúcar', 'azucar',
+      'chicken', 'rice', 'eggs', 'bread', 'salad', 'soup', 'beans',
+      'beef', 'fish', 'fruit', 'cake', 'oatmeal', 'cheese', 'milk',
+    ];
+    if (mealVerbs.some((w) => lower.includes(w)) || foodItems.some((w) => lower.includes(w)))
       return 'meal_log';
 
     // Activity logging
@@ -443,13 +459,13 @@ Determine the user's intention. Return ONLY valid JSON:
           pollo: 250, chicken: 250,
           arroz: 200, rice: 200,
           ensalada: 80, salad: 80,
-          huevos: 150, eggs: 150,
+          huevos: 150, eggs: 150, huevo: 80,
           pan: 120, bread: 120,
-          pasta: 350,
+          pasta: 350, fideos: 350,
           torta: 400, cake: 400,
           pizza: 300,
           pescado: 200, fish: 200,
-          carne: 300, beef: 300,
+          carne: 300, beef: 300, meat: 300,
           frijoles: 150, beans: 150,
           tortilla: 100,
           sandwich: 350,
@@ -457,6 +473,37 @@ Determine the user's intention. Return ONLY valid JSON:
           fruta: 80, fruit: 80,
           yogurt: 120,
           cereal: 200,
+          // Frutas
+          'plátano': 105, platano: 105, banana: 105,
+          manzana: 95, apple: 95,
+          naranja: 65, orange: 65,
+          uvas: 70, grapes: 70,
+          piña: 80, pineapple: 80,
+          mango: 100, papaya: 60, sandía: 50, melón: 50,
+          fresa: 50, strawberry: 50, durazno: 60, pera: 60,
+          // Lácteos
+          leche: 120, milk: 120, queso: 110, cheese: 110,
+          'café': 5, cafe: 5, coffee: 5,
+          // Granos y cereales
+          avena: 150, oatmeal: 150, granola: 200,
+          quinoa: 180,
+          // Comida latina
+          tacos: 250, burrito: 400, empanada: 300,
+          arepa: 200, pupusa: 250, tamales: 300, tostada: 150,
+          // Snacks y postres
+          galletas: 150, chocolate: 200, helado: 250,
+          // Bebidas
+          jugo: 120, licuado: 200, batido: 250, smoothie: 250,
+          // Vegetales y otros
+          aguacate: 160, avocado: 160,
+          'atún': 150, atun: 150, tuna: 150,
+          'jamón': 150, jamon: 150,
+          papas: 200, papa: 130, patata: 130,
+          camote: 120, yuca: 150,
+          lentejas: 180, garbanzos: 180,
+          nueces: 200, almendras: 170,
+          mantequilla: 100, butter: 100,
+          miel: 60, honey: 60,
         };
 
         for (const [food, cal] of Object.entries(foodCalories)) {

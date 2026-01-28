@@ -148,7 +148,7 @@ Rules:
       pollo: 250, chicken: 250,
       arroz: 200, rice: 200,
       ensalada: 80, salad: 80,
-      huevos: 150, eggs: 150,
+      huevos: 150, eggs: 150, huevo: 80,
       pan: 120, bread: 120,
       pasta: 350, fideos: 350,
       torta: 400, cake: 400,
@@ -162,6 +162,31 @@ Rules:
       fruta: 80, fruit: 80,
       yogurt: 120,
       cereal: 200,
+      // Frutas
+      'plátano': 105, platano: 105, banana: 105,
+      manzana: 95, apple: 95,
+      naranja: 65, orange: 65,
+      uvas: 70, grapes: 70,
+      mango: 100, papaya: 60, fresa: 50, durazno: 60, pera: 60,
+      // Lácteos
+      leche: 120, milk: 120, queso: 110, cheese: 110,
+      'café': 5, cafe: 5, coffee: 5,
+      // Granos
+      avena: 150, oatmeal: 150, granola: 200, quinoa: 180,
+      // Comida latina
+      tacos: 250, burrito: 400, empanada: 300,
+      arepa: 200, pupusa: 250, tamales: 300,
+      // Snacks
+      galletas: 150, chocolate: 200, helado: 250,
+      // Bebidas
+      jugo: 120, licuado: 200, batido: 250,
+      // Otros
+      aguacate: 160, avocado: 160,
+      'atún': 150, atun: 150, tuna: 150,
+      papas: 200, papa: 130,
+      camote: 120, yuca: 150,
+      lentejas: 180, garbanzos: 180,
+      nueces: 200, almendras: 170,
     };
 
     for (const [food, cal] of Object.entries(foodCalories)) {

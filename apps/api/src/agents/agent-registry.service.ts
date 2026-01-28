@@ -113,8 +113,17 @@ export class AgentRegistryService {
     const lowerContent = content.toLowerCase();
 
     const nutritionKeywords = [
-      'comí', 'comi', 'comida', 'desayuno', 'almuerzo', 'cena',
-      'snack', 'calorías', 'calorias', 'comido', 'ate', 'meal',
+      'comí', 'comi', 'comida', 'comiendo', 'desayuno', 'desayuné', 'desayune',
+      'almuerzo', 'almorcé', 'almorce', 'cena', 'cené', 'cene',
+      'merienda', 'merendé', 'merende', 'snack', 'tomé', 'tome',
+      'calorías', 'calorias', 'comido', 'ate', 'meal', 'food', 'eaten',
+      'pollo', 'arroz', 'huevos', 'pan', 'pasta', 'pizza', 'carne',
+      'pescado', 'ensalada', 'sopa', 'frijoles', 'tortilla',
+      'plátano', 'platano', 'banana', 'manzana', 'naranja', 'avena',
+      'yogurt', 'cereal', 'fruta', 'leche', 'queso', 'café', 'cafe',
+      'tacos', 'burrito', 'empanada', 'arepa', 'tamales',
+      'aguacate', 'atún', 'atun', 'papas', 'papa',
+      'galletas', 'chocolate', 'helado', 'jugo', 'licuado',
     ];
     if (nutritionKeywords.some((kw) => lowerContent.includes(kw))) {
       additionalAgents.add('nutrition');
