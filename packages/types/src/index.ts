@@ -165,6 +165,7 @@ export interface WeightProgress {
   current: number;
   goal: number;
   remaining: number;
+  change?: number; // kg changed from starting weight (negative = lost)
   trend?: 'up' | 'down' | 'stable';
 }
 

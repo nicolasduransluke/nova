@@ -40,7 +40,7 @@ export function DailySummaryCard({ summary, compact = false }: DailySummaryCardP
       {/* Progress bar */}
       <div className="mb-4">
         <div className="flex justify-between text-sm text-indigo-200 mb-1">
-          <span>Consumido: {intake} kcal</span>
+          <span>{Math.round(progress)}%</span>
           <span>Meta: {totalBurn - targetDeficit} kcal</span>
         </div>
         <div className="w-full bg-white/10 rounded-full h-3">
@@ -97,6 +97,11 @@ export function DailySummaryCard({ summary, compact = false }: DailySummaryCardP
               (faltan {weightProgress.remaining} kg)
             </span>
           </p>
+          {weightProgress.change != null && weightProgress.change !== 0 && (
+            <p className={`text-sm mt-1 font-medium ${weightProgress.change < 0 ? 'text-green-400' : 'text-red-400'}`}>
+              {weightProgress.change > 0 ? '+' : ''}{weightProgress.change} kg desde el inicio
+            </p>
+          )}
           {weightProgress.trend && (
             <p className="text-xs text-indigo-300 mt-1">
               Tendencia: {weightProgress.trend === 'down' ? 'bajando' : weightProgress.trend === 'up' ? 'subiendo' : 'estable'}

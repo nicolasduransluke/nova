@@ -151,10 +151,14 @@ Keep responses brief, data-focused, and in the user's language.`;
     const effectiveGoalWeight = goalWeight ?? profile?.goalWeight;
     let weightProgress: WeightProgress | undefined;
     if (lastWeight != null && effectiveGoalWeight != null) {
+      const startingWeight = profile?.weight;
       weightProgress = {
         current: lastWeight,
         goal: effectiveGoalWeight,
         remaining: Number((lastWeight - effectiveGoalWeight).toFixed(1)),
+        change: startingWeight != null
+          ? Number((lastWeight - startingWeight).toFixed(1))
+          : undefined,
       };
     }
 
