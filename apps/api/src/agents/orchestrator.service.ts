@@ -120,19 +120,24 @@ export class OrchestratorService {
       // Step 8a: Handle weight_log (before summary so new weight is reflected)
       if (intent === 'weight_log' && extractedData.weight) {
         const newWeight = extractedData.weight as number;
-        await deps.createWeightLog({
-          userId: request.userId,
-          weight: newWeight,
-          date: new Date(),
-        });
-        // Update lastWeightLog so daily summary and integrator use the new weight
-        lastWeightLog = { weight: newWeight, date: new Date(), daysSince: 0 };
-        needsWeightPrompt = false;
+        // Validate weight is in realistic range (20-500 kg)
+        if (newWeight >= 20 && newWeight <= 500) {
+          await deps.createWeightLog({
+            userId: request.userId,
+            weight: newWeight,
+            date: new Date(),
+          });
+          // Update lastWeightLog so daily summary and integrator use the new weight
+          lastWeightLog = { weight: newWeight, date: new Date(), daysSince: 0 };
+          needsWeightPrompt = false;
+        } else {
+          this.logger.warn(`Invalid weight value ignored: ${newWeight} kg`);
+        }
       }
 
       // Step 8b: Handle goal_set (before summary so new goal is reflected)
       if (intent === 'goal_set') {
-        const goalWeight = extractedData.goalWeight as number | null;
+        let goalWeight = extractedData.goalWeight as number | null;
         let weeklyGoal = extractedData.weeklyGoal as number | null;
         // Try extractedData first, fallback to regex on original message
         let targetWeeks = extractedData.targetWeeks as number | null;
@@ -142,6 +147,21 @@ export class OrchestratorService {
             targetWeeks = parseInt(weeksMatch[1] || weeksMatch[2], 10);
           }
         }
+
+        // Validate goal values
+        if (goalWeight != null && (goalWeight < 30 || goalWeight > 300)) {
+          this.logger.warn(`Invalid goalWeight ignored: ${goalWeight} kg`);
+          goalWeight = null;
+        }
+        if (weeklyGoal != null && (weeklyGoal < 0.1 || weeklyGoal > 2.0)) {
+          this.logger.warn(`Invalid weeklyGoal ignored: ${weeklyGoal} kg/week`);
+          weeklyGoal = null;
+        }
+        if (targetWeeks != null && (targetWeeks < 1 || targetWeeks > 200)) {
+          this.logger.warn(`Invalid targetWeeks ignored: ${targetWeeks}`);
+          targetWeeks = null;
+        }
+
         const updateData: { goalWeight?: number; weeklyGoal?: number; targetWeeks?: number } = {};
         if (goalWeight != null) updateData.goalWeight = goalWeight;
         if (targetWeeks != null) updateData.targetWeeks = targetWeeks;
@@ -152,11 +172,15 @@ export class OrchestratorService {
           const currentWeight = lastWeightLog?.weight ?? context.profile?.weight;
           if (effectiveGoalWeight != null && currentWeight != null) {
             const remaining = Math.abs(currentWeight - effectiveGoalWeight);
-            weeklyGoal = Number((remaining / targetWeeks).toFixed(2));
+            const calculated = Number((remaining / targetWeeks).toFixed(2));
+            // Cap weeklyGoal to safe range (0.1-2.0 kg/week)
+            weeklyGoal = Math.min(Math.max(calculated, 0.1), 2.0);
           }
         }
 
-        if (weeklyGoal != null) updateData.weeklyGoal = weeklyGoal;
+        if (weeklyGoal != null && weeklyGoal >= 0.1 && weeklyGoal <= 2.0) {
+          updateData.weeklyGoal = weeklyGoal;
+        }
         if (Object.keys(updateData).length > 0) {
           const updatedProfile = await deps.updateProfile(request.userId, updateData);
           // Refresh context profile for summary calculation
