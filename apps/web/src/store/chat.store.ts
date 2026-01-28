@@ -139,8 +139,43 @@ export const useChatStore = create<ChatStore>()(
             body: JSON.stringify(body),
           });
 
-          const data = await response.json();
+          // Handle 401 - try to refresh token and retry
+          if (response.status === 401) {
+            const refreshed = await useAuthStore.getState().refreshTokens();
+            if (refreshed) {
+              // Retry with new token
+              const newAccessToken = useAuthStore.getState().accessToken;
+              const retryResponse = await fetch(`${API_URL}/api/messages/process/sync`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...(newAccessToken ? { Authorization: `Bearer ${newAccessToken}` } : {}),
+                },
+                body: JSON.stringify(body),
+              });
+              const retryData = await retryResponse.json();
+              setAgentTyping(false);
 
+              if (retryData.success && retryData.data?.response?.message) {
+                addMessage({
+                  type: 'text',
+                  content: retryData.data.response.message,
+                  sender: 'agent',
+                });
+                if (retryData.data.response.dailySummary) {
+                  set({ dailySummary: retryData.data.response.dailySummary });
+                }
+                return;
+              }
+            } else {
+              // Refresh failed, redirect to login
+              setAgentTyping(false);
+              window.location.href = '/login';
+              return;
+            }
+          }
+
+          const data = await response.json();
           setAgentTyping(false);
 
           if (data.success && data.data?.response?.message) {

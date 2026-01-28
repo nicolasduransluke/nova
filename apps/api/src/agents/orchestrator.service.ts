@@ -206,6 +206,9 @@ export class OrchestratorService {
       );
 
       // Step 10: Integrate responses
+      // Profile is incomplete if user hasn't set a goalWeight
+      const isProfileIncomplete = !context.profile?.goalWeight;
+
       const integratorInput: IntegratorInput = {
         context,
         message: request.content,
@@ -215,6 +218,7 @@ export class OrchestratorService {
         dailySummary,
         lastWeightLog,
         needsWeightPrompt,
+        isProfileIncomplete,
       };
 
       const response = await this.integratorAgent.integrate(integratorInput);

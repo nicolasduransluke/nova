@@ -23,6 +23,7 @@ export interface IntegratorInput extends AgentInput {
   dailySummary?: DailySummary;
   lastWeightLog?: LastWeightLogInfo;
   needsWeightPrompt: boolean;
+  isProfileIncomplete?: boolean;
 }
 
 @Injectable()
@@ -277,21 +278,39 @@ DO NOT say you couldn't detect data. The data IS in the agent analysis above. US
 DO NOT say you couldn't detect data. The data IS in the agent analysis above. USE IT.`;
     } else if (intent === 'goal_set') {
       let goalTask = `Acknowledge the goal update.`;
-      if (dailySummary?.weightProgress?.estimatedWeeks != null && dailySummary.weightProgress.estimatedWeeks > 0) {
+      const hasExplicitPace = context.profile?.targetWeeks || (input.extractedData?.weeklyGoal != null) || (input.extractedData?.targetWeeks != null);
+
+      if (hasExplicitPace && dailySummary?.weightProgress?.estimatedWeeks != null && dailySummary.weightProgress.estimatedWeeks > 0) {
         goalTask += ` The estimated timeline to reach the goal is ~${dailySummary.weightProgress.estimatedWeeks} weeks. Mention this timeline.`;
-      }
-      if (context.profile?.targetWeeks) {
-        goalTask += ` The user set a target of ${context.profile.targetWeeks} weeks.`;
+        if (context.profile?.targetWeeks) {
+          goalTask += ` The user set a target of ${context.profile.targetWeeks} weeks.`;
+        }
+      } else if (!hasExplicitPace && dailySummary?.goalWeight != null) {
+        // User set goalWeight but not pace - ask them about their preferred pace
+        goalTask += ` The user set their goal weight but did NOT specify a timeline or pace.
+DO NOT mention any estimated weeks or timeline.
+Instead, ask them at what pace they want to lose weight. Give them options like:
+- "en cuánto tiempo?" or "a qué ritmo?"
+- Example: "puedo perder 0.5 kg/semana" or "quiero lograrlo en 20 semanas"`;
       }
       goalTask += ` Keep it brief and encouraging.`;
       prompt += goalTask;
     } else if (intent === 'weight_log') {
       let weightTask = `Acknowledge the weight entry.`;
-      if (lastWeightLog && dailySummary?.goalWeight != null) {
+      if (input.isProfileIncomplete) {
+        weightTask = `The user logged their weight: ${lastWeightLog?.weight || 'unknown'} kg. This appears to be a new user without a configured profile.
+DO NOT mention any specific deficit or weekly loss targets. Instead:
+1. Acknowledge the weight was recorded
+2. Ask them to set their weight goal (target weight in kg)
+3. Mention they can say something like "mi meta es llegar a X kg" or "quiero pesar X kg"
+Keep it brief and encouraging.`;
+      } else if (lastWeightLog && dailySummary?.goalWeight != null) {
         const remaining = (lastWeightLog.weight - dailySummary.goalWeight).toFixed(1);
         weightTask += ` The user logged ${lastWeightLog.weight} kg. Goal is ${dailySummary.goalWeight} kg. They have ${remaining} kg remaining.`;
+        weightTask += ` Show trend if available. Keep it brief.`;
+      } else {
+        weightTask += ` Show trend if available. Keep it brief.`;
       }
-      weightTask += ` Show trend if available. Keep it brief.`;
       prompt += weightTask;
     } else if (intent === 'question') {
       const remainingToEat = dailySummary ? (dailySummary.tdee + dailySummary.burn - dailySummary.targetDeficit - dailySummary.intake) : null;

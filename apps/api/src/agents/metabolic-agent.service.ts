@@ -91,11 +91,14 @@ Keep responses brief, data-focused, and in the user's language.`;
       }
     }
 
-    // Weight projection based on deficit
-    const weeklyGoal = profile?.weeklyGoal ?? 0.5;
-    const dailyDeficit = Math.round((weeklyGoal * 7700) / 7);
-    const projectedWeeklyLoss = dailyDeficit * 7 / 7700;
-    insights.push(`Proyección con déficit de ${dailyDeficit} kcal/día: ~${projectedWeeklyLoss.toFixed(2)} kg/semana`);
+    // Weight projection based on deficit (only show if user has configured goals)
+    let projectedWeeklyLoss: number | undefined;
+    if (profile?.goalWeight || profile?.weeklyGoal) {
+      const weeklyGoal = profile?.weeklyGoal ?? 0.5;
+      const dailyDeficit = Math.round((weeklyGoal * 7700) / 7);
+      projectedWeeklyLoss = dailyDeficit * 7 / 7700;
+      insights.push(`Mantenemos el déficit de ${dailyDeficit} kcal/día para una pérdida de ~${projectedWeeklyLoss.toFixed(2)} kg/semana.`);
+    }
 
     return this.createOutput({
       insights,
