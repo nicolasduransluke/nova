@@ -38,7 +38,7 @@ export function DailySummaryCard({ summary, compact = false }: DailySummaryCardP
       <div className="mb-4">
         <div className="flex justify-between text-sm text-indigo-200 mb-1">
           <span>{Math.round(progress)}%</span>
-          <span>Meta: {totalBurn - targetDeficit} kcal</span>
+          <span>Meta de consumo: {totalBurn - targetDeficit} kcal</span>
         </div>
         <div className="w-full bg-white/10 rounded-full h-3">
           <div
