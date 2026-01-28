@@ -134,7 +134,14 @@ export class OrchestratorService {
       if (intent === 'goal_set') {
         const goalWeight = extractedData.goalWeight as number | null;
         let weeklyGoal = extractedData.weeklyGoal as number | null;
-        const targetWeeks = extractedData.targetWeeks as number | null;
+        // Try extractedData first, fallback to regex on original message
+        let targetWeeks = extractedData.targetWeeks as number | null;
+        if (targetWeeks == null) {
+          const weeksMatch = request.content.match(/(?:en\s+)?(\d+)\s*semanas?|(\d+)\s*weeks?/i);
+          if (weeksMatch) {
+            targetWeeks = parseInt(weeksMatch[1] || weeksMatch[2], 10);
+          }
+        }
         const updateData: { goalWeight?: number; weeklyGoal?: number; targetWeeks?: number } = {};
         if (goalWeight != null) updateData.goalWeight = goalWeight;
         if (targetWeeks != null) updateData.targetWeeks = targetWeeks;
