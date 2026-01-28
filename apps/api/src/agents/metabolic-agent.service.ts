@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { AgentOutput, DailyEntry, DailySummary, Profile } from '@nova/types';
+import type { AgentOutput, DailyEntry, DailySummary, Profile, WeightProgress } from '@nova/types';
 import { BaseAgent, AgentInput } from './base-agent.abstract';
 import { ClaudeClientService } from '../claude-client/claude-client.service';
 
@@ -137,6 +137,8 @@ Keep responses brief, data-focused, and in the user's language.`;
     profile: Profile | undefined,
     todayIntake: number,
     todayBurn: number,
+    lastWeight?: number,
+    goalWeight?: number,
   ): DailySummary {
     const tdee = this.calculateTDEE(profile);
     const totalBurn = tdee + todayBurn;
@@ -146,6 +148,16 @@ Keep responses brief, data-focused, and in the user's language.`;
     const targetDeficit = Math.round((weeklyGoal * 7700) / 7);
     const projectedWeeklyLoss = (deficit * 7) / 7700; // 7700 cal = 1 kg
 
+    const effectiveGoalWeight = goalWeight ?? profile?.goalWeight;
+    let weightProgress: WeightProgress | undefined;
+    if (lastWeight != null && effectiveGoalWeight != null) {
+      weightProgress = {
+        current: lastWeight,
+        goal: effectiveGoalWeight,
+        remaining: Number((lastWeight - effectiveGoalWeight).toFixed(1)),
+      };
+    }
+
     return {
       date: new Date(),
       intake: todayIntake,
@@ -154,7 +166,9 @@ Keep responses brief, data-focused, and in the user's language.`;
       deficit: Math.round(deficit),
       targetDeficit,
       projectedWeeklyLoss: Number(projectedWeeklyLoss.toFixed(2)),
-      goalWeight: profile?.goalWeight,
+      goalWeight: effectiveGoalWeight,
+      currentWeight: lastWeight,
+      weightProgress,
     };
   }
 

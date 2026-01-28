@@ -11,10 +11,18 @@ import type {
 import { BaseAgent, AgentInput } from './base-agent.abstract';
 import { ClaudeClientService, ClaudeMessage } from '../claude-client/claude-client.service';
 
+export interface LastWeightLogInfo {
+  weight: number;
+  date: Date;
+  daysSince: number;
+}
+
 export interface IntegratorInput extends AgentInput {
   intent: MessageIntent;
   agentOutputs: AgentOutput[];
   dailySummary?: DailySummary;
+  lastWeightLog?: LastWeightLogInfo;
+  needsWeightPrompt: boolean;
 }
 
 @Injectable()
@@ -176,7 +184,7 @@ Be calm, data-driven, brief. No hype language.`;
   }
 
   private buildIntegrationPrompt(input: IntegratorInput): string {
-    const { message, context, intent, agentOutputs, dailySummary } = input;
+    const { message, context, intent, agentOutputs, dailySummary, lastWeightLog, needsWeightPrompt } = input;
 
     let prompt = `## User Message
 "${message}"
@@ -199,6 +207,22 @@ ${intent}
 - TDEE: ${dailySummary.tdee} kcal
 - Current deficit: ${dailySummary.deficit} kcal
 - Target deficit: ${dailySummary.targetDeficit} kcal
+`;
+    }
+
+    // Weight context
+    if (lastWeightLog && dailySummary?.goalWeight != null) {
+      const remaining = (lastWeightLog.weight - dailySummary.goalWeight).toFixed(1);
+      prompt += `
+## Weight Progress
+- Last weight: ${lastWeightLog.weight} kg (${lastWeightLog.daysSince} days ago)
+- Goal: ${dailySummary.goalWeight} kg
+- Remaining: ${remaining} kg
+`;
+    } else if (lastWeightLog) {
+      prompt += `
+## Weight Info
+- Last weight: ${lastWeightLog.weight} kg (${lastWeightLog.daysSince} days ago)
 `;
     }
 
@@ -249,12 +273,26 @@ DO NOT say you couldn't detect data. The data IS in the agent analysis above. US
 3. Show today's totals from "Today's Progress" above (consumed/burned/deficit)
 DO NOT say you couldn't detect data. The data IS in the agent analysis above. USE IT.`;
     } else if (intent === 'weight_log') {
-      prompt += `Acknowledge the weight entry. Show trend if available. Keep it brief.`;
+      let weightTask = `Acknowledge the weight entry.`;
+      if (lastWeightLog && dailySummary?.goalWeight != null) {
+        const remaining = (lastWeightLog.weight - dailySummary.goalWeight).toFixed(1);
+        weightTask += ` The user logged ${lastWeightLog.weight} kg. Goal is ${dailySummary.goalWeight} kg. They have ${remaining} kg remaining.`;
+      }
+      weightTask += ` Show trend if available. Keep it brief.`;
+      prompt += weightTask;
     } else if (intent === 'question') {
       prompt += `Answer using the data available. Focus on deficit progress and daily summary.`;
     } else {
-      prompt += `Respond naturally. If appropriate, mention they can log meals or activities.
+      // greeting or general
+      let generalTask = `Respond naturally.`;
+      if (needsWeightPrompt && !lastWeightLog) {
+        generalTask += ` The user has never logged their weight. Ask them to share their current weight so you can track their progress.`;
+      } else if (needsWeightPrompt && lastWeightLog) {
+        generalTask += ` The user hasn't logged their weight in ${lastWeightLog.daysSince} days. Suggest they weigh in today.`;
+      }
+      generalTask += ` If appropriate, mention they can log meals or activities.
 Keep it conversational and brief (max 6 lines).`;
+      prompt += generalTask;
     }
 
     return prompt;

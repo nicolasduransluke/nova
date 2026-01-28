@@ -7,7 +7,7 @@ export interface DailySummaryCardProps {
 }
 
 export function DailySummaryCard({ summary, compact = false }: DailySummaryCardProps) {
-  const { intake, burn, tdee, deficit, targetDeficit, projectedWeeklyLoss, goalWeight } = summary;
+  const { intake, burn, tdee, deficit, targetDeficit, projectedWeeklyLoss, goalWeight, weightProgress } = summary;
   const totalBurn = tdee + burn;
   const progress = totalBurn > 0 ? Math.min((intake / totalBurn) * 100, 100) : 0;
   const isOnTrack = deficit >= targetDeficit * 0.8;
@@ -82,10 +82,28 @@ export function DailySummaryCard({ summary, compact = false }: DailySummaryCardP
         ) : (
           <p>Meta de déficit: {targetDeficit} kcal/día para perder ~{((targetDeficit * 7) / 7700).toFixed(1)} kg/semana</p>
         )}
-        {goalWeight != null && (
+        {goalWeight != null && !weightProgress && (
           <p className="mt-1">Meta de peso: {goalWeight} kg</p>
         )}
       </div>
+
+      {/* Weight Progress */}
+      {weightProgress && (
+        <div className="mt-4 pt-4 border-t border-white/10 text-center">
+          <h4 className="text-white font-medium text-sm mb-2">Progreso de Peso</h4>
+          <p className="text-indigo-200 text-sm">
+            {weightProgress.current} kg → {weightProgress.goal} kg
+            <span className="ml-2 text-indigo-300">
+              (faltan {weightProgress.remaining} kg)
+            </span>
+          </p>
+          {weightProgress.trend && (
+            <p className="text-xs text-indigo-300 mt-1">
+              Tendencia: {weightProgress.trend === 'down' ? 'bajando' : weightProgress.trend === 'up' ? 'subiendo' : 'estable'}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

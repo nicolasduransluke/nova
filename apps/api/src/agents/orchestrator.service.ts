@@ -15,7 +15,7 @@ import type {
   WeightLog,
 } from '@nova/types';
 import { ClaudeClientService } from '../claude-client/claude-client.service';
-import { IntegratorAgentService, IntegratorInput } from './integrator-agent.service';
+import { IntegratorAgentService, IntegratorInput, LastWeightLogInfo } from './integrator-agent.service';
 import { AgentRegistryService } from './agent-registry.service';
 import { MetabolicAgentService } from './metabolic-agent.service';
 import { AgentInput } from './base-agent.abstract';
@@ -62,6 +62,22 @@ export class OrchestratorService {
     try {
       // Step 1: Build context
       const context = await this.buildContext(request.userId, deps);
+
+      // Step 1b: Fetch last weight log for weight prompting
+      const recentWeightLogs = await deps.getRecentWeightLogs(request.userId, 1);
+      let lastWeightLog: LastWeightLogInfo | undefined;
+      let needsWeightPrompt = false;
+
+      if (recentWeightLogs.length > 0) {
+        const log = recentWeightLogs[0];
+        const daysSince = Math.floor(
+          (Date.now() - new Date(log.date).getTime()) / (1000 * 60 * 60 * 24),
+        );
+        lastWeightLog = { weight: log.weight, date: log.date, daysSince };
+        needsWeightPrompt = daysSince > 7;
+      } else {
+        needsWeightPrompt = true;
+      }
 
       // Step 2: Classify intent
       const intent = await this.classifyMessage(request.content);
@@ -114,6 +130,8 @@ export class OrchestratorService {
         context.profile,
         todayIntake,
         todayBurn,
+        lastWeightLog?.weight,
+        context.profile?.goalWeight,
       );
 
       // Step 9: Handle weight_log
@@ -147,6 +165,8 @@ export class OrchestratorService {
         intent,
         agentOutputs,
         dailySummary,
+        lastWeightLog,
+        needsWeightPrompt,
       };
 
       const response = await this.integratorAgent.integrate(integratorInput);

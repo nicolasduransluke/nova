@@ -161,6 +161,13 @@ export interface PendingEntry {
   createdAt: Date;
 }
 
+export interface WeightProgress {
+  current: number;
+  goal: number;
+  remaining: number;
+  trend?: 'up' | 'down' | 'stable';
+}
+
 export interface DailySummary {
   date: Date;
   intake: number;
@@ -170,6 +177,8 @@ export interface DailySummary {
   targetDeficit: number;
   projectedWeeklyLoss: number; // kg
   goalWeight?: number; // target weight in kg
+  currentWeight?: number; // last recorded weight
+  weightProgress?: WeightProgress;
 }
 
 // API Response Types
