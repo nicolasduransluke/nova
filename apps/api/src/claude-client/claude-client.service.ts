@@ -308,24 +308,51 @@ Determine the user's intention. Return ONLY valid JSON:
       }
     }
 
-    // Meals / Food
-    if (lowerPrompt.includes('comí') || lowerPrompt.includes('comi') || lowerPrompt.includes('comida') ||
-        lowerPrompt.includes('desayuno') || lowerPrompt.includes('almuerzo') || lowerPrompt.includes('cena') ||
+    // Meals / Food — extract actual data from the integration prompt
+    if (lowerPrompt.includes('meal_log') || lowerPrompt.includes('comí') || lowerPrompt.includes('comi') ||
+        lowerPrompt.includes('comida') || lowerPrompt.includes('desayuno') || lowerPrompt.includes('almuerzo') ||
+        lowerPrompt.includes('almor') || lowerPrompt.includes('cena') ||
         lowerPrompt.includes('pollo') || lowerPrompt.includes('arroz') ||
         lowerPrompt.includes('ate') || lowerPrompt.includes('meal') || lowerPrompt.includes('food')) {
+      const itemsData = this.extractItemsFromPrompt(prompt);
+      const summaryData = this.extractSummaryFromPrompt(prompt);
+      if (itemsData.items.length > 0) {
+        const itemLines = itemsData.items.map((item) => `- ${item.name}: ~${item.calories} kcal`).join('\n');
+        const summaryLine = summaryData
+          ? (isSpanish
+            ? `\nHoy llevas ${summaryData.intake} kcal consumidas | ${summaryData.burn} kcal quemadas | Déficit: ${summaryData.deficit} kcal`
+            : `\nToday: ${summaryData.intake} kcal consumed | ${summaryData.burn} kcal burned | Deficit: ${summaryData.deficit} kcal`)
+          : '';
+        return isSpanish
+          ? `He registrado tu comida:\n\n${itemLines}\n\nTotal: ~${itemsData.total} kcal${summaryLine}`
+          : `Meal logged:\n\n${itemLines}\n\nTotal: ~${itemsData.total} kcal${summaryLine}`;
+      }
       return isSpanish
-        ? "He estimado las calorías de tu comida:\n\n- Plato principal: ~450 kcal\n- Acompañamiento: ~150 kcal\n\nTotal estimado: ~600 kcal\n\n¿Te parece bien?"
-        : "I've estimated the calories for your meal:\n\n- Main dish: ~450 kcal\n- Side: ~150 kcal\n\nEstimated total: ~600 kcal\n\nDoes this look right?";
+        ? "He registrado tu comida con un estimado de ~500 kcal."
+        : "Meal logged with an estimate of ~500 kcal.";
     }
 
-    // Exercise / Activity
-    if (lowerPrompt.includes('entrené') || lowerPrompt.includes('entrene') || lowerPrompt.includes('ejercicio') ||
-        lowerPrompt.includes('corrí') || lowerPrompt.includes('correr') || lowerPrompt.includes('gimnasio') ||
-        lowerPrompt.includes('workout') || lowerPrompt.includes('exercise') || lowerPrompt.includes('gym') ||
-        lowerPrompt.includes('running') || lowerPrompt.includes('run')) {
+    // Exercise / Activity — extract actual data from the integration prompt
+    if (lowerPrompt.includes('activity_log') || lowerPrompt.includes('entrené') || lowerPrompt.includes('entrene') ||
+        lowerPrompt.includes('ejercicio') || lowerPrompt.includes('corrí') || lowerPrompt.includes('correr') ||
+        lowerPrompt.includes('gimnasio') || lowerPrompt.includes('workout') || lowerPrompt.includes('exercise') ||
+        lowerPrompt.includes('gym') || lowerPrompt.includes('running') || lowerPrompt.includes('run')) {
+      const itemsData = this.extractItemsFromPrompt(prompt);
+      const summaryData = this.extractSummaryFromPrompt(prompt);
+      if (itemsData.items.length > 0) {
+        const itemLines = itemsData.items.map((item) => `- ${item.name}: ~${item.calories} kcal`).join('\n');
+        const summaryLine = summaryData
+          ? (isSpanish
+            ? `\nHoy llevas ${summaryData.intake} kcal consumidas | ${summaryData.burn} kcal quemadas | Déficit: ${summaryData.deficit} kcal`
+            : `\nToday: ${summaryData.intake} kcal consumed | ${summaryData.burn} kcal burned | Deficit: ${summaryData.deficit} kcal`)
+          : '';
+        return isSpanish
+          ? `He registrado tu actividad:\n\n${itemLines}\n\nTotal quemado: ~${itemsData.total} kcal${summaryLine}`
+          : `Activity logged:\n\n${itemLines}\n\nTotal burned: ~${itemsData.total} kcal${summaryLine}`;
+      }
       return isSpanish
-        ? "He estimado las calorías quemadas:\n\n- Ejercicio (~30 min): ~250 kcal\n\n¿Te parece bien?"
-        : "I've estimated the calories burned:\n\n- Exercise (~30 min): ~250 kcal\n\nDoes this look right?";
+        ? "He registrado tu actividad con un estimado de ~250 kcal quemadas."
+        : "Activity logged with an estimate of ~250 kcal burned.";
     }
 
     // Weight
@@ -366,7 +393,7 @@ Determine the user's intention. Return ONLY valid JSON:
       'peso', 'energía', 'energia', 'buenos', 'buenas',
       'gracias', 'por favor', 'ayuda', 'puedes', 'tengo', 'estoy',
       'bien', 'mal', 'mucho', 'poco',
-      'desayuno', 'almuerzo', 'cena', 'comida',
+      'desayuno', 'almuerzo', 'almor', 'cena', 'comida',
       'correr', 'gimnasio', 'ejercicio', 'cansado', 'cansada',
       'sí', 'dale', 'ponle', 'bórralo', 'borralo',
     ];
@@ -392,7 +419,7 @@ Determine the user's intention. Return ONLY valid JSON:
       'ate', 'eaten', 'eating', 'meal', 'food', 'snack',
       'breakfast', 'lunch', 'dinner',
       'comí', 'comi', 'comida', 'comiendo', 'merendé', 'merende',
-      'desayuné', 'desayune', 'desayuno', 'almorcé', 'almorce', 'almuerzo',
+      'desayuné', 'desayune', 'desayuno', 'almorcé', 'almorce', 'almuerzo', 'almor',
       'cené', 'cene', 'cena', 'merienda', 'tomé', 'tome',
     ];
     const foodItems = [
@@ -554,6 +581,58 @@ Determine the user's intention. Return ONLY valid JSON:
       default:
         return {};
     }
+  }
+
+  private extractItemsFromPrompt(prompt: string): { items: CalorieEntryItem[]; total: number } {
+    const items: CalorieEntryItem[] = [];
+    // Look for "Estimado: item: ~X kcal" patterns from agent insights
+    const estimadoMatches = prompt.matchAll(/(?:Estimado|Data).*?(\{[^}]*"items"\s*:\s*\[.*?\].*?\})/gs);
+    for (const match of estimadoMatches) {
+      try {
+        const parsed = JSON.parse(match[1]);
+        if (parsed.items) {
+          return { items: parsed.items, total: parsed.totalCalories || parsed.items.reduce((s: number, i: CalorieEntryItem) => s + i.calories, 0) };
+        }
+      } catch { /* ignore parse errors */ }
+    }
+
+    // Try extracting from Data: JSON blocks
+    const dataMatch = prompt.match(/Data:\s*(\{[\s\S]*?\})\n/);
+    if (dataMatch) {
+      try {
+        const parsed = JSON.parse(dataMatch[1]);
+        if (parsed.items && Array.isArray(parsed.items)) {
+          const total = parsed.totalCalories || parsed.caloriesBurned || parsed.items.reduce((s: number, i: CalorieEntryItem) => s + i.calories, 0);
+          return { items: parsed.items, total };
+        }
+      } catch { /* ignore parse errors */ }
+    }
+
+    // Try extracting individual "- item: ~X kcal" lines from insights
+    const insightMatches = prompt.matchAll(/- Estimado:\s*(.+?):\s*~?(\d+)\s*kcal/g);
+    for (const match of insightMatches) {
+      items.push({ name: match[1].trim(), calories: parseInt(match[2], 10) });
+    }
+
+    // Try extracting "Total estimado: X kcal"
+    const totalMatch = prompt.match(/Total estimado:\s*(\d+)\s*kcal/);
+    const total = totalMatch ? parseInt(totalMatch[1], 10) : items.reduce((s, i) => s + i.calories, 0);
+
+    return { items, total };
+  }
+
+  private extractSummaryFromPrompt(prompt: string): { intake: number; burn: number; deficit: number } | null {
+    const intakeMatch = prompt.match(/Consumed:\s*(\d+)\s*kcal/);
+    const burnMatch = prompt.match(/Burned \(exercise\):\s*(\d+)\s*kcal/);
+    const deficitMatch = prompt.match(/Current deficit:\s*(-?\d+)\s*kcal/);
+    if (intakeMatch && burnMatch && deficitMatch) {
+      return {
+        intake: parseInt(intakeMatch[1], 10),
+        burn: parseInt(burnMatch[1], 10),
+        deficit: parseInt(deficitMatch[1], 10),
+      };
+    }
+    return null;
   }
 
   private getMockConfirmation(message: string): ConfirmationResult {

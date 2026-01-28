@@ -202,7 +202,7 @@ Keep it conversational and brief (max 6 lines).`;
       'peso', 'energía', 'energia', 'buenos', 'buenas',
       'gracias', 'por favor', 'ayuda', 'puedes', 'tengo', 'estoy',
       'bien', 'mal', 'mucho', 'poco',
-      'desayuno', 'almuerzo', 'cena', 'comida',
+      'desayuno', 'almuerzo', 'almor', 'cena', 'comida',
       'correr', 'gimnasio', 'ejercicio', 'cansado', 'cansada',
       'sí', 'dale', 'ponle', 'bórralo', 'borralo',
     ];

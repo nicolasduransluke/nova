@@ -114,7 +114,7 @@ export class AgentRegistryService {
 
     const nutritionKeywords = [
       'comí', 'comi', 'comida', 'comiendo', 'desayuno', 'desayuné', 'desayune',
-      'almuerzo', 'almorcé', 'almorce', 'cena', 'cené', 'cene',
+      'almuerzo', 'almorcé', 'almorce', 'almor', 'cena', 'cené', 'cene',
       'merienda', 'merendé', 'merende', 'snack', 'tomé', 'tome',
       'calorías', 'calorias', 'comido', 'ate', 'meal', 'food', 'eaten',
       'pollo', 'arroz', 'huevos', 'pan', 'pasta', 'pizza', 'carne',
