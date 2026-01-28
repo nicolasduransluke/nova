@@ -16,12 +16,19 @@ datasource db {
 // ============================================
 
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  name      String
-  metadata  String   @default("{}")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id            String    @id @default(uuid())
+  email         String    @unique
+  name          String
+  password      String?   // null if using OAuth
+  provider      String    @default("local") // "local", "google", "apple"
+  providerId    String?   @map("provider_id") // ID from OAuth provider
+  emailVerified Boolean   @default(false) @map("email_verified")
+  resetToken    String?   @map("reset_token")
+  resetTokenExp DateTime? @map("reset_token_exp")
+  refreshToken  String?   @map("refresh_token")
+  metadata      String    @default("{}")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
 
   // Relations
   profile        Profile?
@@ -29,6 +36,8 @@ model User {
   calorieEntries CalorieEntry[]
   weightLogs     WeightLog[]
 
+  // Indexes
+  @@index([provider, providerId])
   @@map("users")
 }
 

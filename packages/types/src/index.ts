@@ -1,8 +1,13 @@
 // User Domain
+export type AuthProvider = 'local' | 'google' | 'apple';
+
 export interface User {
   id: string;
   email: string;
   name: string;
+  provider: AuthProvider;
+  providerId?: string;
+  emailVerified: boolean;
   metadata: Record<string, unknown>;
   createdAt: Date;
   updatedAt: Date;
@@ -12,6 +17,41 @@ export interface CreateUserDTO {
   email: string;
   name: string;
   metadata?: Record<string, unknown>;
+}
+
+// Auth Domain
+export interface AuthTokens {
+  accessToken: string;
+  refreshToken: string;
+}
+
+export interface LoginResponse {
+  user: User;
+  tokens: AuthTokens;
+}
+
+export interface RegisterDto {
+  name: string;
+  email: string;
+  password: string;
+}
+
+export interface LoginDto {
+  email: string;
+  password: string;
+}
+
+export interface ForgotPasswordDto {
+  email: string;
+}
+
+export interface ResetPasswordDto {
+  token: string;
+  password: string;
+}
+
+export interface RefreshTokenDto {
+  refreshToken: string;
 }
 
 // Profile Domain

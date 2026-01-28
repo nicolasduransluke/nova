@@ -5,12 +5,17 @@ import {
   HttpCode,
   HttpStatus,
   Logger,
+  UseGuards,
+  ForbiddenException,
 } from '@nestjs/common';
 import type { ApiResponse, ProcessMessageResponse } from '@nova/types';
 import { MessageProcessorService } from './message-processor.service';
 import { ProcessMessageDto } from './dto/process-message.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { CurrentUser, JwtPayload } from '../auth/decorators/current-user.decorator';
 
 @Controller('messages')
+@UseGuards(JwtAuthGuard)
 export class MessageProcessorController {
   private readonly logger = new Logger(MessageProcessorController.name);
 
@@ -22,7 +27,11 @@ export class MessageProcessorController {
   @HttpCode(HttpStatus.OK)
   async processMessage(
     @Body() dto: ProcessMessageDto,
+    @CurrentUser() user: JwtPayload,
   ): Promise<ApiResponse<ProcessMessageResponse>> {
+    if (dto.userId !== user.sub) {
+      throw new ForbiddenException('You can only send messages as yourself');
+    }
     this.logger.debug(`Received message from user ${dto.userId}`);
 
     const startTime = Date.now();
@@ -60,7 +69,11 @@ export class MessageProcessorController {
   @HttpCode(HttpStatus.OK)
   async processMessageSync(
     @Body() dto: ProcessMessageDto,
+    @CurrentUser() user: JwtPayload,
   ): Promise<ApiResponse<ProcessMessageResponse>> {
+    if (dto.userId !== user.sub) {
+      throw new ForbiddenException('You can only send messages as yourself');
+    }
     this.logger.debug(`Received sync message from user ${dto.userId}`);
 
     try {

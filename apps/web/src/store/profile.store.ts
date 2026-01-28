@@ -1,0 +1,94 @@
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+import type { Profile, WeightLog } from '@nova/types';
+import { api } from '../lib/api';
+
+export interface ProfileState {
+  profile: Profile | null;
+  weightLogs: WeightLog[];
+  isLoading: boolean;
+  error: string | null;
+}
+
+export interface ProfileActions {
+  loadProfile: (userId: string) => Promise<void>;
+  loadWeightLogs: (userId: string) => Promise<void>;
+  updateProfile: (userId: string, data: Partial<Profile>) => Promise<void>;
+  setError: (error: string | null) => void;
+}
+
+export type ProfileStore = ProfileState & ProfileActions;
+
+export const useProfileStore = create<ProfileStore>()(
+  persist(
+    (set) => ({
+      // State
+      profile: null,
+      weightLogs: [],
+      isLoading: false,
+      error: null,
+
+      // Actions
+      loadProfile: async (userId: string) => {
+        set({ isLoading: true, error: null });
+
+        try {
+          const response = await api.get<Profile>(`/api/profiles/${userId}`);
+
+          if (response.success && response.data) {
+            set({ profile: response.data, isLoading: false });
+          } else {
+            set({ isLoading: false, error: response.error || 'No se pudo cargar el perfil' });
+          }
+        } catch (error) {
+          set({
+            isLoading: false,
+            error: error instanceof Error ? error.message : 'Error de conexión',
+          });
+        }
+      },
+
+      loadWeightLogs: async (userId: string) => {
+        try {
+          const response = await api.get<WeightLog[]>(`/api/weight-logs/${userId}?limit=30`);
+
+          if (response.success && response.data) {
+            set({ weightLogs: response.data });
+          }
+        } catch (error) {
+          console.error('Error loading weight logs:', error);
+        }
+      },
+
+      updateProfile: async (userId: string, updates: Partial<Profile>) => {
+        set({ isLoading: true, error: null });
+
+        try {
+          const response = await api.patch<Profile>(`/api/profiles/${userId}`, updates);
+
+          if (response.success && response.data) {
+            set({ profile: response.data, isLoading: false });
+          } else {
+            set({ isLoading: false, error: response.error || 'No se pudo actualizar el perfil' });
+          }
+        } catch (error) {
+          set({
+            isLoading: false,
+            error: error instanceof Error ? error.message : 'Error de conexión',
+          });
+        }
+      },
+
+      setError: (error) => {
+        set({ error });
+      },
+    }),
+    {
+      name: 'nova-profile-storage',
+      partialize: (state) => ({
+        profile: state.profile,
+        weightLogs: state.weightLogs,
+      }),
+    }
+  )
+);

@@ -1,12 +1,12 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Message, User, MessageType, DailySummary } from '@nova/types';
+import type { Message, MessageType, DailySummary } from '@nova/types';
 import { generateId } from '@nova/utils';
+import { useAuthStore } from './auth.store';
 
 export interface ChatState {
   messages: Message[];
   isAgentTyping: boolean;
-  currentUser: User | null;
   isLoading: boolean;
   error: string | null;
   dailySummary: DailySummary | null;
@@ -15,7 +15,6 @@ export interface ChatState {
 export interface ChatActions {
   addMessage: (message: Omit<Message, 'id' | 'timestamp'>) => Message;
   setAgentTyping: (typing: boolean) => void;
-  setCurrentUser: (user: User | null) => void;
   loadHistory: () => Promise<void>;
   clearMessages: () => void;
   setError: (error: string | null) => void;
@@ -53,7 +52,6 @@ export const useChatStore = create<ChatStore>()(
       // State
       messages: [],
       isAgentTyping: false,
-      currentUser: null,
       isLoading: false,
       error: null,
       dailySummary: null,
@@ -75,10 +73,6 @@ export const useChatStore = create<ChatStore>()(
 
       setAgentTyping: (typing) => {
         set({ isAgentTyping: typing });
-      },
-
-      setCurrentUser: (user) => {
-        set({ currentUser: user });
       },
 
       loadHistory: async () => {
@@ -104,7 +98,19 @@ export const useChatStore = create<ChatStore>()(
       },
 
       sendUserMessage: async (content, imageUrl, explicitType) => {
-        const { addMessage, setAgentTyping, currentUser } = get();
+        const { addMessage, setAgentTyping } = get();
+        const authState = useAuthStore.getState();
+        const userId = authState.user?.id;
+        const accessToken = authState.accessToken;
+
+        if (!userId) {
+          addMessage({
+            type: 'text',
+            content: 'Error: No hay sesión activa. Por favor inicia sesión.',
+            sender: 'agent',
+          });
+          return;
+        }
 
         const type = explicitType || detectMessageType(content, !!imageUrl);
 
@@ -120,7 +126,7 @@ export const useChatStore = create<ChatStore>()(
         try {
           const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
           const body: Record<string, unknown> = {
-            userId: currentUser?.id || 'demo-user-001',
+            userId,
             content,
           };
 
@@ -128,6 +134,7 @@ export const useChatStore = create<ChatStore>()(
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
+              ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
             },
             body: JSON.stringify(body),
           });
@@ -169,7 +176,6 @@ export const useChatStore = create<ChatStore>()(
       name: 'nova-chat-storage',
       partialize: (state) => ({
         messages: state.messages,
-        currentUser: state.currentUser,
         dailySummary: state.dailySummary,
       }),
     }
