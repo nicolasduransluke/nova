@@ -5,12 +5,10 @@ import {
   HttpCode,
   HttpStatus,
   Logger,
-  Get,
 } from '@nestjs/common';
 import type { ApiResponse, ProcessMessageResponse } from '@nova/types';
 import { MessageProcessorService } from './message-processor.service';
 import { ProcessMessageDto } from './dto/process-message.dto';
-import { QueueService } from '../queue/queue.service';
 
 @Controller('messages')
 export class MessageProcessorController {
@@ -18,7 +16,6 @@ export class MessageProcessorController {
 
   constructor(
     private readonly messageProcessor: MessageProcessorService,
-    private readonly queueService: QueueService,
   ) {}
 
   @Post('process')
@@ -36,6 +33,7 @@ export class MessageProcessorController {
         content: dto.content,
         imageUrl: dto.imageUrl,
         messageType: dto.messageType,
+        pendingEntryId: dto.pendingEntryId,
       });
 
       const processingTime = Date.now() - startTime;
@@ -72,6 +70,7 @@ export class MessageProcessorController {
         content: dto.content,
         imageUrl: dto.imageUrl,
         messageType: dto.messageType,
+        pendingEntryId: dto.pendingEntryId,
       });
 
       return {
@@ -86,23 +85,5 @@ export class MessageProcessorController {
         error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
-  }
-
-  @Get('queue/health')
-  async getQueueHealth(): Promise<
-    ApiResponse<{
-      connected: boolean;
-      waiting: number;
-      active: number;
-      completed: number;
-      failed: number;
-    }>
-  > {
-    const health = await this.queueService.getQueueHealth();
-
-    return {
-      success: true,
-      data: health,
-    };
   }
 }

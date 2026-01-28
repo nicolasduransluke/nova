@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NutritionAgentService } from './nutrition-agent.service';
 import { ClaudeClientService } from '../claude-client/claude-client.service';
-import type { AgentContext, NutritionData } from '@nova/types';
+import type { AgentContext } from '@nova/types';
 
 describe('NutritionAgentService', () => {
   let service: NutritionAgentService;
@@ -24,6 +24,7 @@ describe('NutritionAgentService', () => {
       age: 30,
       sex: 'male',
       objective: 'weight_loss',
+      activityLevel: 'moderate',
       createdAt: new Date(),
       updatedAt: new Date(),
     },
@@ -43,22 +44,11 @@ describe('NutritionAgentService', () => {
   });
 
   describe('process', () => {
-    it('should process meal data and return insights', async () => {
-      const nutritionData: NutritionData = {
-        meals: [
-          { name: 'Desayuno', calories: 500, protein: 30, carbs: 50, fat: 20 },
-          { name: 'Almuerzo', calories: 800, protein: 50, carbs: 80, fat: 30 },
-        ],
-        totalCalories: 1300,
-        totalProtein: 80,
-        totalCarbs: 130,
-        totalFat: 50,
-      };
-
+    it('should process meal description and return calorie estimate', async () => {
       const input = {
         context: mockContext,
-        message: 'Hoy desayuné huevos y almorcé pollo con arroz',
-        extractedData: nutritionData,
+        message: 'Almorcé pollo con arroz',
+        extractedData: {},
       };
 
       const output = await service.process(input);
@@ -66,155 +56,54 @@ describe('NutritionAgentService', () => {
       expect(output.agentType).toBe('nutrition');
       expect(output.insights).toBeDefined();
       expect(output.insights.length).toBeGreaterThan(0);
-      expect(output.recommendations).toBeDefined();
-      expect(output.dataPoints).toHaveProperty('calories');
-      expect(output.dataPoints).toHaveProperty('protein');
+      expect(output.dataPoints).toHaveProperty('totalCalories');
+      expect(output.dataPoints).toHaveProperty('items');
       expect(output.confidence).toBeGreaterThan(0);
     });
 
-    it('should calculate macro targets based on profile', async () => {
-      const nutritionData: NutritionData = {
-        totalCalories: 2000,
-        totalProtein: 150,
-        totalCarbs: 200,
-        totalFat: 60,
-      };
-
+    it('should return low confidence for empty messages', async () => {
       const input = {
         context: mockContext,
-        message: 'Registro de comidas del día',
-        extractedData: nutritionData,
-      };
-
-      const output = await service.process(input);
-
-      expect(output.dataPoints).toHaveProperty('targetCalories');
-      expect(output.dataPoints).toHaveProperty('targetProtein');
-      expect(output.dataPoints.targetCalories).toBeGreaterThan(0);
-      expect(output.dataPoints.targetProtein).toBeGreaterThan(0);
-    });
-
-    it('should return low confidence without data', async () => {
-      const input = {
-        context: mockContext,
-        message: 'No comí nada hoy',
+        message: 'ab',
         extractedData: {},
       };
 
       const output = await service.process(input);
 
-      expect(output.confidence).toBeLessThan(0.5);
-    });
-
-    it('should generate protein recommendations when low', async () => {
-      const nutritionData: NutritionData = {
-        totalCalories: 1500,
-        totalProtein: 50, // Low protein
-        totalCarbs: 200,
-        totalFat: 50,
-      };
-
-      const input = {
-        context: mockContext,
-        message: 'Comí principalmente carbohidratos hoy',
-        extractedData: nutritionData,
-      };
-
-      const output = await service.process(input);
-
-      expect(output.recommendations.length).toBeGreaterThan(0);
-      // Should have a protein-related recommendation
-      const hasProteinRec = output.recommendations.some(
-        (rec) => rec.toLowerCase().includes('proteína') || rec.toLowerCase().includes('protein'),
-      );
-      expect(hasProteinRec).toBe(true);
-    });
-
-    it('should track meal distribution', async () => {
-      const nutritionData: NutritionData = {
-        meals: [
-          { name: 'Desayuno', calories: 400, protein: 25 },
-          { name: 'Almuerzo', calories: 600, protein: 35 },
-          { name: 'Cena', calories: 500, protein: 30 },
-        ],
-        totalCalories: 1500,
-        totalProtein: 90,
-      };
-
-      const input = {
-        context: mockContext,
-        message: 'Tres comidas del día',
-        extractedData: nutritionData,
-      };
-
-      const output = await service.process(input);
-
-      expect(output.dataPoints).toHaveProperty('mealsCount');
-      expect(output.dataPoints.mealsCount).toBe(3);
-    });
-
-    it('should calculate adherence percentages', async () => {
-      const nutritionData: NutritionData = {
-        totalCalories: 2000,
-        totalProtein: 150,
-      };
-
-      const input = {
-        context: mockContext,
-        message: 'Comidas del día',
-        extractedData: nutritionData,
-      };
-
-      const output = await service.process(input);
-
-      expect(output.dataPoints).toHaveProperty('calorieAdherence');
-      expect(output.dataPoints).toHaveProperty('proteinAdherence');
+      expect(output.confidence).toBeLessThanOrEqual(0.3);
     });
   });
 
-  describe('edge cases', () => {
-    it('should handle missing profile gracefully', async () => {
-      const contextWithoutProfile: AgentContext = {
-        ...mockContext,
-        profile: undefined,
-      };
+  describe('calculateTDEE', () => {
+    it('should calculate TDEE with Mifflin-St Jeor for male', () => {
+      const tdee = service.calculateTDEE(mockContext.profile);
 
-      const nutritionData: NutritionData = {
-        totalCalories: 1800,
-        totalProtein: 100,
-      };
-
-      const input = {
-        context: contextWithoutProfile,
-        message: 'Comidas del día',
-        extractedData: nutritionData,
-      };
-
-      const output = await service.process(input);
-
-      expect(output.agentType).toBe('nutrition');
-      expect(output.dataPoints.targetCalories).toBeDefined();
-      // Should use default targets
-      expect(output.dataPoints.targetCalories).toBe(2000);
+      // BMR for male: 10*80 + 6.25*175 - 5*30 + 5 = 800 + 1093.75 - 150 + 5 = 1748.75
+      // TDEE with moderate (1.55): 1748.75 * 1.55 = 2710.56
+      expect(tdee).toBeCloseTo(2710.56, 0);
     });
 
-    it('should handle zero values', async () => {
-      const nutritionData: NutritionData = {
-        totalCalories: 0,
-        totalProtein: 0,
-      };
+    it('should calculate TDEE for female', () => {
+      const femaleProfile = { ...mockContext.profile!, sex: 'female' as const };
+      const tdee = service.calculateTDEE(femaleProfile);
 
-      const input = {
-        context: mockContext,
-        message: 'Ayuné hoy',
-        extractedData: nutritionData,
-      };
+      // BMR for female: 10*80 + 6.25*175 - 5*30 - 161 = 800 + 1093.75 - 150 - 161 = 1582.75
+      // TDEE with moderate (1.55): 1582.75 * 1.55 = 2453.26
+      expect(tdee).toBeCloseTo(2453.26, 0);
+    });
 
-      const output = await service.process(input);
+    it('should return default 2000 without profile', () => {
+      const tdee = service.calculateTDEE(undefined);
+      expect(tdee).toBe(2000);
+    });
+  });
 
-      expect(output).toBeDefined();
-      // When there's zero data, either calories is 0 or dataPoints may be minimal
-      expect(output.dataPoints.calories === 0 || output.dataPoints.calories === undefined).toBe(true);
+  describe('estimateCalories', () => {
+    it('should estimate calories from food description', async () => {
+      const result = await service.estimateCalories('pollo con arroz');
+
+      expect(result.items.length).toBeGreaterThan(0);
+      expect(result.totalCalories).toBeGreaterThan(0);
     });
   });
 });

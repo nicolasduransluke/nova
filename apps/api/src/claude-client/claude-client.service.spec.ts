@@ -24,19 +24,14 @@ describe('ClaudeClientService', () => {
       expect(intent).toBe('meal_log');
     });
 
-    it('should classify workout messages', async () => {
-      const intent = await service.classifyIntent('Just finished a 30 min run');
-      expect(intent).toBe('workout_log');
+    it('should classify activity messages', async () => {
+      const intent = await service.classifyIntent('Corrí 30 minutos');
+      expect(intent).toBe('activity_log');
     });
 
-    it('should classify sleep messages', async () => {
-      const intent = await service.classifyIntent('I slept 8 hours last night');
-      expect(intent).toBe('sleep_log');
-    });
-
-    it('should classify energy messages', async () => {
-      const intent = await service.classifyIntent('Feeling tired today');
-      expect(intent).toBe('energy_check');
+    it('should classify confirmation messages', async () => {
+      const intent = await service.classifyIntent('sí');
+      expect(intent).toBe('confirmation');
     });
 
     it('should classify questions', async () => {
@@ -65,13 +60,24 @@ describe('ClaudeClientService', () => {
       expect(data.weight).toBeCloseTo(75.5, 1);
     });
 
-    it('should extract sleep data', async () => {
+    it('should extract meal data with items', async () => {
       const data = await service.extractDataFromMessage(
-        'Got 7 hours of sleep',
-        'sleep_log',
+        'Almorcé pollo con arroz',
+        'meal_log',
       );
-      expect(data).toHaveProperty('hours');
-      expect(data.hours).toBe(7);
+      expect(data).toHaveProperty('items');
+      expect(data).toHaveProperty('totalCalories');
+      expect((data.items as Array<unknown>).length).toBeGreaterThan(0);
+    });
+
+    it('should extract activity data', async () => {
+      const data = await service.extractDataFromMessage(
+        'Corrí 30 minutos',
+        'activity_log',
+      );
+      expect(data).toHaveProperty('activity');
+      expect(data).toHaveProperty('durationMinutes');
+      expect(data).toHaveProperty('caloriesBurned');
     });
 
     it('should handle weight in pounds', async () => {
@@ -80,12 +86,39 @@ describe('ClaudeClientService', () => {
         'weight_log',
       );
       expect(data).toHaveProperty('weight');
-      expect(data.weight).toBeCloseTo(74.84, 1); // ~165 * 0.453592
+      expect(data.weight).toBeCloseTo(74.84, 1);
     });
 
     it('should return empty object for unknown intent', async () => {
       const data = await service.extractDataFromMessage('Hello there', 'greeting');
       expect(data).toEqual({});
+    });
+  });
+
+  describe('parseConfirmation', () => {
+    const pendingEntry = {
+      id: 'test-1',
+      type: 'intake' as const,
+      description: 'pollo con arroz',
+      calories: 450,
+      items: [{ name: 'pollo', calories: 250 }, { name: 'arroz', calories: 200 }],
+      createdAt: new Date(),
+    };
+
+    it('should parse confirmation', async () => {
+      const result = await service.parseConfirmation('sí', pendingEntry);
+      expect(result.action).toBe('confirm');
+    });
+
+    it('should parse rejection', async () => {
+      const result = await service.parseConfirmation('no', pendingEntry);
+      expect(result.action).toBe('reject');
+    });
+
+    it('should parse adjustment', async () => {
+      const result = await service.parseConfirmation('ponle 800', pendingEntry);
+      expect(result.action).toBe('adjust');
+      expect(result.adjustedCalories).toBe(800);
     });
   });
 
@@ -99,12 +132,12 @@ describe('ClaudeClientService', () => {
 
     it('should return appropriate response for weight', async () => {
       const response = await service.generateResponse('I weigh 75 kg today');
-      expect(response.toLowerCase()).toContain('weight');
+      expect(response.toLowerCase()).toMatch(/weight|peso/);
     });
 
     it('should return appropriate response for meal', async () => {
-      const response = await service.generateResponse('Had a healthy meal');
-      expect(response.toLowerCase()).toContain('meal');
+      const response = await service.generateResponse('Almorcé pollo con arroz');
+      expect(response.toLowerCase()).toMatch(/calor|estimad|meal|comida/);
     });
   });
 
@@ -148,6 +181,7 @@ describe('ClaudeClientService', () => {
           age: 30,
           sex: 'male' as const,
           objective: 'weight_loss' as const,
+          activityLevel: 'moderate' as const,
           createdAt: new Date(),
           updatedAt: new Date(),
         },
@@ -159,7 +193,7 @@ describe('ClaudeClientService', () => {
       const prompt = service.buildContextPrompt(context);
 
       expect(prompt).toContain('75kg');
-      expect(prompt).toContain('weight loss');
+      expect(prompt).toContain('Activity level');
     });
   });
 });

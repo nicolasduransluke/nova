@@ -3,12 +3,10 @@ import { OrchestratorService, OrchestratorDependencies } from './orchestrator.se
 import { ClaudeClientService } from '../claude-client/claude-client.service';
 import { MetabolicAgentService } from './metabolic-agent.service';
 import { NutritionAgentService } from './nutrition-agent.service';
-import { TrainingAgentService } from './training-agent.service';
-import { SleepAgentService } from './sleep-agent.service';
-import { EnergyAgentService } from './energy-agent.service';
+import { ActivityBurnAgentService } from './activity-burn-agent.service';
 import { IntegratorAgentService } from './integrator-agent.service';
 import { AgentRegistryService } from './agent-registry.service';
-import type { User, Profile, DailyEntry, Message } from '@nova/types';
+import type { User, Profile } from '@nova/types';
 
 describe('OrchestratorService', () => {
   let service: OrchestratorService;
@@ -31,6 +29,7 @@ describe('OrchestratorService', () => {
     age: 30,
     sex: 'male',
     objective: 'weight_loss',
+    activityLevel: 'moderate',
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -46,10 +45,45 @@ describe('OrchestratorService', () => {
       date: new Date(),
       type: 'custom',
       data: {},
-      novaPoints: 10,
+      novaPoints: 0,
       createdAt: new Date(),
       updatedAt: new Date(),
     }),
+    createCalorieEntry: jest.fn().mockResolvedValue({
+      id: 'calorie-1',
+      userId: 'user-1',
+      date: new Date(),
+      type: 'intake',
+      description: 'test',
+      calories: 500,
+      items: [{ name: 'test', calories: 500 }],
+      confirmed: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }),
+    updateCalorieEntry: jest.fn().mockResolvedValue({
+      id: 'calorie-1',
+      userId: 'user-1',
+      date: new Date(),
+      type: 'intake',
+      description: 'test',
+      calories: 500,
+      items: [{ name: 'test', calories: 500 }],
+      confirmed: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }),
+    deleteCalorieEntry: jest.fn().mockResolvedValue(undefined),
+    getPendingCalorieEntry: jest.fn().mockResolvedValue(null),
+    getTodayCalorieEntries: jest.fn().mockResolvedValue([]),
+    createWeightLog: jest.fn().mockResolvedValue({
+      id: 'weight-1',
+      userId: 'user-1',
+      weight: 79,
+      date: new Date(),
+      createdAt: new Date(),
+    }),
+    getRecentWeightLogs: jest.fn().mockResolvedValue([]),
   };
 
   beforeEach(async () => {
@@ -59,9 +93,7 @@ describe('OrchestratorService', () => {
         ClaudeClientService,
         MetabolicAgentService,
         NutritionAgentService,
-        TrainingAgentService,
-        SleepAgentService,
-        EnergyAgentService,
+        ActivityBurnAgentService,
         IntegratorAgentService,
         AgentRegistryService,
       ],
@@ -71,7 +103,6 @@ describe('OrchestratorService', () => {
     claudeClient = module.get<ClaudeClientService>(ClaudeClientService);
     claudeClient.onModuleInit();
 
-    // Reset mocks
     jest.clearAllMocks();
   });
 
@@ -113,45 +144,19 @@ describe('OrchestratorService', () => {
 
       expect(result.success).toBe(true);
       expect(result.intent).toBe('question');
-      expect(result.response.tone).toBe('informative');
     });
 
     it('should fetch user context', async () => {
       const request = {
         userId: 'user-1',
-        content: 'Weight check',
+        content: 'Weight check: 80 kg',
       };
 
       await service.processMessage(request, mockDependencies);
 
       expect(mockDependencies.getUser).toHaveBeenCalledWith('user-1');
       expect(mockDependencies.getProfile).toHaveBeenCalledWith('user-1');
-      expect(mockDependencies.getRecentEntries).toHaveBeenCalledWith(
-        'user-1',
-        10,
-      );
-    });
-
-    it('should save entry for loggable intents', async () => {
-      const request = {
-        userId: 'user-1',
-        content: 'I weigh 79 kg today',
-      };
-
-      await service.processMessage(request, mockDependencies);
-
-      expect(mockDependencies.saveEntry).toHaveBeenCalled();
-    });
-
-    it('should not save entry for greetings', async () => {
-      const request = {
-        userId: 'user-1',
-        content: 'Hello!',
-      };
-
-      await service.processMessage(request, mockDependencies);
-
-      expect(mockDependencies.saveEntry).not.toHaveBeenCalled();
+      expect(mockDependencies.getRecentEntries).toHaveBeenCalledWith('user-1', 10);
     });
 
     it('should handle user not found', async () => {
@@ -168,7 +173,6 @@ describe('OrchestratorService', () => {
       const result = await service.processMessage(request, deps);
 
       expect(result.success).toBe(false);
-      expect(result.response.message).toContain('trouble');
     });
 
     it('should handle processing errors gracefully', async () => {
@@ -188,52 +192,58 @@ describe('OrchestratorService', () => {
       expect(result.response.tone).toBe('calm');
     });
 
-    it('should process meal log messages', async () => {
+    it('should process meal log and create pending entry', async () => {
       const request = {
         userId: 'user-1',
-        content: 'Had eggs and toast for breakfast',
+        content: 'Almorcé pollo con arroz',
       };
 
       const result = await service.processMessage(request, mockDependencies);
 
       expect(result.success).toBe(true);
       expect(result.intent).toBe('meal_log');
+      expect(mockDependencies.createCalorieEntry).toHaveBeenCalled();
+      expect(result.response.pendingEntry).toBeDefined();
     });
 
-    it('should process workout log messages', async () => {
+    it('should process activity log', async () => {
       const request = {
         userId: 'user-1',
-        content: 'Just finished a 30 minute run',
+        content: 'Corrí 30 minutos',
       };
 
       const result = await service.processMessage(request, mockDependencies);
 
       expect(result.success).toBe(true);
-      expect(result.intent).toBe('workout_log');
+      expect(result.intent).toBe('activity_log');
+      expect(mockDependencies.createCalorieEntry).toHaveBeenCalled();
     });
 
-    it('should process sleep log messages', async () => {
+    it('should create weight log for weight entries', async () => {
       const request = {
         userId: 'user-1',
-        content: 'Slept 7 hours last night',
+        content: 'Peso 79 kg',
       };
 
       const result = await service.processMessage(request, mockDependencies);
 
       expect(result.success).toBe(true);
-      expect(result.intent).toBe('sleep_log');
+      expect(mockDependencies.createWeightLog).toHaveBeenCalled();
     });
 
-    it('should include NOVA points in response', async () => {
+    it('should include daily summary in response', async () => {
       const request = {
         userId: 'user-1',
-        content: 'Weight: 79 kg',
+        content: 'Almorcé pollo con arroz',
       };
 
       const result = await service.processMessage(request, mockDependencies);
 
-      expect(result.response.novaPointsEarned).toBeDefined();
-      expect(result.response.novaPointsEarned).toBeGreaterThanOrEqual(0);
+      expect(result.response.dailySummary).toBeDefined();
+      expect(result.response.dailySummary).toHaveProperty('intake');
+      expect(result.response.dailySummary).toHaveProperty('burn');
+      expect(result.response.dailySummary).toHaveProperty('tdee');
+      expect(result.response.dailySummary).toHaveProperty('deficit');
     });
   });
 });

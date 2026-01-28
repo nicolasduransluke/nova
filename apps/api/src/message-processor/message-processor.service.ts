@@ -6,9 +6,10 @@ import type {
   Profile,
   DailyEntry,
   Message,
+  CalorieEntry,
+  WeightLog,
 } from '@nova/types';
 import { OrchestratorService, OrchestratorDependencies } from '../agents/orchestrator.service';
-import { QueueService } from '../queue/queue.service';
 import { PrismaService } from '../infrastructure/database/prisma.service';
 import { generateId } from '@nova/utils';
 
@@ -19,10 +20,8 @@ export class MessageProcessorService {
 
   constructor(
     private readonly orchestrator: OrchestratorService,
-    private readonly queueService: QueueService,
     private readonly prisma: PrismaService,
   ) {
-    // Initialize dependencies that use Prisma
     this.dependencies = this.createDependencies();
   }
 
@@ -60,6 +59,7 @@ export class MessageProcessorService {
           age: profile.age,
           sex: profile.sex as Profile['sex'],
           objective: profile.objective as Profile['objective'],
+          activityLevel: (profile.activityLevel || 'moderate') as Profile['activityLevel'],
           createdAt: profile.createdAt,
           updatedAt: profile.updatedAt,
         };
@@ -91,8 +91,6 @@ export class MessageProcessorService {
         userId: string,
         limit: number,
       ): Promise<Message[]> => {
-        // In a real app, this would fetch from a messages table
-        // For now, return empty array (messages are handled client-side)
         return [];
       },
 
@@ -119,6 +117,158 @@ export class MessageProcessorService {
           updatedAt: created.updatedAt,
         };
       },
+
+      createCalorieEntry: async (data: {
+        userId: string;
+        date: Date;
+        type: string;
+        description: string;
+        calories: number;
+        items: Array<{ name: string; calories: number }>;
+        confirmed: boolean;
+      }): Promise<CalorieEntry> => {
+        const created = await this.prisma.calorieEntry.create({
+          data: {
+            id: generateId(),
+            userId: data.userId,
+            date: data.date,
+            type: data.type,
+            description: data.description,
+            calories: data.calories,
+            items: JSON.stringify(data.items),
+            confirmed: data.confirmed,
+          },
+        });
+
+        return {
+          id: created.id,
+          userId: created.userId,
+          date: created.date,
+          type: created.type as CalorieEntry['type'],
+          description: created.description,
+          calories: created.calories,
+          items: JSON.parse(created.items as string),
+          confirmed: created.confirmed,
+          createdAt: created.createdAt,
+          updatedAt: created.updatedAt,
+        };
+      },
+
+      updateCalorieEntry: async (
+        id: string,
+        data: Partial<{ calories: number; items: string; confirmed: boolean }>,
+      ): Promise<CalorieEntry> => {
+        const updated = await this.prisma.calorieEntry.update({
+          where: { id },
+          data,
+        });
+
+        return {
+          id: updated.id,
+          userId: updated.userId,
+          date: updated.date,
+          type: updated.type as CalorieEntry['type'],
+          description: updated.description,
+          calories: updated.calories,
+          items: JSON.parse(updated.items as string),
+          confirmed: updated.confirmed,
+          createdAt: updated.createdAt,
+          updatedAt: updated.updatedAt,
+        };
+      },
+
+      deleteCalorieEntry: async (id: string): Promise<void> => {
+        await this.prisma.calorieEntry.delete({ where: { id } });
+      },
+
+      getPendingCalorieEntry: async (userId: string): Promise<CalorieEntry | null> => {
+        const entry = await this.prisma.calorieEntry.findFirst({
+          where: { userId, confirmed: false },
+          orderBy: { createdAt: 'desc' },
+        });
+
+        if (!entry) return null;
+
+        return {
+          id: entry.id,
+          userId: entry.userId,
+          date: entry.date,
+          type: entry.type as CalorieEntry['type'],
+          description: entry.description,
+          calories: entry.calories,
+          items: JSON.parse(entry.items as string),
+          confirmed: entry.confirmed,
+          createdAt: entry.createdAt,
+          updatedAt: entry.updatedAt,
+        };
+      },
+
+      getTodayCalorieEntries: async (userId: string): Promise<CalorieEntry[]> => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+
+        const entries = await this.prisma.calorieEntry.findMany({
+          where: {
+            userId,
+            confirmed: true,
+            date: { gte: today, lt: tomorrow },
+          },
+        });
+
+        return entries.map((entry) => ({
+          id: entry.id,
+          userId: entry.userId,
+          date: entry.date,
+          type: entry.type as CalorieEntry['type'],
+          description: entry.description,
+          calories: entry.calories,
+          items: JSON.parse(entry.items as string),
+          confirmed: entry.confirmed,
+          createdAt: entry.createdAt,
+          updatedAt: entry.updatedAt,
+        }));
+      },
+
+      createWeightLog: async (data: {
+        userId: string;
+        weight: number;
+        date: Date;
+      }): Promise<WeightLog> => {
+        const created = await this.prisma.weightLog.create({
+          data: {
+            id: generateId(),
+            userId: data.userId,
+            weight: data.weight,
+            date: data.date,
+          },
+        });
+
+        return {
+          id: created.id,
+          userId: created.userId,
+          weight: created.weight,
+          date: created.date,
+          createdAt: created.createdAt,
+        };
+      },
+
+      getRecentWeightLogs: async (userId: string, limit: number): Promise<WeightLog[]> => {
+        const logs = await this.prisma.weightLog.findMany({
+          where: { userId },
+          orderBy: { date: 'desc' },
+          take: limit,
+        });
+
+        return logs.map((log) => ({
+          id: log.id,
+          userId: log.userId,
+          weight: log.weight,
+          date: log.date,
+          createdAt: log.createdAt,
+        }));
+      },
     };
   }
 
@@ -126,45 +276,7 @@ export class MessageProcessorService {
     request: ProcessMessageRequest,
   ): Promise<ProcessMessageResponse> {
     this.logger.debug(`Processing message from user ${request.userId}`);
-
-    // Try to use queue if available
-    if (this.queueService.isQueueAvailable()) {
-      const jobId = await this.queueService.enqueueMessage(request);
-
-      if (jobId) {
-        this.logger.debug(`Message queued with job ID ${jobId}`);
-
-        // For now, wait for result (in production, could return job ID for polling)
-        // This is a simplified approach - in production you'd use WebSockets
-        return this.waitForJobResult(jobId, 30000);
-      }
-    }
-
-    // Fall back to synchronous processing
-    this.logger.debug('Processing message synchronously');
     return this.orchestrator.processMessage(request, this.dependencies);
-  }
-
-  private async waitForJobResult(
-    jobId: string,
-    timeoutMs: number,
-  ): Promise<ProcessMessageResponse> {
-    const startTime = Date.now();
-    const pollInterval = 100;
-
-    while (Date.now() - startTime < timeoutMs) {
-      const result = await this.queueService.getJobResult(jobId);
-
-      if (result) {
-        return result.response;
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, pollInterval));
-    }
-
-    // Timeout - fall back to sync processing
-    this.logger.warn(`Job ${jobId} timed out, falling back to sync`);
-    throw new Error('Message processing timed out');
   }
 
   async processMessageSync(

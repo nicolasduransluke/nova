@@ -8,7 +8,6 @@ import { GetUserUseCase } from './application/use-cases/get-user.use-case';
 import { UserRepository } from './infrastructure/database/repositories/user.repository';
 import { ClaudeClientModule } from './claude-client/claude-client.module';
 import { AgentsModule } from './agents/agents.module';
-import { QueueModule } from './queue/queue.module';
 import { MessageProcessorModule } from './message-processor/message-processor.module';
 
 @Module({
@@ -20,7 +19,6 @@ import { MessageProcessorModule } from './message-processor/message-processor.mo
     DatabaseModule,
     ClaudeClientModule,
     AgentsModule,
-    QueueModule,
     MessageProcessorModule,
   ],
   controllers: [HealthController, UserController],

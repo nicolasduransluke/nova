@@ -1,11 +1,12 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI, Content } from '@google/generative-ai';
 import type {
   MessageIntent,
   AgentContext,
-  Message,
+  PendingEntry,
+  CalorieEntryItem,
 } from '@nova/types';
-import { retry, sleep } from '@nova/utils';
+import { retry } from '@nova/utils';
 
 export interface ClaudeMessage {
   role: 'user' | 'assistant';
@@ -19,60 +20,51 @@ export interface GenerateOptions {
   conversationHistory?: ClaudeMessage[];
 }
 
+export interface ConfirmationResult {
+  action: 'confirm' | 'adjust' | 'reject';
+  adjustedCalories?: number;
+  adjustedItems?: CalorieEntryItem[];
+}
+
 @Injectable()
 export class ClaudeClientService implements OnModuleInit {
-  private client: Anthropic;
+  private client: GoogleGenerativeAI;
   private readonly logger = new Logger(ClaudeClientService.name);
-  private readonly model = 'claude-sonnet-4-20250514';
+  private readonly model = 'gemini-2.0-flash';
   private readonly maxRetries = 3;
   private readonly baseDelayMs = 1000;
 
   onModuleInit() {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const apiKey = process.env.GOOGLE_API_KEY;
 
     if (!apiKey) {
       this.logger.warn(
-        'ANTHROPIC_API_KEY not set. Claude client will operate in mock mode.',
+        'GOOGLE_API_KEY not set. LLM client will operate in mock mode.',
       );
     }
 
-    this.client = new Anthropic({
-      apiKey: apiKey || 'mock-key',
-    });
+    this.client = new GoogleGenerativeAI(apiKey || 'mock-key');
   }
 
   private get novaSystemPrompt(): string {
-    return `You are NOVA, a calm and intelligent AI health coach focused on human energy optimization.
+    return `You are NOVA, a calorie deficit coach that helps users lose weight by tracking meals and physical activity.
 
 ## Language Rule (CRITICAL)
 - ALWAYS respond in the SAME LANGUAGE as the user's message
 - If the user writes in Spanish, respond ENTIRELY in Spanish
 - If the user writes in English, respond in English
-- Never mix languages in a single response
 
 ## Voice Guidelines
 - Be calm, data-driven, and supportive
 - Keep responses short (6-8 lines maximum)
-- Structure: Data Reading → Interpretation → Actionable Step
-- Use minimal emojis (only when truly helpful)
-- Avoid hype language ("amazing!", "awesome!", "genial!", etc.)
-- Make evidence-based statements
+- When presenting calorie estimates, always ask for confirmation
+- Focus on deficit tracking and weight loss progress
 - Be direct but warm
 
 ## Response Structure
 1. Acknowledge the data/input briefly
-2. Provide one key insight based on patterns
-3. Suggest one specific, actionable next step
-
-## Tone Examples (English)
-- Instead of "Great job!" → "That's consistent with your goals."
-- Instead of "Amazing progress!" → "Your trend shows steady improvement."
-
-## Tone Examples (Spanish)
-- Instead of "¡Excelente!" → "Eso es consistente con tus objetivos."
-- Instead of "¡Increíble progreso!" → "Tu tendencia muestra mejora constante."
-
-Always prioritize the user's wellbeing and provide personalized guidance based on their data and goals.`;
+2. Present calorie estimate with item breakdown
+3. Ask for confirmation if applicable`;
   }
 
   async generateResponse(
@@ -86,37 +78,37 @@ Always prioritize the user's wellbeing and provide personalized guidance based o
       conversationHistory = [],
     } = options;
 
-    // Check if we're in mock mode
-    if (!process.env.ANTHROPIC_API_KEY) {
+    if (!process.env.GOOGLE_API_KEY) {
       return this.getMockResponse(prompt);
     }
 
     return retry(
       async () => {
         try {
-          const messages: Anthropic.MessageParam[] = [
-            ...conversationHistory.map((msg) => ({
-              role: msg.role as 'user' | 'assistant',
-              content: msg.content,
-            })),
-            { role: 'user' as const, content: prompt },
-          ];
-
-          const response = await this.client.messages.create({
+          const model = this.client.getGenerativeModel({
             model: this.model,
-            max_tokens: maxTokens,
-            temperature,
-            system: systemPrompt,
-            messages,
+            systemInstruction: systemPrompt,
           });
 
-          const textBlock = response.content.find(
-            (block) => block.type === 'text',
-          );
+          const contents: Content[] = [
+            ...conversationHistory.map((msg) => ({
+              role: msg.role === 'assistant' ? 'model' : 'user',
+              parts: [{ text: msg.content }],
+            } as Content)),
+            { role: 'user', parts: [{ text: prompt }] },
+          ];
 
-          return textBlock && 'text' in textBlock ? textBlock.text : '';
+          const result = await model.generateContent({
+            contents,
+            generationConfig: {
+              maxOutputTokens: maxTokens,
+              temperature,
+            },
+          });
+
+          return result.response.text();
         } catch (error) {
-          this.logger.error(`Claude API error: ${error}`);
+          this.logger.error(`Gemini API error: ${error}`);
           throw error;
         }
       },
@@ -126,18 +118,16 @@ Always prioritize the user's wellbeing and provide personalized guidance based o
   }
 
   async classifyIntent(message: string): Promise<MessageIntent> {
-    // Check if we're in mock mode
-    if (!process.env.ANTHROPIC_API_KEY) {
+    if (!process.env.GOOGLE_API_KEY) {
       return this.getMockIntent(message);
     }
 
     const prompt = `Classify the following user message into exactly ONE of these categories:
+- meal_log: User is sharing what they ate or drank
+- activity_log: User is reporting exercise/physical activity
 - weight_log: User is reporting their weight
-- meal_log: User is sharing what they ate
-- workout_log: User is reporting exercise/workout
-- sleep_log: User is reporting sleep data
-- energy_check: User is describing their energy levels
-- question: User is asking a question
+- confirmation: User is confirming, adjusting, or rejecting a previous estimate (yes/no/ok/dale/sí/ponle/bórralo)
+- question: User is asking a question about their progress or the system
 - greeting: User is saying hello or greeting
 - general: Any other type of message
 
@@ -147,19 +137,17 @@ Respond with ONLY the category name, nothing else.`;
 
     try {
       const response = await this.generateResponse(prompt, {
-        systemPrompt:
-          'You are a message classifier. Respond with only the category name.',
+        systemPrompt: 'You are a message classifier. Respond with only the category name.',
         maxTokens: 20,
         temperature: 0,
       });
 
       const intent = response.trim().toLowerCase() as MessageIntent;
       const validIntents: MessageIntent[] = [
-        'weight_log',
         'meal_log',
-        'workout_log',
-        'sleep_log',
-        'energy_check',
+        'activity_log',
+        'weight_log',
+        'confirmation',
         'question',
         'greeting',
         'general',
@@ -176,17 +164,14 @@ Respond with ONLY the category name, nothing else.`;
     message: string,
     intent: MessageIntent,
   ): Promise<Record<string, unknown>> {
-    // Check if we're in mock mode
-    if (!process.env.ANTHROPIC_API_KEY) {
+    if (!process.env.GOOGLE_API_KEY) {
       return this.getMockExtractedData(message, intent);
     }
 
     const extractionPrompts: Record<string, string> = {
       weight_log: `Extract weight data from this message. Return JSON with: { "weight": number (in kg), "unit": "kg" or "lb" }`,
-      meal_log: `Extract meal data from this message. Return JSON with: { "mealType": "breakfast"|"lunch"|"dinner"|"snack", "foods": string[], "estimatedCalories": number or null }`,
-      workout_log: `Extract workout data from this message. Return JSON with: { "type": string, "duration": number (minutes), "intensity": "low"|"medium"|"high" }`,
-      sleep_log: `Extract sleep data from this message. Return JSON with: { "hours": number, "quality": "poor"|"fair"|"good"|"excellent" or null }`,
-      energy_check: `Extract energy level from this message. Return JSON with: { "level": 1-10, "factors": string[] }`,
+      meal_log: `Extract meal data from this message. Return JSON with: { "items": [{"name": "food item", "calories": estimated_calories}], "totalCalories": sum_of_calories }. Estimate calories using Latin American portion sizes. Be conservative (slightly overestimate).`,
+      activity_log: `Extract activity data from this message. Return JSON with: { "activity": "activity name", "durationMinutes": number, "caloriesBurned": estimated_calories_burned }`,
     };
 
     const extractionPrompt = extractionPrompts[intent];
@@ -203,14 +188,57 @@ Respond with ONLY valid JSON, nothing else.`;
     try {
       const response = await this.generateResponse(prompt, {
         systemPrompt: 'You are a data extractor. Respond with only valid JSON.',
-        maxTokens: 200,
+        maxTokens: 300,
         temperature: 0,
       });
 
-      return JSON.parse(response.trim());
+      const cleaned = response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      return JSON.parse(cleaned);
     } catch (error) {
       this.logger.error(`Data extraction failed: ${error}`);
       return {};
+    }
+  }
+
+  async parseConfirmation(
+    message: string,
+    pendingEntry: PendingEntry,
+  ): Promise<ConfirmationResult> {
+    if (!process.env.GOOGLE_API_KEY) {
+      return this.getMockConfirmation(message);
+    }
+
+    const prompt = `The user has a pending calorie entry:
+- Type: ${pendingEntry.type}
+- Description: ${pendingEntry.description}
+- Estimated calories: ${pendingEntry.calories}
+- Items: ${JSON.stringify(pendingEntry.items)}
+
+The user responded: "${message}"
+
+Determine the user's intention. Return ONLY valid JSON:
+{
+  "action": "confirm" | "adjust" | "reject",
+  "adjustedCalories": number or null,
+  "adjustedItems": [{name, calories}] or null
+}
+
+- "confirm": user agrees (sí, ok, dale, yes, perfecto, está bien)
+- "adjust": user wants to change the calories (ponle X, cámbialo a X, son X)
+- "reject": user wants to delete it (no, bórralo, quítalo, cancel)`;
+
+    try {
+      const response = await this.generateResponse(prompt, {
+        systemPrompt: 'You are a confirmation parser. Respond with only valid JSON.',
+        maxTokens: 100,
+        temperature: 0,
+      });
+
+      const cleaned = response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      return JSON.parse(cleaned);
+    } catch (error) {
+      this.logger.error(`Confirmation parsing failed: ${error}`);
+      return { action: 'confirm' }; // Default to confirm on parse failure
     }
   }
 
@@ -223,16 +251,17 @@ Respond with ONLY valid JSON, nothing else.`;
 `;
 
     if (profile) {
-      contextStr += `- Goal: ${profile.objective.replace('_', ' ')}
-- Current weight: ${profile.weight}kg
+      contextStr += `- Weight: ${profile.weight}kg
+- Height: ${profile.height}cm
 - Age: ${profile.age}
+- Activity level: ${profile.activityLevel}
 `;
     }
 
     if (recentEntries.length > 0) {
       contextStr += `\n## Recent Activity (last ${recentEntries.length} entries)\n`;
       recentEntries.slice(0, 5).forEach((entry) => {
-        contextStr += `- ${entry.type}: ${JSON.stringify(entry.data)} (${entry.novaPoints} points)\n`;
+        contextStr += `- ${entry.type}: ${JSON.stringify(entry.data)}\n`;
       });
     }
 
@@ -251,90 +280,95 @@ Respond with ONLY valid JSON, nothing else.`;
     const lowerPrompt = prompt.toLowerCase();
     const isSpanish = this.detectSpanish(lowerPrompt);
 
+    // Calorie estimation requests (JSON)
+    if (lowerPrompt.includes('estimate calories') || lowerPrompt.includes('return only valid json')) {
+      if (lowerPrompt.includes('meal') || lowerPrompt.includes('food') || lowerPrompt.includes('comí') || lowerPrompt.includes('comida')) {
+        return JSON.stringify({
+          items: [
+            { name: 'plato principal', calories: 450 },
+            { name: 'acompañamiento', calories: 150 },
+          ],
+          totalCalories: 600,
+        });
+      }
+      if (lowerPrompt.includes('activity') || lowerPrompt.includes('exercise') || lowerPrompt.includes('corrí') || lowerPrompt.includes('correr')) {
+        return JSON.stringify({
+          activity: 'ejercicio',
+          durationMinutes: 30,
+          met: 6,
+        });
+      }
+      if (lowerPrompt.includes('weight') || lowerPrompt.includes('peso')) {
+        const match = prompt.match(/(\d+\.?\d*)\s*(kg|lb|kilos)?/i);
+        const weight = match ? parseFloat(match[1]) : 70;
+        return JSON.stringify({ weight, unit: 'kg' });
+      }
+      if (lowerPrompt.includes('confirmation') || lowerPrompt.includes('confirm')) {
+        return JSON.stringify({ action: 'confirm' });
+      }
+    }
+
+    // Meals / Food
+    if (lowerPrompt.includes('comí') || lowerPrompt.includes('comi') || lowerPrompt.includes('comida') ||
+        lowerPrompt.includes('desayuno') || lowerPrompt.includes('almuerzo') || lowerPrompt.includes('cena') ||
+        lowerPrompt.includes('pollo') || lowerPrompt.includes('arroz') ||
+        lowerPrompt.includes('ate') || lowerPrompt.includes('meal') || lowerPrompt.includes('food')) {
+      return isSpanish
+        ? "He estimado las calorías de tu comida:\n\n- Plato principal: ~450 kcal\n- Acompañamiento: ~150 kcal\n\nTotal estimado: ~600 kcal\n\n¿Te parece bien?"
+        : "I've estimated the calories for your meal:\n\n- Main dish: ~450 kcal\n- Side: ~150 kcal\n\nEstimated total: ~600 kcal\n\nDoes this look right?";
+    }
+
+    // Exercise / Activity
+    if (lowerPrompt.includes('entrené') || lowerPrompt.includes('entrene') || lowerPrompt.includes('ejercicio') ||
+        lowerPrompt.includes('corrí') || lowerPrompt.includes('correr') || lowerPrompt.includes('gimnasio') ||
+        lowerPrompt.includes('workout') || lowerPrompt.includes('exercise') || lowerPrompt.includes('gym') ||
+        lowerPrompt.includes('running') || lowerPrompt.includes('run')) {
+      return isSpanish
+        ? "He estimado las calorías quemadas:\n\n- Ejercicio (~30 min): ~250 kcal\n\n¿Te parece bien?"
+        : "I've estimated the calories burned:\n\n- Exercise (~30 min): ~250 kcal\n\nDoes this look right?";
+    }
+
     // Weight
     if (lowerPrompt.includes('weight') || lowerPrompt.includes('kg') ||
         lowerPrompt.includes('peso') || lowerPrompt.includes('kilos')) {
       return isSpanish
-        ? "He registrado tu peso. Mirando tu tendencia reciente, estás manteniendo un progreso constante hacia tu objetivo. Sigue registrando consistentemente - ayuda a identificar patrones."
-        : "I've noted your weight entry. Looking at your recent trend, you're maintaining steady progress toward your goal. Keep tracking consistently - it helps identify patterns.";
+        ? "Peso registrado. Tu tendencia reciente muestra progreso constante. Sigue registrando para ver el patrón completo."
+        : "Weight logged. Your recent trend shows steady progress. Keep tracking to see the full pattern.";
     }
 
-    // Meals / Food
-    if (lowerPrompt.includes('ate') || lowerPrompt.includes('meal') || lowerPrompt.includes('food') ||
-        lowerPrompt.includes('comí') || lowerPrompt.includes('comi') || lowerPrompt.includes('comida') ||
-        lowerPrompt.includes('desayuno') || lowerPrompt.includes('almuerzo') || lowerPrompt.includes('cena') ||
-        lowerPrompt.includes('torta') || lowerPrompt.includes('pollo') || lowerPrompt.includes('arroz')) {
+    // Progress question
+    if (lowerPrompt.includes('cómo voy') || lowerPrompt.includes('como voy') ||
+        lowerPrompt.includes('progress') || lowerPrompt.includes('deficit') || lowerPrompt.includes('déficit') ||
+        lowerPrompt.includes('how am i')) {
       return isSpanish
-        ? "Gracias por registrar tu comida. Una nutrición balanceada apoya tus niveles de energía durante el día. Considera cómo te hace sentir esta comida en las próximas horas."
-        : "Thanks for logging your meal. Balanced nutrition supports your energy levels throughout the day. Consider how this meal makes you feel in the next few hours.";
-    }
-
-    // Workout / Exercise
-    if (lowerPrompt.includes('workout') || lowerPrompt.includes('exercise') || lowerPrompt.includes('gym') ||
-        lowerPrompt.includes('entrené') || lowerPrompt.includes('entrene') || lowerPrompt.includes('ejercicio') ||
-        lowerPrompt.includes('running') || lowerPrompt.includes('correr') || lowerPrompt.includes('gimnasio')) {
-      return isSpanish
-        ? "Buen trabajo manteniéndote activo. Tu cuerpo se beneficia del movimiento constante. Recuerda balancear la intensidad con una recuperación adecuada para resultados óptimos."
-        : "Good work on staying active. Your body benefits from consistent movement. Remember to balance intensity with proper recovery for optimal results.";
-    }
-
-    // Sleep
-    if (lowerPrompt.includes('sleep') || lowerPrompt.includes('slept') ||
-        lowerPrompt.includes('dormí') || lowerPrompt.includes('dormi') || lowerPrompt.includes('sueño')) {
-      return isSpanish
-        ? "El sueño es fundamental para tus niveles de energía. Basándome en tu registro, considera mantener un horario de sueño consistente. Un descanso de calidad apoya tanto el rendimiento físico como mental."
-        : "Sleep is foundational to your energy levels. Based on your entry, consider maintaining a consistent sleep schedule. Quality rest supports both physical and mental performance.";
-    }
-
-    // Energy / Tiredness
-    if (lowerPrompt.includes('energy') || lowerPrompt.includes('tired') ||
-        lowerPrompt.includes('energía') || lowerPrompt.includes('energia') || lowerPrompt.includes('cansado') ||
-        lowerPrompt.includes('cansada') || lowerPrompt.includes('agotado')) {
-      return isSpanish
-        ? "He registrado tu nivel de energía. Tus niveles pueden ser influenciados por el sueño, la nutrición y la actividad. Analizar patrones a lo largo del tiempo nos ayudará a identificar qué funciona mejor para ti."
-        : "I've recorded your energy check. Your levels can be influenced by sleep, nutrition, and activity. Looking at patterns over time will help us identify what works best for you.";
-    }
-
-    // Pain / Health concerns
-    if (lowerPrompt.includes('duele') || lowerPrompt.includes('dolor') || lowerPrompt.includes('hurt') ||
-        lowerPrompt.includes('pain') || lowerPrompt.includes('guata') || lowerPrompt.includes('estómago') ||
-        lowerPrompt.includes('stomach') || lowerPrompt.includes('mal')) {
-      return isSpanish
-        ? "Lamento escuchar que no te sientes bien. Si el malestar persiste, considera consultar a un profesional de salud. Mientras tanto, descansa y mantente hidratado. ¿Hay algo específico que crees que pudo haberlo causado?"
-        : "I'm sorry to hear you're not feeling well. If the discomfort persists, consider consulting a health professional. In the meantime, rest and stay hydrated. Is there anything specific you think might have caused it?";
-    }
-
-    // Question about capabilities
-    if (lowerPrompt.includes('qué puedes') || lowerPrompt.includes('que puedes') ||
-        lowerPrompt.includes('what can you') || lowerPrompt.includes('help me')) {
-      return isSpanish
-        ? "Soy NOVA, tu coach de salud personal. Puedo ayudarte a:\n\n• Registrar tu peso y ver tendencias\n• Analizar tus comidas y nutrición\n• Dar seguimiento a tus entrenamientos\n• Monitorear tu sueño y energía\n• Identificar patrones para optimizar tu bienestar\n\n¿Qué te gustaría registrar hoy?"
-        : "I'm NOVA, your personal health coach. I can help you:\n\n• Track your weight and see trends\n• Analyze your meals and nutrition\n• Monitor your workouts\n• Track your sleep and energy\n• Identify patterns to optimize your wellbeing\n\nWhat would you like to log today?";
+        ? "Hoy llevas un buen ritmo. Tu déficit actual está en línea con tu meta de perder ~0.5 kg/semana. Sigue registrando tus comidas para mantener el control."
+        : "You're on a good pace today. Your current deficit is in line with your goal of losing ~0.5 kg/week. Keep logging your meals to stay on track.";
     }
 
     // Greetings
     if (lowerPrompt.includes('hello') || lowerPrompt.includes('hi') || lowerPrompt.includes('hey') ||
         lowerPrompt.includes('hola') || lowerPrompt.includes('buenos') || lowerPrompt.includes('buenas')) {
       return isSpanish
-        ? "¡Hola! Soy NOVA, tu coach de energía y bienestar. ¿Cómo puedo ayudarte hoy? Puedes compartirme tu peso, comidas, entrenamientos, sueño o cómo te sientes."
-        : "Hello! I'm NOVA, your energy and wellness coach. How can I help you today? You can share your weight, meals, workouts, sleep, or how you're feeling.";
+        ? "Hola. Soy NOVA, tu coach de déficit calórico. Puedes contarme qué comiste, qué ejercicio hiciste, o registrar tu peso. ¿En qué te ayudo?"
+        : "Hello. I'm NOVA, your calorie deficit coach. You can tell me what you ate, what exercise you did, or log your weight. How can I help?";
     }
 
     // Default
     return isSpanish
-      ? "Estoy aquí para apoyar tu bienestar. Comparte tus comidas, entrenamientos, sueño o niveles de energía, y te ayudaré a entender patrones y avanzar hacia tus objetivos."
-      : "I'm here to support your wellness journey. Share your meals, workouts, sleep, or energy levels, and I'll help you understand patterns and make progress toward your goals.";
+      ? "Estoy aquí para ayudarte con tu déficit calórico. Cuéntame qué comiste o qué actividad hiciste, y te ayudo a calcular las calorías."
+      : "I'm here to help with your calorie deficit. Tell me what you ate or what activity you did, and I'll help calculate the calories.";
   }
 
   private detectSpanish(text: string): boolean {
     const spanishIndicators = [
       'hola', 'cómo', 'como', 'qué', 'que', 'hoy', 'día', 'dia',
       'comí', 'comi', 'entrené', 'entrene', 'dormí', 'dormi',
-      'peso', 'energía', 'energia', 'sueño', 'buenos', 'buenas',
+      'peso', 'energía', 'energia', 'buenos', 'buenas',
       'gracias', 'por favor', 'ayuda', 'puedes', 'tengo', 'estoy',
-      'duele', 'guata', 'bien', 'mal', 'mucho', 'poco',
-      'desayuno', 'almuerzo', 'cena', 'comida', 'torta',
+      'bien', 'mal', 'mucho', 'poco',
+      'desayuno', 'almuerzo', 'cena', 'comida',
       'correr', 'gimnasio', 'ejercicio', 'cansado', 'cansada',
+      'sí', 'dale', 'ponle', 'bórralo', 'borralo',
     ];
     return spanishIndicators.some((word) => text.includes(word));
   }
@@ -342,51 +376,42 @@ Respond with ONLY valid JSON, nothing else.`;
   private getMockIntent(message: string): MessageIntent {
     const lower = message.toLowerCase();
 
-    // Weight logging (English + Spanish)
+    // Confirmation detection (check first as it's context-sensitive)
+    const confirmWords = ['sí', 'si', 'ok', 'dale', 'perfecto', 'está bien', 'esta bien', 'yes', 'confirm', 'ponle', 'cámbialo', 'cambialo', 'no', 'bórralo', 'borralo', 'quítalo', 'quitalo', 'cancel'];
+    if (confirmWords.some((w) => lower === w || lower.startsWith(w + ' ') || lower.startsWith(w + ','))) {
+      return 'confirmation';
+    }
+
+    // Weight logging
     if (lower.includes('kg') || lower.includes('lb') || lower.includes('weigh') ||
         lower.includes('peso') || lower.includes('kilos'))
       return 'weight_log';
 
-    // Meal logging (English + Spanish)
+    // Meal logging
     if (lower.includes('ate') || lower.includes('meal') || lower.includes('food') ||
         lower.includes('breakfast') || lower.includes('lunch') || lower.includes('dinner') ||
         lower.includes('comí') || lower.includes('comi') || lower.includes('comida') ||
         lower.includes('desayuno') || lower.includes('almuerzo') || lower.includes('cena') ||
-        lower.includes('torta') || lower.includes('pollo') || lower.includes('arroz') ||
+        lower.includes('pollo') || lower.includes('arroz') ||
         lower.includes('huevos') || lower.includes('pan'))
       return 'meal_log';
 
-    // Workout logging (English + Spanish)
+    // Activity logging
     if (lower.includes('workout') || lower.includes('exercise') || lower.includes('gym') ||
         lower.includes('run') || lower.includes('running') ||
         lower.includes('entrené') || lower.includes('entrene') || lower.includes('ejercicio') ||
-        lower.includes('correr') || lower.includes('gimnasio') || lower.includes('pesas') ||
-        lower.includes('cardio'))
-      return 'workout_log';
+        lower.includes('correr') || lower.includes('corrí') || lower.includes('gimnasio') ||
+        lower.includes('pesas') || lower.includes('cardio') || lower.includes('nadar') ||
+        lower.includes('bici') || lower.includes('caminé') || lower.includes('camine'))
+      return 'activity_log';
 
-    // Sleep logging (English + Spanish)
-    if (lower.includes('sleep') || lower.includes('slept') ||
-        lower.includes('dormí') || lower.includes('dormi') || lower.includes('sueño') ||
-        lower.includes('horas de sueño') || lower.includes('desperté') || lower.includes('desperte'))
-      return 'sleep_log';
-
-    // Energy check (English + Spanish)
-    if (lower.includes('energy') || lower.includes('tired') ||
-        lower.includes('energía') || lower.includes('energia') ||
-        lower.includes('cansado') || lower.includes('cansada') ||
-        lower.includes('agotado') || lower.includes('agotada') ||
-        lower.includes('animado') || lower.includes('bien') ||
-        (lower.includes('me siento') && !lower.includes('duele')))
-      return 'energy_check';
-
-    // Questions (both languages)
-    if (lower.includes('?') ||
+    // Questions
+    if (lower.includes('?') || lower.includes('cómo voy') || lower.includes('como voy') ||
         lower.includes('qué puedes') || lower.includes('que puedes') ||
-        lower.includes('cómo') || lower.includes('como funciona') ||
-        lower.includes('what can') || lower.includes('how do'))
+        lower.includes('how am') || lower.includes('what can'))
       return 'question';
 
-    // Greetings (English + Spanish)
+    // Greetings
     if (lower.includes('hello') || lower.includes('hi') || lower.includes('hey') ||
         lower.includes('hola') || lower.includes('buenos días') || lower.includes('buenos dias') ||
         lower.includes('buenas tardes') || lower.includes('buenas noches'))
@@ -412,115 +437,98 @@ Respond with ONLY valid JSON, nothing else.`;
         return { weight: null, unit: 'kg' };
       }
 
-      case 'sleep_log': {
-        // Match both "7 hours" and "7 horas"
-        const match = message.match(/(\d+\.?\d*)\s*(hours?|horas?)/i);
-        return {
-          hours: match ? parseFloat(match[1]) : null,
-          quality: (lower.includes('great') || lower.includes('good') ||
-                   lower.includes('bien') || lower.includes('excelente'))
-            ? 'good'
-            : (lower.includes('bad') || lower.includes('poor') ||
-               lower.includes('mal') || lower.includes('terrible'))
-              ? 'poor'
-              : 'fair',
-        };
-      }
-
-      case 'workout_log': {
-        // Detect workout type (English + Spanish)
-        let type = 'general';
-        if (lower.includes('run') || lower.includes('running') || lower.includes('correr') || lower.includes('corrí')) {
-          type = 'cardio';
-        } else if (lower.includes('gym') || lower.includes('gimnasio') || lower.includes('pesas') || lower.includes('strength')) {
-          type = 'strength';
-        } else if (lower.includes('yoga') || lower.includes('stretching') || lower.includes('estirar')) {
-          type = 'flexibility';
-        } else if (lower.includes('swim') || lower.includes('nadar') || lower.includes('natación')) {
-          type = 'cardio';
-        } else if (lower.includes('bike') || lower.includes('bici') || lower.includes('ciclismo')) {
-          type = 'cardio';
-        }
-
-        // Try to extract duration
-        const durationMatch = message.match(/(\d+)\s*(min|minutes?|minutos?)/i);
-        const duration = durationMatch ? parseInt(durationMatch[1], 10) : 30;
-
-        // Detect intensity
-        let intensity: 'low' | 'medium' | 'high' = 'medium';
-        if (lower.includes('intense') || lower.includes('intenso') || lower.includes('fuerte') || lower.includes('hard')) {
-          intensity = 'high';
-        } else if (lower.includes('light') || lower.includes('suave') || lower.includes('ligero') || lower.includes('easy')) {
-          intensity = 'low';
-        }
-
-        return { type, duration, intensity };
-      }
-
       case 'meal_log': {
-        // Detect meal type (English + Spanish)
-        let mealType = 'snack';
-        if (lower.includes('breakfast') || lower.includes('desayuno')) {
-          mealType = 'breakfast';
-        } else if (lower.includes('lunch') || lower.includes('almuerzo')) {
-          mealType = 'lunch';
-        } else if (lower.includes('dinner') || lower.includes('cena')) {
-          mealType = 'dinner';
+        const items: CalorieEntryItem[] = [];
+        const foodCalories: Record<string, number> = {
+          pollo: 250, chicken: 250,
+          arroz: 200, rice: 200,
+          ensalada: 80, salad: 80,
+          huevos: 150, eggs: 150,
+          pan: 120, bread: 120,
+          pasta: 350,
+          torta: 400, cake: 400,
+          pizza: 300,
+          pescado: 200, fish: 200,
+          carne: 300, beef: 300,
+          frijoles: 150, beans: 150,
+          tortilla: 100,
+          sandwich: 350,
+          sopa: 150, soup: 150,
+          fruta: 80, fruit: 80,
+          yogurt: 120,
+          cereal: 200,
+        };
+
+        for (const [food, cal] of Object.entries(foodCalories)) {
+          if (lower.includes(food)) {
+            items.push({ name: food, calories: cal });
+          }
         }
 
-        // Extract food items mentioned
-        const foods: string[] = [];
-        const foodKeywords = [
-          'eggs', 'huevos', 'toast', 'tostada', 'pan',
-          'chicken', 'pollo', 'rice', 'arroz', 'pasta',
-          'salad', 'ensalada', 'torta', 'cake', 'pizza',
-          'fish', 'pescado', 'beef', 'carne', 'vegetables', 'verduras',
-          'fruit', 'fruta', 'yogurt', 'cereal', 'sandwich',
-        ];
-        foodKeywords.forEach(food => {
-          if (lower.includes(food)) {
-            foods.push(food);
-          }
-        });
+        if (items.length === 0) {
+          items.push({ name: 'comida', calories: 500 });
+        }
 
-        return {
-          mealType,
-          foods,
-          estimatedCalories: null,
-        };
+        const totalCalories = items.reduce((sum, item) => sum + item.calories, 0);
+        return { items, totalCalories };
       }
 
-      case 'energy_check': {
-        let level = 5;
-        // High energy indicators (English + Spanish)
-        if (lower.includes('great') || lower.includes('high') || lower.includes('excellent') ||
-            lower.includes('genial') || lower.includes('excelente') || lower.includes('mucha energía') ||
-            lower.includes('muy bien') || lower.includes('animado')) {
-          level = 8;
-        }
-        // Low energy indicators (English + Spanish)
-        if (lower.includes('low') || lower.includes('tired') || lower.includes('exhausted') ||
-            lower.includes('cansado') || lower.includes('cansada') || lower.includes('agotado') ||
-            lower.includes('agotada') || lower.includes('sin energía') || lower.includes('mal')) {
-          level = 3;
+      case 'activity_log': {
+        // Extract duration
+        const durationMatch = message.match(/(\d+)\s*(min|minutos?|minutes?|hrs?|horas?|hours?)/i);
+        let durationMinutes = 30;
+        if (durationMatch) {
+          const value = parseInt(durationMatch[1], 10);
+          const unit = durationMatch[2].toLowerCase();
+          durationMinutes = unit.startsWith('h') ? value * 60 : value;
         }
 
-        const factors: string[] = [];
-        if (lower.includes('sleep') || lower.includes('sueño') || lower.includes('dormí')) {
-          factors.push('sleep');
-        }
-        if (lower.includes('stress') || lower.includes('estrés') || lower.includes('estresado')) {
-          factors.push('stress');
-        }
-        if (lower.includes('work') || lower.includes('trabajo')) {
-          factors.push('work');
-        }
+        // Estimate MET based on activity
+        let met = 5;
+        let activity = 'ejercicio general';
+        if (lower.includes('corr') || lower.includes('run')) { met = 8; activity = 'correr'; }
+        else if (lower.includes('pesas') || lower.includes('gym') || lower.includes('gimnasio') || lower.includes('weights')) { met = 5.5; activity = 'pesas'; }
+        else if (lower.includes('nadar') || lower.includes('swim')) { met = 7; activity = 'nadar'; }
+        else if (lower.includes('bici') || lower.includes('cycl')) { met = 7; activity = 'ciclismo'; }
+        else if (lower.includes('camin') || lower.includes('walk')) { met = 3.5; activity = 'caminar'; }
+        else if (lower.includes('yoga')) { met = 3; activity = 'yoga'; }
 
-        return { level, factors };
+        const weight = 70; // default
+        const caloriesBurned = Math.round(met * weight * (durationMinutes / 60));
+
+        return {
+          activity,
+          durationMinutes,
+          caloriesBurned,
+          items: [{ name: `${activity} (${durationMinutes} min)`, calories: caloriesBurned }],
+        };
       }
 
       default:
         return {};
     }
+  }
+
+  private getMockConfirmation(message: string): ConfirmationResult {
+    const lower = message.toLowerCase().trim();
+
+    // Check for rejection
+    if (lower === 'no' || lower.includes('bórralo') || lower.includes('borralo') ||
+        lower.includes('quítalo') || lower.includes('quitalo') || lower.includes('cancel') ||
+        lower.includes('delete')) {
+      return { action: 'reject' };
+    }
+
+    // Check for adjustment
+    const adjustMatch = message.match(/(?:ponle|cámbialo a|cambialo a|son|were|make it)\s*(\d+)/i);
+    if (adjustMatch) {
+      return {
+        action: 'adjust',
+        adjustedCalories: parseInt(adjustMatch[1], 10),
+      };
+    }
+
+    // Default: confirm
+    return { action: 'confirm' };
   }
 }

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Message, User, MessageType } from '@nova/types';
+import type { Message, User, MessageType, PendingEntry, DailySummary } from '@nova/types';
 import { generateId } from '@nova/utils';
 
 export interface ChatState {
@@ -9,6 +9,8 @@ export interface ChatState {
   currentUser: User | null;
   isLoading: boolean;
   error: string | null;
+  pendingEntry: PendingEntry | null;
+  dailySummary: DailySummary | null;
 }
 
 export interface ChatActions {
@@ -23,60 +25,25 @@ export interface ChatActions {
 
 export type ChatStore = ChatState & ChatActions;
 
-// Mock agent responses
-const agentResponses: Record<string, string[]> = {
-  default: [
-    "I'm here to help you on your wellness journey. What would you like to track today?",
-    "That's great progress! Keep up the good work.",
-    "I've noted that down. How are you feeling overall?",
-    "Thanks for sharing. Remember, consistency is key to reaching your goals.",
-  ],
-  weight: [
-    "Got it! I've recorded your weight. You're making steady progress.",
-    "Weight logged. Remember, daily fluctuations are normal.",
-    "Thanks for tracking your weight. Consistency in logging helps us see trends.",
-  ],
-  meal: [
-    "Nice meal choice! I've logged it for you.",
-    "Food tracked! How did this meal make you feel?",
-    "Got it. Remember to stay hydrated throughout the day.",
-  ],
-  workout: [
-    "Great workout! I've added those NOVA points to your score.",
-    "Exercise logged! How's your energy level after that?",
-    "Awesome effort! Rest and recovery are just as important.",
-  ],
-  sleep: [
-    "Sleep logged. Quality rest is crucial for your goals.",
-    "Got it! How do you feel this morning?",
-    "Thanks for tracking. Consistent sleep schedules help improve quality.",
-  ],
-  energy: [
-    "Energy level noted. Let's see what factors might be affecting it.",
-    "Thanks for checking in. Your energy patterns help us optimize your routine.",
-  ],
-};
-
-function getAgentResponse(messageType: MessageType): string {
-  const responses = agentResponses[messageType] || agentResponses.default;
-  return responses[Math.floor(Math.random() * responses.length)];
-}
-
 function detectMessageType(content: string, hasImage: boolean): MessageType {
   const lowerContent = content.toLowerCase();
 
   if (hasImage) {
-    if (lowerContent.includes('weight') || lowerContent.includes('scale')) return 'weight';
-    if (lowerContent.includes('food') || lowerContent.includes('meal') || lowerContent.includes('ate') || lowerContent.includes('breakfast') || lowerContent.includes('lunch') || lowerContent.includes('dinner')) return 'meal';
-    if (lowerContent.includes('workout') || lowerContent.includes('gym') || lowerContent.includes('exercise')) return 'workout';
+    if (lowerContent.includes('weight') || lowerContent.includes('scale') || lowerContent.includes('peso')) return 'weight';
+    if (lowerContent.includes('food') || lowerContent.includes('meal') || lowerContent.includes('comida')) return 'meal';
+    if (lowerContent.includes('workout') || lowerContent.includes('gym') || lowerContent.includes('ejercicio')) return 'workout';
     return 'image';
   }
 
-  if (lowerContent.includes('sleep') || lowerContent.includes('slept') || lowerContent.includes('tired')) return 'sleep';
-  if (lowerContent.includes('energy') || lowerContent.includes('feel')) return 'energy';
-  if (lowerContent.includes('workout') || lowerContent.includes('exercise') || lowerContent.includes('run') || lowerContent.includes('gym')) return 'workout';
-  if (lowerContent.includes('ate') || lowerContent.includes('food') || lowerContent.includes('meal')) return 'meal';
-  if (lowerContent.includes('weight') || lowerContent.includes('kg') || lowerContent.includes('lb')) return 'weight';
+  if (lowerContent.includes('workout') || lowerContent.includes('exercise') || lowerContent.includes('run') ||
+      lowerContent.includes('gym') || lowerContent.includes('entrené') || lowerContent.includes('correr') ||
+      lowerContent.includes('ejercicio') || lowerContent.includes('gimnasio') || lowerContent.includes('pesas')) return 'workout';
+  if (lowerContent.includes('ate') || lowerContent.includes('food') || lowerContent.includes('meal') ||
+      lowerContent.includes('comí') || lowerContent.includes('comida') || lowerContent.includes('almuerzo') ||
+      lowerContent.includes('desayuno') || lowerContent.includes('cena') || lowerContent.includes('pollo') ||
+      lowerContent.includes('arroz')) return 'meal';
+  if (lowerContent.includes('weight') || lowerContent.includes('kg') || lowerContent.includes('lb') ||
+      lowerContent.includes('peso') || lowerContent.includes('kilos')) return 'weight';
 
   return 'text';
 }
@@ -90,6 +57,8 @@ export const useChatStore = create<ChatStore>()(
       currentUser: null,
       isLoading: false,
       error: null,
+      pendingEntry: null,
+      dailySummary: null,
 
       // Actions
       addMessage: (messageData) => {
@@ -118,11 +87,7 @@ export const useChatStore = create<ChatStore>()(
         set({ isLoading: true, error: null });
 
         try {
-          // In a real app, this would fetch from the API
-          // For now, we just simulate a delay
-          await new Promise((resolve) => setTimeout(resolve, 500));
-
-          // Messages are already persisted via zustand/persist
+          await new Promise((resolve) => setTimeout(resolve, 300));
           set({ isLoading: false });
         } catch (error) {
           set({
@@ -133,7 +98,7 @@ export const useChatStore = create<ChatStore>()(
       },
 
       clearMessages: () => {
-        set({ messages: [] });
+        set({ messages: [], pendingEntry: null, dailySummary: null });
       },
 
       setError: (error) => {
@@ -141,12 +106,10 @@ export const useChatStore = create<ChatStore>()(
       },
 
       sendUserMessage: async (content, imageUrl, explicitType) => {
-        const { addMessage, setAgentTyping } = get();
+        const { addMessage, setAgentTyping, currentUser, pendingEntry } = get();
 
-        // Detect message type
         const type = explicitType || detectMessageType(content, !!imageUrl);
 
-        // Add user message
         addMessage({
           type,
           content,
@@ -154,20 +117,66 @@ export const useChatStore = create<ChatStore>()(
           sender: 'user',
         });
 
-        // Simulate agent typing
         setAgentTyping(true);
 
-        // Random delay between 1-2 seconds
-        const delay = 1000 + Math.random() * 1000;
-        await new Promise((resolve) => setTimeout(resolve, delay));
+        try {
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+          const body: Record<string, unknown> = {
+            userId: currentUser?.id || 'demo-user-001',
+            content,
+          };
 
-        // Add agent response
-        setAgentTyping(false);
-        addMessage({
-          type: 'text',
-          content: getAgentResponse(type),
-          sender: 'agent',
-        });
+          if (pendingEntry) {
+            body.pendingEntryId = pendingEntry.id;
+          }
+
+          const response = await fetch(`${API_URL}/api/messages/process/sync`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(body),
+          });
+
+          const data = await response.json();
+
+          setAgentTyping(false);
+
+          if (data.success && data.data?.response?.message) {
+            addMessage({
+              type: 'text',
+              content: data.data.response.message,
+              sender: 'agent',
+            });
+
+            // Update pending entry and daily summary from response
+            const responseData = data.data.response;
+
+            if (responseData.pendingEntry) {
+              set({ pendingEntry: responseData.pendingEntry });
+            } else if (data.data.intent === 'confirmation') {
+              set({ pendingEntry: null });
+            }
+
+            if (responseData.dailySummary) {
+              set({ dailySummary: responseData.dailySummary });
+            }
+          } else {
+            addMessage({
+              type: 'text',
+              content: 'No pude procesar tu mensaje. Intenta de nuevo.',
+              sender: 'agent',
+            });
+          }
+        } catch (error) {
+          console.error('Error calling API:', error);
+          setAgentTyping(false);
+          addMessage({
+            type: 'text',
+            content: 'Error de conexión. Verifica que el servidor esté corriendo.',
+            sender: 'agent',
+          });
+        }
       },
     }),
     {
@@ -175,6 +184,7 @@ export const useChatStore = create<ChatStore>()(
       partialize: (state) => ({
         messages: state.messages,
         currentUser: state.currentUser,
+        dailySummary: state.dailySummary,
       }),
     }
   )

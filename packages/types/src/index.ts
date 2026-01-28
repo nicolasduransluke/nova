@@ -17,6 +17,7 @@ export interface CreateUserDTO {
 // Profile Domain
 export type Sex = 'male' | 'female' | 'other';
 export type Objective = 'weight_loss' | 'muscle_gain' | 'maintenance' | 'energy' | 'sleep' | 'stress';
+export type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active';
 
 export interface Profile {
   id: string;
@@ -26,6 +27,7 @@ export interface Profile {
   age: number;
   sex: Sex;
   objective: Objective;
+  activityLevel: ActivityLevel;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -37,9 +39,10 @@ export interface CreateProfileDTO {
   age: number;
   sex: Sex;
   objective: Objective;
+  activityLevel?: ActivityLevel;
 }
 
-// Daily Entry Domain
+// Daily Entry Domain (legacy)
 export type EntryType = 'food' | 'exercise' | 'sleep' | 'mood' | 'energy' | 'custom';
 
 export interface DailyEntry {
@@ -61,80 +64,88 @@ export interface CreateDailyEntryDTO {
   novaPoints?: number;
 }
 
-// Agent Domain
-export type AgentType =
-  | 'metabolic'
-  | 'nutrition'
-  | 'training'
-  | 'sleep'
-  | 'energy'
-  | 'integrator'
-  | 'coach'
-  | 'analyst'
-  | 'planner'
-  | 'motivator';
+// Calorie Entry Domain
+export type CalorieEntryType = 'intake' | 'burn';
 
-export type AgentStatus = 'active' | 'inactive' | 'learning';
-
-// Specialized Agent Input Types
-export interface NutritionData {
-  meals?: Array<{
-    name: string;
-    calories?: number;
-    protein?: number;
-    carbs?: number;
-    fat?: number;
-    time?: string;
-  }>;
-  totalCalories?: number;
-  totalProtein?: number;
-  totalCarbs?: number;
-  totalFat?: number;
+export interface CalorieEntryItem {
+  name: string;
+  calories: number;
 }
 
-export interface TrainingData {
-  type?: 'strength' | 'cardio' | 'flexibility' | 'sports' | 'mixed';
-  duration?: number; // minutes
-  exercises?: Array<{
-    name: string;
-    sets?: number;
-    reps?: number;
-    weight?: number;
-    duration?: number;
-  }>;
-  intensity?: 'low' | 'moderate' | 'high' | 'very_high';
-  caloriesBurned?: number;
-}
-
-export interface SleepData {
-  duration?: number; // hours
-  quality?: number; // 1-5
-  bedtime?: string;
-  wakeTime?: string;
-  interruptions?: number;
-  notes?: string;
-}
-
-export interface EnergyData {
-  level?: number; // 1-5
-  time?: 'morning' | 'afternoon' | 'evening' | 'night';
-  mood?: 'great' | 'good' | 'neutral' | 'low' | 'bad';
-  stressLevel?: number; // 1-5
-  notes?: string;
-}
-
-export interface Agent {
+export interface CalorieEntry {
   id: string;
-  type: AgentType;
-  config: Record<string, unknown>;
-  status: AgentStatus;
+  userId: string;
+  date: Date;
+  type: CalorieEntryType;
+  description: string;
+  calories: number;
+  items: CalorieEntryItem[];
+  confirmed: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
 
-export interface CreateAgentDTO {
-  type: AgentType;
-  config?: Record<string, unknown>;
+export interface CreateCalorieEntryDTO {
+  userId: string;
+  date: Date;
+  type: CalorieEntryType;
+  description: string;
+  calories: number;
+  items: CalorieEntryItem[];
+  confirmed?: boolean;
+}
+
+// Weight Log Domain
+export interface WeightLog {
+  id: string;
+  userId: string;
+  weight: number; // kg
+  date: Date;
+  createdAt: Date;
+}
+
+export interface CreateWeightLogDTO {
+  userId: string;
+  weight: number;
+  date: Date;
+}
+
+// Agent Domain
+export type AgentType =
+  | 'metabolic'
+  | 'nutrition'
+  | 'activity'
+  | 'integrator';
+
+// Calorie Estimate Types
+export interface CalorieEstimate {
+  items: CalorieEntryItem[];
+  totalCalories: number;
+}
+
+export interface ActivityEstimate {
+  activity: string;
+  durationMinutes: number;
+  caloriesBurned: number;
+}
+
+export interface PendingEntry {
+  id: string;
+  type: CalorieEntryType;
+  description: string;
+  calories: number;
+  items: CalorieEntryItem[];
+  createdAt: Date;
+}
+
+export interface DailySummary {
+  date: Date;
+  intake: number;
+  burn: number;
+  tdee: number;
+  deficit: number;
+  targetDeficit: number;
+  projectedWeeklyLoss: number; // kg
 }
 
 // API Response Types
@@ -169,10 +180,8 @@ export type MessageType =
   | 'text'
   | 'image'
   | 'weight'
-  | 'sleep'
   | 'meal'
-  | 'workout'
-  | 'energy';
+  | 'workout';
 
 export type MessageSender = 'user' | 'agent';
 
@@ -204,11 +213,10 @@ export interface ChatSession {
 
 // Agent Orchestrator Domain
 export type MessageIntent =
-  | 'weight_log'
   | 'meal_log'
-  | 'workout_log'
-  | 'sleep_log'
-  | 'energy_check'
+  | 'activity_log'
+  | 'weight_log'
+  | 'confirmation'
   | 'question'
   | 'greeting'
   | 'general';
@@ -236,7 +244,8 @@ export interface FinalResponse {
   tone: ResponseTone;
   actionItems?: string[];
   nextSteps?: string[];
-  novaPointsEarned?: number;
+  pendingEntry?: PendingEntry;
+  dailySummary?: DailySummary;
 }
 
 export interface ProcessMessageRequest {
@@ -244,6 +253,7 @@ export interface ProcessMessageRequest {
   content: string;
   imageUrl?: string;
   messageType?: MessageType;
+  pendingEntryId?: string;
 }
 
 export interface ProcessMessageResponse {

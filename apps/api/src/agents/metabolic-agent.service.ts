@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { AgentOutput, DailyEntry } from '@nova/types';
+import type { AgentOutput, DailyEntry, DailySummary, Profile } from '@nova/types';
 import { BaseAgent, AgentInput } from './base-agent.abstract';
 import { ClaudeClientService } from '../claude-client/claude-client.service';
 
@@ -9,13 +9,6 @@ interface WeightTrend {
   dataPoints: number;
 }
 
-interface MetabolicData {
-  currentWeight?: number;
-  weightTrend?: WeightTrend;
-  bmi?: number;
-  goalProgress?: number;
-}
-
 @Injectable()
 export class MetabolicAgentService extends BaseAgent {
   constructor(claudeClient: ClaudeClientService) {
@@ -23,107 +16,141 @@ export class MetabolicAgentService extends BaseAgent {
   }
 
   protected getSystemPrompt(): string {
-    return `You are the Metabolic Analysis component of NOVA.
-Your role is to analyze weight and body composition data.
+    return `You are the Metabolic Analysis component of NOVA, a calorie deficit coach.
+Your role is to analyze weight trends and calorie deficit progress.
 
 Focus on:
 - Weight trends over time (not single data points)
-- BMI calculations and what they mean
-- Progress toward weight-related goals
+- BMI calculations
+- Deficit progress and projected weight loss
 - Sustainable rate of change (0.5-1kg per week)
+- Plateau detection
 
-When analyzing:
-1. Look at trends, not just numbers
-2. Consider natural fluctuations (±1kg is normal daily)
-3. Compare to user's stated goals
-4. Provide one actionable insight
-
-Keep responses brief and data-focused.`;
+Keep responses brief, data-focused, and in the user's language.`;
   }
 
   protected validateInput(input: AgentInput): boolean {
-    // Metabolic agent needs either extracted weight data or recent weight entries
     const hasWeightData = input.extractedData?.weight !== undefined;
     const hasWeightEntries = input.context.recentEntries.some(
       (e) => e.type === 'food' || e.data?.weight !== undefined,
     );
-
-    return hasWeightData || hasWeightEntries;
+    return hasWeightData || hasWeightEntries || input.message.length > 2;
   }
 
   async process(input: AgentInput): Promise<AgentOutput> {
     this.logger.debug(`Processing metabolic analysis for user ${input.context.user.id}`);
 
-    // Calculate metabolic metrics
-    const metabolicData = this.calculateMetabolicData(input);
+    const profile = input.context.profile;
+    const currentWeight = input.extractedData?.weight as number | undefined;
 
-    // Build analysis prompt
-    const prompt = this.buildAnalysisPrompt(input, metabolicData);
+    // Calculate BMI if possible
+    let bmi: number | undefined;
+    const weight = currentWeight || profile?.weight;
+    if (weight && profile?.height) {
+      const heightM = profile.height / 100;
+      bmi = Number((weight / (heightM * heightM)).toFixed(1));
+    }
 
-    // Get Claude's analysis
-    const analysis = await this.claudeClient.generateResponse(prompt, {
-      systemPrompt: this.getSystemPrompt(),
-      maxTokens: 300,
-      temperature: 0.5,
-    });
+    // Calculate weight trend from recent entries
+    const weightEntries = input.context.recentEntries
+      .filter((e) => e.data?.weight !== undefined)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-    // Parse and structure the output
-    const insights = this.parseInsights(analysis);
-    const recommendations = this.generateRecommendations(metabolicData, input);
+    let weightTrend: WeightTrend | undefined;
+    if (weightEntries.length >= 2) {
+      weightTrend = this.calculateWeightTrend(weightEntries);
+    }
+
+    // Calculate TDEE
+    const tdee = this.calculateTDEE(profile);
+
+    // Build insights
+    const insights: string[] = [];
+    const recommendations: string[] = [];
+
+    if (currentWeight) {
+      insights.push(`Peso registrado: ${currentWeight} kg`);
+    }
+
+    if (bmi) {
+      const bmiCategory = bmi < 18.5 ? 'bajo peso' : bmi < 25 ? 'normal' : bmi < 30 ? 'sobrepeso' : 'obesidad';
+      insights.push(`IMC: ${bmi} (${bmiCategory})`);
+    }
+
+    if (weightTrend) {
+      const direction = weightTrend.direction === 'down' ? 'bajando' :
+                       weightTrend.direction === 'up' ? 'subiendo' : 'estable';
+      insights.push(`Tendencia: ${direction} (${weightTrend.averageChange > 0 ? '+' : ''}${weightTrend.averageChange} kg/semana)`);
+
+      if (weightTrend.direction === 'down' && Math.abs(weightTrend.averageChange) > 1) {
+        recommendations.push('Estás bajando más de 1 kg/semana. Considera reducir el déficit para que sea sostenible.');
+      } else if (weightTrend.direction === 'stable') {
+        recommendations.push('Tu peso está estable. Si buscas perder, revisa tu ingesta calórica.');
+      } else if (weightTrend.direction === 'down') {
+        recommendations.push('Buen progreso. Mantén la consistencia.');
+      }
+    }
+
+    // Weight projection based on deficit
+    const projectedWeeklyLoss = 500 * 7 / 7700; // 500 cal/day deficit = ~0.45 kg/week
+    insights.push(`Proyección con déficit de 500 kcal/día: ~${projectedWeeklyLoss.toFixed(2)} kg/semana`);
 
     return this.createOutput({
       insights,
       recommendations,
-      dataPoints: metabolicData,
+      dataPoints: {
+        currentWeight,
+        bmi,
+        weightTrend,
+        tdee,
+        projectedWeeklyLoss,
+      },
       confidence: this.calculateConfidence(input.extractedData, input.context),
     });
   }
 
-  private calculateMetabolicData(input: AgentInput): MetabolicData {
-    const data: MetabolicData = {};
-    const { context, extractedData } = input;
+  calculateTDEE(profile?: Profile): number {
+    if (!profile) return 2000;
 
-    // Get current weight from extracted data
-    if (extractedData?.weight) {
-      data.currentWeight = extractedData.weight as number;
+    let bmr: number;
+    if (profile.sex === 'male') {
+      bmr = 10 * profile.weight + 6.25 * profile.height - 5 * profile.age + 5;
+    } else {
+      bmr = 10 * profile.weight + 6.25 * profile.height - 5 * profile.age - 161;
     }
 
-    // Calculate weight trend from recent entries
-    const weightEntries = context.recentEntries
-      .filter((e) => e.data?.weight !== undefined)
-      .sort(
-        (a, b) =>
-          new Date(a.date).getTime() - new Date(b.date).getTime(),
-      );
+    const activityMultipliers: Record<string, number> = {
+      sedentary: 1.2,
+      light: 1.375,
+      moderate: 1.55,
+      active: 1.725,
+      very_active: 1.9,
+    };
 
-    if (weightEntries.length >= 2) {
-      data.weightTrend = this.calculateWeightTrend(weightEntries);
-    }
+    const multiplier = activityMultipliers[profile.activityLevel] || 1.55;
+    return bmr * multiplier;
+  }
 
-    // Calculate BMI if we have height from profile
-    if (data.currentWeight && context.profile?.height) {
-      const heightM = context.profile.height / 100;
-      data.bmi = Number(
-        (data.currentWeight / (heightM * heightM)).toFixed(1),
-      );
-    }
+  calculateDailySummary(
+    profile: Profile | undefined,
+    todayIntake: number,
+    todayBurn: number,
+  ): DailySummary {
+    const tdee = this.calculateTDEE(profile);
+    const totalBurn = tdee + todayBurn;
+    const deficit = totalBurn - todayIntake;
+    const targetDeficit = 500;
+    const projectedWeeklyLoss = (deficit * 7) / 7700; // 7700 cal = 1 kg
 
-    // Calculate goal progress if applicable
-    if (
-      context.profile?.objective === 'weight_loss' &&
-      data.currentWeight &&
-      context.profile?.weight
-    ) {
-      const startWeight = context.profile.weight;
-      const targetLoss = startWeight * 0.1; // Assume 10% target
-      const actualLoss = startWeight - data.currentWeight;
-      data.goalProgress = Math.min(
-        100,
-        Math.max(0, (actualLoss / targetLoss) * 100),
-      );
-    }
-
-    return data;
+    return {
+      date: new Date(),
+      intake: todayIntake,
+      burn: todayBurn,
+      tdee: Math.round(tdee),
+      deficit: Math.round(deficit),
+      targetDeficit,
+      projectedWeeklyLoss: Number(projectedWeeklyLoss.toFixed(2)),
+    };
   }
 
   private calculateWeightTrend(entries: DailyEntry[]): WeightTrend {
@@ -132,7 +159,6 @@ Keep responses brief and data-focused.`;
     const lastWeight = weights[weights.length - 1];
     const change = lastWeight - firstWeight;
 
-    // Calculate average weekly change
     const daysDiff =
       (new Date(entries[entries.length - 1].date).getTime() -
         new Date(entries[0].date).getTime()) /
@@ -145,90 +171,5 @@ Keep responses brief and data-focused.`;
       averageChange: Number(weeklyChange.toFixed(2)),
       dataPoints: weights.length,
     };
-  }
-
-  private buildAnalysisPrompt(
-    input: AgentInput,
-    metabolicData: MetabolicData,
-  ): string {
-    const basePrompt = this.buildPrompt(input);
-
-    let metricsSection = '\n## Calculated Metrics\n';
-
-    if (metabolicData.currentWeight) {
-      metricsSection += `- Current weight: ${metabolicData.currentWeight}kg\n`;
-    }
-
-    if (metabolicData.bmi) {
-      metricsSection += `- BMI: ${metabolicData.bmi}\n`;
-    }
-
-    if (metabolicData.weightTrend) {
-      const trend = metabolicData.weightTrend;
-      metricsSection += `- Trend: ${trend.direction} (${trend.averageChange > 0 ? '+' : ''}${trend.averageChange}kg/week over ${trend.dataPoints} data points)\n`;
-    }
-
-    if (metabolicData.goalProgress !== undefined) {
-      metricsSection += `- Goal progress: ${metabolicData.goalProgress.toFixed(0)}%\n`;
-    }
-
-    return `${basePrompt}${metricsSection}
-
-Provide a brief metabolic analysis focusing on trends and one actionable insight.`;
-  }
-
-  private generateRecommendations(
-    data: MetabolicData,
-    input: AgentInput,
-  ): string[] {
-    const recommendations: string[] = [];
-    const objective = input.context.profile?.objective;
-
-    if (data.weightTrend) {
-      const { direction, averageChange } = data.weightTrend;
-
-      if (objective === 'weight_loss') {
-        if (direction === 'down' && Math.abs(averageChange) > 1) {
-          recommendations.push(
-            'Current rate exceeds 1kg/week. Consider slowing down for sustainability.',
-          );
-        } else if (direction === 'stable' || direction === 'up') {
-          recommendations.push(
-            'Weight plateau detected. Review calorie intake and activity levels.',
-          );
-        } else {
-          recommendations.push(
-            'Progress is on track. Maintain current approach.',
-          );
-        }
-      }
-
-      if (objective === 'muscle_gain') {
-        if (direction === 'up' && averageChange > 0.5) {
-          recommendations.push(
-            'Gaining at a good rate for lean muscle. Monitor body composition.',
-          );
-        } else if (direction === 'stable' || direction === 'down') {
-          recommendations.push(
-            'Consider increasing calorie surplus to support muscle growth.',
-          );
-        }
-      }
-    }
-
-    // BMI-based recommendations
-    if (data.bmi) {
-      if (data.bmi < 18.5) {
-        recommendations.push(
-          'BMI indicates underweight. Consult healthcare provider for guidance.',
-        );
-      } else if (data.bmi >= 25 && data.bmi < 30) {
-        recommendations.push(
-          'BMI in overweight range. Focus on gradual, sustainable changes.',
-        );
-      }
-    }
-
-    return recommendations.slice(0, 2);
   }
 }

@@ -23,6 +23,10 @@ export class ProcessMessageDto {
   imageUrl?: string;
 
   @IsOptional()
-  @IsEnum(['text', 'image', 'weight', 'sleep', 'meal', 'workout', 'energy'])
+  @IsEnum(['text', 'image', 'weight', 'meal', 'workout'])
   messageType?: MessageType;
+
+  @IsOptional()
+  @IsString()
+  pendingEntryId?: string;
 }

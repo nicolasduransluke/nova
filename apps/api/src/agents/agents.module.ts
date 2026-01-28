@@ -4,9 +4,7 @@ import { OrchestratorService } from './orchestrator.service';
 import { MetabolicAgentService } from './metabolic-agent.service';
 import { IntegratorAgentService } from './integrator-agent.service';
 import { NutritionAgentService } from './nutrition-agent.service';
-import { TrainingAgentService } from './training-agent.service';
-import { SleepAgentService } from './sleep-agent.service';
-import { EnergyAgentService } from './energy-agent.service';
+import { ActivityBurnAgentService } from './activity-burn-agent.service';
 import { AgentRegistryService } from './agent-registry.service';
 
 @Module({
@@ -15,9 +13,7 @@ import { AgentRegistryService } from './agent-registry.service';
     // Specialized Agents
     MetabolicAgentService,
     NutritionAgentService,
-    TrainingAgentService,
-    SleepAgentService,
-    EnergyAgentService,
+    ActivityBurnAgentService,
     IntegratorAgentService,
     // Registry & Orchestrator
     AgentRegistryService,

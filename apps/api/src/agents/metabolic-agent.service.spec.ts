@@ -24,6 +24,7 @@ describe('MetabolicAgentService', () => {
       age: 30,
       sex: 'male',
       objective: 'weight_loss',
+      activityLevel: 'moderate',
       createdAt: new Date(),
       updatedAt: new Date(),
     },
@@ -90,7 +91,6 @@ describe('MetabolicAgentService', () => {
       const output = await service.process(input);
 
       expect(output.dataPoints).toHaveProperty('bmi');
-      // BMI = 75 / (1.75^2) ≈ 24.5
       expect(output.dataPoints.bmi).toBeCloseTo(24.5, 0);
     });
 
@@ -110,18 +110,6 @@ describe('MetabolicAgentService', () => {
       };
       expect(trend.direction).toBe('down');
       expect(trend.dataPoints).toBe(2);
-    });
-
-    it('should generate recommendations based on objective', async () => {
-      const input = {
-        context: mockContext,
-        message: 'Current weight: 79 kg',
-        extractedData: { weight: 79, unit: 'kg' },
-      };
-
-      const output = await service.process(input);
-
-      expect(output.recommendations.length).toBeGreaterThan(0);
     });
 
     it('should have higher confidence with more data', async () => {
@@ -147,6 +135,38 @@ describe('MetabolicAgentService', () => {
       expect(outputWithData.confidence).toBeGreaterThan(
         outputWithoutData.confidence,
       );
+    });
+  });
+
+  describe('calculateTDEE', () => {
+    it('should calculate TDEE based on profile', () => {
+      const tdee = service.calculateTDEE(mockContext.profile);
+      expect(tdee).toBeGreaterThan(0);
+      expect(tdee).toBeCloseTo(2710.56, 0);
+    });
+
+    it('should return 2000 without profile', () => {
+      expect(service.calculateTDEE(undefined)).toBe(2000);
+    });
+  });
+
+  describe('calculateDailySummary', () => {
+    it('should calculate daily summary correctly', () => {
+      const summary = service.calculateDailySummary(mockContext.profile, 1500, 300);
+
+      expect(summary.intake).toBe(1500);
+      expect(summary.burn).toBe(300);
+      expect(summary.tdee).toBeGreaterThan(0);
+      expect(summary.deficit).toBeGreaterThan(0);
+      expect(summary.targetDeficit).toBe(500);
+      expect(summary.projectedWeeklyLoss).toBeGreaterThan(0);
+    });
+
+    it('should handle missing profile with defaults', () => {
+      const summary = service.calculateDailySummary(undefined, 1500, 0);
+
+      expect(summary.tdee).toBe(2000);
+      expect(summary.deficit).toBe(500); // 2000 - 1500
     });
   });
 });

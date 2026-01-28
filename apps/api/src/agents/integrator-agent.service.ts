@@ -5,6 +5,8 @@ import type {
   FinalResponse,
   ResponseTone,
   MessageIntent,
+  PendingEntry,
+  DailySummary,
 } from '@nova/types';
 import { BaseAgent, AgentInput } from './base-agent.abstract';
 import { ClaudeClientService, ClaudeMessage } from '../claude-client/claude-client.service';
@@ -12,6 +14,8 @@ import { ClaudeClientService, ClaudeMessage } from '../claude-client/claude-clie
 export interface IntegratorInput extends AgentInput {
   intent: MessageIntent;
   agentOutputs: AgentOutput[];
+  pendingEntry?: PendingEntry;
+  dailySummary?: DailySummary;
 }
 
 @Injectable()
@@ -21,48 +25,45 @@ export class IntegratorAgentService extends BaseAgent {
   }
 
   protected getSystemPrompt(): string {
-    return `You are NOVA, an AI health coach that helps users optimize their energy and wellbeing.
+    return `You are NOVA, a calorie deficit coach that helps users lose weight by tracking their food intake and physical activity.
 
 ## CRITICAL: Language Rule
 - ALWAYS respond in the SAME LANGUAGE as the user's message
 - If the user writes in Spanish, respond ENTIRELY in Spanish
 - If the user writes in English, respond in English
-- NEVER mix languages in your response
 
 ## Your Role
-Synthesize insights from specialized analysis into one clear, helpful response.
+Help users maintain a caloric deficit by:
+- Estimating calories in their meals
+- Estimating calories burned in activities
+- Tracking their daily deficit
+- Providing weight trend analysis
 
 ## Communication Style
 - Calm and supportive, never pushy
 - Data-driven but not robotic
 - Brief (max 6-8 lines)
-- One clear action item when relevant
+- When presenting calorie estimates, ALWAYS ask for confirmation
 
-## Response Structure
-1. Acknowledge the user's input (1 line)
-2. Share the key insight (1-2 lines)
-3. Suggest next step if appropriate (1 line)
+## Response Structure for meal/activity logs:
+1. Present the calorie estimate with item breakdown
+2. Ask: "¿Te parece bien?" / "Does this look right?"
+3. Mention how it fits in their daily goal
 
-## Tone Guidelines
-- "calm": For routine check-ins and data logging
-- "encouraging": When user shows progress or effort
-- "informative": When answering questions or explaining patterns
+## For questions about progress:
+1. Show current daily summary (intake/burn/deficit)
+2. Contextualize with weekly projection
+3. One actionable suggestion
 
-Never use:
-- Excessive exclamation marks
-- Words like "amazing", "awesome", "fantastic", "genial", "increíble"
-- More than one emoji per response
-- Medical advice or diagnoses
-
+Never use excessive exclamation marks or hype language.
 Always ground responses in the user's actual data.`;
   }
 
   protected validateInput(input: AgentInput): boolean {
-    return true; // Integrator accepts all inputs
+    return true;
   }
 
   async process(input: AgentInput): Promise<AgentOutput> {
-    // This is not used directly - use integrate() instead
     return this.createOutput();
   }
 
@@ -74,10 +75,8 @@ Always ground responses in the user's actual data.`;
     const tone = this.determineTone(input);
     const conversationHistory = this.buildConversationHistory(input.context);
 
-    // Build integration prompt
     const prompt = this.buildIntegrationPrompt(input);
 
-    // Get Claude's integrated response
     const response = await this.claudeClient.generateResponse(prompt, {
       systemPrompt: this.getSystemPrompt(),
       maxTokens: 400,
@@ -85,45 +84,33 @@ Always ground responses in the user's actual data.`;
       conversationHistory,
     });
 
-    // Extract action items and next steps
     const { message, actionItems, nextSteps } = this.parseResponse(response);
-
-    // Calculate NOVA points earned
-    const novaPointsEarned = this.calculateNovaPoints(input);
 
     return {
       message,
       tone,
       actionItems,
       nextSteps,
-      novaPointsEarned,
+      pendingEntry: input.pendingEntry,
+      dailySummary: input.dailySummary,
     };
   }
 
   private determineTone(input: IntegratorInput): ResponseTone {
     const { intent, agentOutputs } = input;
 
-    // Encouraging tone for progress
     const hasPositiveProgress = agentOutputs.some(
       (output) =>
         output.insights.some(
           (i) =>
             i.toLowerCase().includes('progress') ||
-            i.toLowerCase().includes('improvement') ||
+            i.toLowerCase().includes('buen progreso') ||
             i.toLowerCase().includes('on track'),
         ),
     );
 
-    if (hasPositiveProgress) {
-      return 'encouraging';
-    }
-
-    // Informative tone for questions
-    if (intent === 'question') {
-      return 'informative';
-    }
-
-    // Calm tone for routine logging
+    if (hasPositiveProgress) return 'encouraging';
+    if (intent === 'question') return 'informative';
     return 'calm';
   }
 
@@ -135,7 +122,7 @@ Always ground responses in the user's actual data.`;
   }
 
   private buildIntegrationPrompt(input: IntegratorInput): string {
-    const { message, context, intent, agentOutputs } = input;
+    const { message, context, intent, agentOutputs, dailySummary } = input;
 
     let prompt = `## User Message
 "${message}"
@@ -145,27 +132,37 @@ ${intent}
 
 ## User Context
 - Name: ${context.user.name}
-- Goal: ${context.profile?.objective?.replace('_', ' ') || 'general wellness'}
+- Weight: ${context.profile?.weight || 'unknown'} kg
+- TDEE: ${dailySummary?.tdee || 'unknown'} kcal
 - Current date: ${context.currentDate.toLocaleDateString()}
 `;
+
+    if (dailySummary) {
+      prompt += `
+## Today's Progress
+- Consumed: ${dailySummary.intake} kcal
+- Burned (exercise): ${dailySummary.burn} kcal
+- TDEE: ${dailySummary.tdee} kcal
+- Current deficit: ${dailySummary.deficit} kcal
+- Target deficit: ${dailySummary.targetDeficit} kcal
+`;
+    }
 
     if (agentOutputs.length > 0) {
       prompt += '\n## Analysis from Specialized Agents\n';
 
       agentOutputs.forEach((output) => {
-        prompt += `\n### ${output.agentType.charAt(0).toUpperCase() + output.agentType.slice(1)} Analysis (confidence: ${(output.confidence * 100).toFixed(0)}%)\n`;
+        prompt += `\n### ${output.agentType} Analysis\n`;
 
         if (output.insights.length > 0) {
-          prompt += 'Insights:\n';
           output.insights.forEach((insight) => {
             prompt += `- ${insight}\n`;
           });
         }
 
         if (output.recommendations.length > 0) {
-          prompt += 'Recommendations:\n';
           output.recommendations.forEach((rec) => {
-            prompt += `- ${rec}\n`;
+            prompt += `- Rec: ${rec}\n`;
           });
         }
 
@@ -175,21 +172,27 @@ ${intent}
       });
     }
 
-    // Detect user language
     const isSpanish = this.detectSpanishMessage(message);
 
     prompt += `
 ## Language Requirement
-The user wrote in ${isSpanish ? 'SPANISH' : 'ENGLISH'}. You MUST respond ENTIRELY in ${isSpanish ? 'SPANISH' : 'ENGLISH'}.
+Respond ENTIRELY in ${isSpanish ? 'SPANISH' : 'ENGLISH'}.
 
 ## Your Task
-Create a unified response that:
-1. Acknowledges the user's input naturally
-2. Incorporates the most relevant insight from the analysis
-3. Ends with one specific, actionable suggestion if appropriate
+`;
 
-Keep it conversational and brief (max 6 lines).
-If suggesting an action, format it clearly on its own line starting with "→"`;
+    if (intent === 'meal_log' || intent === 'activity_log') {
+      prompt += `Present the calorie estimate clearly with item breakdown.
+Then ask for confirmation: "${isSpanish ? '¿Te parece bien?' : 'Does this look right?'}"
+Briefly mention where they stand for the day.`;
+    } else if (intent === 'weight_log') {
+      prompt += `Acknowledge the weight entry. Show trend if available. Keep it brief.`;
+    } else if (intent === 'question') {
+      prompt += `Answer the question using the data available. Focus on deficit progress.`;
+    } else {
+      prompt += `Respond naturally. If appropriate, mention they can log meals or activities.
+Keep it conversational and brief (max 6 lines).`;
+    }
 
     return prompt;
   }
@@ -199,11 +202,12 @@ If suggesting an action, format it clearly on its own line starting with "→"`;
     const spanishIndicators = [
       'hola', 'cómo', 'como', 'qué', 'que', 'hoy', 'día', 'dia',
       'comí', 'comi', 'entrené', 'entrene', 'dormí', 'dormi',
-      'peso', 'energía', 'energia', 'sueño', 'buenos', 'buenas',
+      'peso', 'energía', 'energia', 'buenos', 'buenas',
       'gracias', 'por favor', 'ayuda', 'puedes', 'tengo', 'estoy',
-      'duele', 'guata', 'bien', 'mal', 'mucho', 'poco',
-      'desayuno', 'almuerzo', 'cena', 'comida', 'torta',
+      'bien', 'mal', 'mucho', 'poco',
+      'desayuno', 'almuerzo', 'cena', 'comida',
       'correr', 'gimnasio', 'ejercicio', 'cansado', 'cansada',
+      'sí', 'dale', 'ponle', 'bórralo', 'borralo',
     ];
     return spanishIndicators.some((word) => lower.includes(word));
   }
@@ -222,19 +226,14 @@ If suggesting an action, format it clearly on its own line starting with "→"`;
     lines.forEach((line) => {
       const trimmed = line.trim();
 
-      // Detect action items (lines starting with → or - [ ])
       if (trimmed.startsWith('→') || trimmed.startsWith('- [ ]')) {
         actionItems.push(trimmed.replace(/^[→\-\[\]\s]+/, '').trim());
-      }
-      // Detect next steps (lines with "next:" or "try:")
-      else if (
+      } else if (
         trimmed.toLowerCase().includes('next:') ||
         trimmed.toLowerCase().includes('try:')
       ) {
         nextSteps.push(trimmed);
-      }
-      // Regular message content
-      else {
+      } else {
         messageLines.push(trimmed);
       }
     });
@@ -244,43 +243,5 @@ If suggesting an action, format it clearly on its own line starting with "→"`;
       actionItems: actionItems.slice(0, 3),
       nextSteps: nextSteps.slice(0, 2),
     };
-  }
-
-  private calculateNovaPoints(input: IntegratorInput): number {
-    const basePoints: Record<MessageIntent, number> = {
-      weight_log: 15,
-      meal_log: 10,
-      workout_log: 20,
-      sleep_log: 15,
-      energy_check: 5,
-      question: 2,
-      greeting: 0,
-      general: 3,
-    };
-
-    let points = basePoints[input.intent] || 0;
-
-    // Bonus for providing image
-    if (input.extractedData?.imageUrl) {
-      points += 5;
-    }
-
-    // Bonus for detailed data
-    const dataKeys = Object.keys(input.extractedData || {});
-    if (dataKeys.length >= 3) {
-      points += 5;
-    }
-
-    // Streak bonus (would be calculated from recent entries in production)
-    const recentDays = new Set(
-      input.context.recentEntries.map((e) =>
-        new Date(e.date).toDateString(),
-      ),
-    );
-    if (recentDays.size >= 3) {
-      points += 10; // 3+ day streak bonus
-    }
-
-    return points;
   }
 }

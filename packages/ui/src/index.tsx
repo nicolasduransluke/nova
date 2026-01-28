@@ -1,5 +1,9 @@
 import React from 'react';
 
+// Daily Summary & Weight Chart Components
+export { DailySummaryCard, type DailySummaryCardProps } from './components/DailySummary';
+export { WeightChart, type WeightChartProps, type WeightDataPoint } from './components/WeightChart';
+
 // Chat Components
 export {
   MessageBubble,

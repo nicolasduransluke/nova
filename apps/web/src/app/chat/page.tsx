@@ -1,20 +1,23 @@
 'use client';
 
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ChatContainer,
   ChatHeader,
   MessageInput,
 } from '@nova/ui';
+import { DailySummaryCard } from '@nova/ui';
 import { useChatStore } from '@/store/chat.store';
 
 export default function ChatPage() {
   const router = useRouter();
+  const [showSummary, setShowSummary] = useState(false);
   const {
     messages,
     isAgentTyping,
     isLoading,
+    dailySummary,
     loadHistory,
     sendUserMessage,
   } = useChatStore();
@@ -35,8 +38,7 @@ export default function ChatPage() {
   }, [router]);
 
   const handleSettings = useCallback(() => {
-    // TODO: Open settings modal or navigate to settings page
-    console.log('Settings clicked');
+    setShowSummary((prev) => !prev);
   }, []);
 
   if (isLoading) {
@@ -58,10 +60,16 @@ export default function ChatPage() {
     <div className="flex flex-col h-screen bg-white dark:bg-gray-900">
       <ChatHeader
         title="NOVA"
-        subtitle="Your Health Coach"
+        subtitle="Coach de Déficit Calórico"
         onBack={handleBack}
         onSettings={handleSettings}
       />
+
+      {showSummary && dailySummary && (
+        <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
+          <DailySummaryCard summary={dailySummary} compact />
+        </div>
+      )}
 
       <ChatContainer
         messages={messages}
@@ -71,7 +79,7 @@ export default function ChatPage() {
 
       <MessageInput
         onSend={handleSend}
-        placeholder="Share your meals, workouts, or how you feel..."
+        placeholder="Describe tu comida o actividad..."
       />
     </div>
   );
