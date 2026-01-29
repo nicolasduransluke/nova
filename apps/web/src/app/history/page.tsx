@@ -107,10 +107,12 @@ function DayCard({ day }: { day: HistoryDay }) {
           <span className="text-orange-300 flex items-center gap-1">
             {summary.burn} kcal
             {summary.burnSource === 'whoop' && (
-              <svg className="w-3 h-3 text-orange-400" viewBox="0 0 24 24" fill="currentColor" title="Whoop">
-                <circle cx="12" cy="12" r="10" />
-                <text x="12" y="16" textAnchor="middle" fill="white" fontSize="10" fontWeight="bold">W</text>
-              </svg>
+              <span title="Whoop">
+                <svg className="w-3 h-3 text-orange-400" viewBox="0 0 24 24" fill="currentColor">
+                  <circle cx="12" cy="12" r="10" />
+                  <text x="12" y="16" textAnchor="middle" fill="white" fontSize="10" fontWeight="bold">W</text>
+                </svg>
+              </span>
             )}
           </span>
           <span className={`font-semibold ${summary.deficit >= 0 ? 'text-indigo-300' : 'text-red-300'}`}>
