@@ -16,6 +16,10 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '../../auth/decorators/current-user.decorator';
 
 interface UpdateProfileDto {
+  weight?: number;
+  height?: number;
+  age?: number;
+  sex?: 'male' | 'female';
   goalWeight?: number;
   weeklyGoal?: number;
   targetWeeks?: number;
@@ -83,6 +87,10 @@ export class ProfileController {
     }
 
     const updateData: Record<string, unknown> = {};
+    if (dto.weight !== undefined) updateData.weight = dto.weight;
+    if (dto.height !== undefined) updateData.height = dto.height;
+    if (dto.age !== undefined) updateData.age = dto.age;
+    if (dto.sex !== undefined) updateData.sex = dto.sex;
     if (dto.goalWeight !== undefined) updateData.goalWeight = dto.goalWeight;
     if (dto.weeklyGoal !== undefined) updateData.weeklyGoal = dto.weeklyGoal;
     if (dto.targetWeeks !== undefined) updateData.targetWeeks = dto.targetWeeks;

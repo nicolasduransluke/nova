@@ -14,6 +14,8 @@ import { MessageProcessorModule } from './message-processor/message-processor.mo
 import { HistoryModule } from './history/history.module';
 import { AuthModule } from './auth/auth.module';
 import { MailModule } from './mail/mail.module';
+import { NutritionModule } from './nutrition/nutrition.module';
+import { WhoopModule } from './whoop/whoop.module';
 
 @Module({
   imports: [
@@ -24,6 +26,8 @@ import { MailModule } from './mail/mail.module';
     DatabaseModule,
     AuthModule,
     MailModule,
+    NutritionModule,
+    WhoopModule,
     ClaudeClientModule,
     AgentsModule,
     MessageProcessorModule,

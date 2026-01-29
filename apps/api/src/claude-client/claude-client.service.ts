@@ -7,6 +7,7 @@ import type {
   CalorieEntryItem,
 } from '@nova/types';
 import { retry } from '@nova/utils';
+import { NutritionService } from '../nutrition/nutrition.service';
 
 export interface ClaudeMessage {
   role: 'user' | 'assistant';
@@ -33,6 +34,8 @@ export class ClaudeClientService implements OnModuleInit {
   private readonly model = 'gemini-2.0-flash';
   private readonly maxRetries = 3;
   private readonly baseDelayMs = 1000;
+
+  constructor(private readonly nutritionService: NutritionService) {}
 
   onModuleInit() {
     const apiKey = process.env.GOOGLE_API_KEY;
@@ -118,7 +121,7 @@ export class ClaudeClientService implements OnModuleInit {
     this.logger.debug(`Keyword intent: ${keywordIntent} for "${message}"`);
 
     // For data-logging intents and explicit questions, keywords are reliable — use them directly
-    if (['meal_log', 'activity_log', 'weight_log', 'goal_set', 'confirmation', 'question'].includes(keywordIntent)) {
+    if (['meal_log', 'activity_log', 'weight_log', 'goal_set', 'profile_setup', 'confirmation', 'question'].includes(keywordIntent)) {
       return keywordIntent;
     }
 
@@ -178,14 +181,16 @@ Respond with ONLY the category name, nothing else.`;
 
     const extractionPrompts: Record<string, string> = {
       weight_log: `Extract weight data from this message. Return JSON with: { "weight": number (in kg), "unit": "kg" or "lb" }`,
-      meal_log: `Extract meal data from this message. Return JSON with: { "items": [{"name": "food item", "calories": estimated_calories}], "totalCalories": sum_of_calories }. Estimate calories using Latin American portion sizes. Be conservative (slightly overestimate).`,
+      meal_log: `Extract meal data from this message. Return JSON with: { "items": [{"name": "food item", "quantity": number or null, "unit": "g" or "oz" or "portion" or null}], "totalCalories": null }. Just identify the food items, we will look up calories separately.`,
       activity_log: `Extract activity data from this message. Return JSON with: { "activity": "activity name", "durationMinutes": number, "caloriesBurned": estimated_calories_burned }`,
       goal_set: `Extract weight goal data from this message. Return JSON with: { "goalWeight": number or null (target weight in kg), "weeklyGoal": number or null (kg per week to lose), "targetWeeks": number or null (weeks to reach goal) }. If the user mentions pounds, convert to kg.`,
+      profile_setup: `Extract profile data from this message. Return JSON with: { "weight": number or null (kg), "height": number or null (cm), "age": number or null, "sex": "male" or "female" or null, "goalWeight": number or null (kg) }. Convert meters to cm for height. Convert pounds to kg for weight.`,
     };
 
     const extractionPrompt = extractionPrompts[intent];
     if (!extractionPrompt) {
-      return {};
+      // Fallback to mock extraction for intents not covered by API
+      return this.getMockExtractedData(message, intent);
     }
 
     const prompt = `${extractionPrompt}
@@ -202,14 +207,148 @@ Respond with ONLY valid JSON, nothing else.`;
       });
 
       const cleaned = response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      const parsed = JSON.parse(cleaned);
+      let parsed = JSON.parse(cleaned);
       this.logger.debug(`Extracted data via API: ${JSON.stringify(parsed)}`);
+
+      // For meal_log, enrich with USDA nutrition data
+      if (intent === 'meal_log' && parsed.items && Array.isArray(parsed.items)) {
+        parsed = await this.enrichMealWithUSDA(parsed, message);
+      }
+
       return parsed;
     } catch (error) {
       this.logger.error(`Data extraction via API failed: ${error}`);
       // Fallback to mock extractor
       this.logger.debug(`Falling back to keyword-based data extraction`);
       return this.getMockExtractedData(message, intent);
+    }
+  }
+
+  /**
+   * Enrich meal data with USDA nutrition information
+   */
+  private async enrichMealWithUSDA(
+    mealData: { items: Array<{ name: string; quantity?: number; unit?: string; calories?: number }>; totalCalories?: number },
+    originalMessage: string,
+  ): Promise<Record<string, unknown>> {
+    if (!this.nutritionService.isAvailable()) {
+      // USDA not configured, fall back to Gemini estimation
+      return this.estimateMealCaloriesWithGemini(mealData, originalMessage);
+    }
+
+    const enrichedItems: CalorieEntryItem[] = [];
+    let totalCalories = 0;
+    let usedUSDA = false;
+
+    for (const item of mealData.items) {
+      const usdaResult = await this.nutritionService.estimateCalories(
+        item.name,
+        item.quantity,
+        item.unit,
+      );
+
+      if (usdaResult && usdaResult.source === 'usda') {
+        // USDA found a match
+        usedUSDA = true;
+        const calories = usdaResult.calories;
+        enrichedItems.push({
+          name: `${item.name} (USDA: ${usdaResult.match?.description})`,
+          calories,
+        });
+        totalCalories += calories;
+        this.logger.debug(`USDA match for "${item.name}": ${calories} kcal`);
+      } else {
+        // No USDA match, will estimate later
+        enrichedItems.push({
+          name: item.name,
+          calories: item.calories || 0,
+        });
+      }
+    }
+
+    // If we didn't get USDA data for all items, use Gemini for the remaining
+    if (!usedUSDA || enrichedItems.some(i => i.calories === 0)) {
+      return this.estimateMealCaloriesWithGemini(
+        { items: enrichedItems, totalCalories },
+        originalMessage,
+      );
+    }
+
+    return {
+      items: enrichedItems,
+      totalCalories,
+      source: 'usda',
+    };
+  }
+
+  /**
+   * Fall back to Gemini for calorie estimation when USDA doesn't have data
+   */
+  private async estimateMealCaloriesWithGemini(
+    mealData: { items: Array<{ name: string; calories?: number }>; totalCalories?: number },
+    originalMessage: string,
+  ): Promise<Record<string, unknown>> {
+    const itemsNeedingEstimate = mealData.items.filter(i => !i.calories || i.calories === 0);
+
+    if (itemsNeedingEstimate.length === 0) {
+      return mealData;
+    }
+
+    const prompt = `Estimate calories for these food items using Latin American portion sizes. Be conservative (slightly overestimate).
+
+Items: ${itemsNeedingEstimate.map(i => i.name).join(', ')}
+Original message for context: "${originalMessage}"
+
+Return ONLY valid JSON:
+{
+  "items": [{"name": "item name", "calories": estimated_calories}],
+  "totalCalories": sum_of_all_calories
+}`;
+
+    try {
+      const response = await this.generateResponse(prompt, {
+        systemPrompt: 'You are a nutrition expert. Respond with only valid JSON.',
+        maxTokens: 300,
+        temperature: 0,
+      });
+
+      const cleaned = response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      const estimated = JSON.parse(cleaned);
+
+      // Merge estimated calories with existing items
+      const finalItems = mealData.items.map(item => {
+        if (item.calories && item.calories > 0) {
+          return item;
+        }
+        const estimated_item = estimated.items?.find(
+          (e: { name: string; calories: number }) =>
+            e.name.toLowerCase().includes(item.name.toLowerCase()) ||
+            item.name.toLowerCase().includes(e.name.toLowerCase())
+        );
+        return {
+          name: item.name,
+          calories: estimated_item?.calories || 200, // Default fallback
+        };
+      });
+
+      const total = finalItems.reduce((sum, i) => sum + (i.calories || 0), 0);
+
+      return {
+        items: finalItems,
+        totalCalories: total,
+        source: 'gemini',
+      };
+    } catch (error) {
+      this.logger.error(`Gemini calorie estimation failed: ${error}`);
+      // Last resort: return with default estimates
+      return {
+        items: mealData.items.map(i => ({
+          name: i.name,
+          calories: i.calories || 200,
+        })),
+        totalCalories: mealData.items.reduce((sum, i) => sum + (i.calories || 200), 0),
+        source: 'fallback',
+      };
     }
   }
 
@@ -438,6 +577,17 @@ Determine the user's intention. Return ONLY valid JSON:
     if (questionPatterns.some((p) => lower.includes(p)))
       return 'question';
 
+    // Profile setup - user providing multiple profile fields (height, weight, age, sex)
+    // Check if message contains at least 3 of: height (cm/mido), weight (kg/peso), age (años), sex (hombre/mujer)
+    const hasHeight = /\d+\s*(cm|centimetros?)|mido\s*\d+/i.test(message);
+    const hasWeight = /\d+\s*(kg|kilos?)|peso\s*\d+/i.test(message);
+    const hasAge = /\d+\s*años?|tengo\s*\d+/i.test(message);
+    const hasSex = /(soy\s*)?(hombre|mujer|masculino|femenino|male|female)/i.test(message);
+    const profileFieldCount = [hasHeight, hasWeight, hasAge, hasSex].filter(Boolean).length;
+    if (profileFieldCount >= 3) {
+      return 'profile_setup';
+    }
+
     // Goal setting (check before weight_log since both may contain "kg")
     const goalPatterns = ['mi meta', 'my goal', 'quiero llegar', 'quiero pesar', 'goal weight',
       'target weight', 'quiero perder', 'want to lose', 'por semana', 'per week',
@@ -449,6 +599,15 @@ Determine the user's intention. Return ONLY valid JSON:
     if (lower.includes('kg') || lower.includes('lb') || lower.includes('weigh') ||
         lower.includes('peso') || lower.includes('kilos'))
       return 'weight_log';
+
+    // Activity logging (check BEFORE meal_log to avoid "camine despues de almuerzo" being classified as meal)
+    if (lower.includes('workout') || lower.includes('exercise') || lower.includes('gym') ||
+        lower.includes('run') || lower.includes('running') ||
+        lower.includes('entrené') || lower.includes('entrene') || lower.includes('ejercicio') ||
+        lower.includes('correr') || lower.includes('corrí') || lower.includes('gimnasio') ||
+        lower.includes('pesas') || lower.includes('cardio') || lower.includes('nadar') ||
+        lower.includes('bici') || lower.includes('caminé') || lower.includes('camine'))
+      return 'activity_log';
 
     // Meal logging
     const mealVerbs = [
@@ -474,15 +633,6 @@ Determine the user's intention. Return ONLY valid JSON:
     ];
     if (mealVerbs.some((w) => lower.includes(w)) || foodItems.some((w) => lower.includes(w)))
       return 'meal_log';
-
-    // Activity logging
-    if (lower.includes('workout') || lower.includes('exercise') || lower.includes('gym') ||
-        lower.includes('run') || lower.includes('running') ||
-        lower.includes('entrené') || lower.includes('entrene') || lower.includes('ejercicio') ||
-        lower.includes('correr') || lower.includes('corrí') || lower.includes('gimnasio') ||
-        lower.includes('pesas') || lower.includes('cardio') || lower.includes('nadar') ||
-        lower.includes('bici') || lower.includes('caminé') || lower.includes('camine'))
-      return 'activity_log';
 
     // Questions
     if (lower.includes('?') || lower.includes('cómo voy') || lower.includes('como voy') ||
@@ -640,6 +790,52 @@ Determine the user's intention. Return ONLY valid JSON:
         }
 
         return { goalWeight, weeklyGoal, targetWeeks };
+      }
+
+      case 'profile_setup': {
+        let weight: number | null = null;
+        let height: number | null = null;
+        let age: number | null = null;
+        let sex: 'male' | 'female' | null = null;
+        let goalWeight: number | null = null;
+
+        // Extract weight: "peso 85 kg", "85 kg", "85 kilos"
+        const weightMatch = message.match(/(?:peso\s*)?(\d+\.?\d*)\s*(kg|kilos?)/i);
+        if (weightMatch) {
+          weight = parseFloat(weightMatch[1]);
+        }
+
+        // Extract height: "mido 175 cm", "175 cm", "1.75 m"
+        const heightMatch = message.match(/(?:mido\s*)?(\d+\.?\d*)\s*(cm|centimetros?|m(?:etros?)?)/i);
+        if (heightMatch) {
+          let h = parseFloat(heightMatch[1]);
+          const unit = heightMatch[2].toLowerCase();
+          if (unit === 'm' || unit === 'metros' || unit === 'metro') {
+            h = h * 100; // Convert meters to cm
+          }
+          height = Math.round(h);
+        }
+
+        // Extract age: "tengo 32 años", "32 años"
+        const ageMatch = message.match(/(?:tengo\s*)?(\d+)\s*años?/i);
+        if (ageMatch) {
+          age = parseInt(ageMatch[1], 10);
+        }
+
+        // Extract sex: "soy hombre", "mujer", "masculino", "femenino"
+        const sexMatch = message.match(/(?:soy\s*)?(hombre|mujer|masculino|femenino|male|female)/i);
+        if (sexMatch) {
+          const s = sexMatch[1].toLowerCase();
+          sex = (s === 'hombre' || s === 'masculino' || s === 'male') ? 'male' : 'female';
+        }
+
+        // Extract goal weight: "quiero llegar a 75 kg", "meta 75", "llegar a 75"
+        const goalMatch = message.match(/(?:quiero\s+)?(?:llegar\s+a|pesar|meta)\s*(\d+\.?\d*)\s*(kg|kilos?)?/i);
+        if (goalMatch) {
+          goalWeight = parseFloat(goalMatch[1]);
+        }
+
+        return { weight, height, age, sex, goalWeight };
       }
 
       default:

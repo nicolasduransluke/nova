@@ -59,12 +59,13 @@ export default function ChatPage() {
   }, []);
 
   const handleProfile = useCallback(() => {
-    if (!profile && userId) {
+    // Always reload profile to get latest data (might have been updated via chat)
+    if (userId) {
       loadProfile(userId);
       loadWeightLogs(userId);
     }
     setShowProfile(true);
-  }, [profile, userId, loadProfile, loadWeightLogs]);
+  }, [userId, loadProfile, loadWeightLogs]);
 
   const handleCloseProfile = useCallback(() => {
     setShowProfile(false);

@@ -18,6 +18,7 @@ import { ClaudeClientService } from '../claude-client/claude-client.service';
 import { IntegratorAgentService, IntegratorInput, LastWeightLogInfo } from './integrator-agent.service';
 import { AgentRegistryService } from './agent-registry.service';
 import { MetabolicAgentService } from './metabolic-agent.service';
+import { WhoopService } from '../whoop/whoop.service';
 import { AgentInput } from './base-agent.abstract';
 
 export interface OrchestratorDependencies {
@@ -38,7 +39,16 @@ export interface OrchestratorDependencies {
   getTodayCalorieEntries: (userId: string) => Promise<CalorieEntry[]>;
   createWeightLog: (data: { userId: string; weight: number; date: Date }) => Promise<WeightLog>;
   getRecentWeightLogs: (userId: string, limit: number) => Promise<WeightLog[]>;
-  updateProfile: (userId: string, data: { goalWeight?: number; weeklyGoal?: number; targetWeeks?: number }) => Promise<Profile>;
+  updateProfile: (userId: string, data: {
+    weight?: number;
+    height?: number;
+    age?: number;
+    sex?: 'male' | 'female';
+    goalWeight?: number;
+    weeklyGoal?: number;
+    targetWeeks?: number;
+  }) => Promise<Profile>;
+  getUserMetadata: (userId: string) => Promise<string | null>;
 }
 
 @Injectable()
@@ -50,6 +60,7 @@ export class OrchestratorService {
     private readonly agentRegistry: AgentRegistryService,
     private readonly integratorAgent: IntegratorAgentService,
     private readonly metabolicAgent: MetabolicAgentService,
+    private readonly whoopService: WhoopService,
   ) {}
 
   async processMessage(
@@ -63,25 +74,30 @@ export class OrchestratorService {
       // Step 1: Build context
       const context = await this.buildContext(request.userId, deps);
 
-      // Step 1b: Fetch last weight log for weight prompting
-      const recentWeightLogs = await deps.getRecentWeightLogs(request.userId, 1);
+      // Step 1b: Fetch weight logs for weight prompting and progress tracking
+      const allWeightLogs = await deps.getRecentWeightLogs(request.userId, 100);
       let lastWeightLog: LastWeightLogInfo | undefined;
+      let firstWeightLog: number | undefined;
       let needsWeightPrompt = false;
 
-      if (recentWeightLogs.length > 0) {
-        const log = recentWeightLogs[0];
+      if (allWeightLogs.length > 0) {
+        // Most recent log (first in DESC order)
+        const log = allWeightLogs[0];
         const daysSince = Math.floor(
           (Date.now() - new Date(log.date).getTime()) / (1000 * 60 * 60 * 24),
         );
         lastWeightLog = { weight: log.weight, date: log.date, daysSince };
         needsWeightPrompt = daysSince > 7;
+
+        // First/oldest log (last in DESC order) - used as starting weight for progress calculation
+        firstWeightLog = allWeightLogs[allWeightLogs.length - 1].weight;
       } else {
         needsWeightPrompt = true;
       }
 
       // Step 2: Classify intent
       const intent = await this.classifyMessage(request.content);
-      this.logger.debug(`Classified intent: ${intent}`);
+      this.logger.log(`Classified intent: ${intent} for message: "${request.content}"`);
 
       // Step 5: Extract data from message
       const extractedData = await this.claudeClient.extractDataFromMessage(
@@ -130,6 +146,15 @@ export class OrchestratorService {
           // Update lastWeightLog so daily summary and integrator use the new weight
           lastWeightLog = { weight: newWeight, date: new Date(), daysSince: 0 };
           needsWeightPrompt = false;
+
+          // For new users or first weight log, also update profile.weight as their starting weight
+          // This prevents incorrect "change from start" calculations using default values
+          const isFirstWeightLog = recentWeightLogs.length === 0;
+          const profileHasDefaultWeight = !context.profile || context.profile.weight === 70;
+          if (isFirstWeightLog || profileHasDefaultWeight) {
+            const updatedProfile = await deps.updateProfile(request.userId, { weight: newWeight });
+            context.profile = updatedProfile;
+          }
         } else {
           this.logger.warn(`Invalid weight value ignored: ${newWeight} kg`);
         }
@@ -188,14 +213,103 @@ export class OrchestratorService {
         }
       }
 
+      // Step 8c: Handle profile_setup (new user providing their info via chat)
+      console.log('=== CHECKING PROFILE_SETUP ===');
+      console.log('Intent:', intent);
+      console.log('Is profile_setup?', intent === 'profile_setup');
+      if (intent === 'profile_setup') {
+        console.log('=== PROFILE_SETUP HANDLER ENTERED ===');
+        this.logger.log(`PROFILE_SETUP intent detected. Extracted data: ${JSON.stringify(extractedData)}`);
+        const weight = extractedData.weight as number | null;
+        const height = extractedData.height as number | null;
+        const age = extractedData.age as number | null;
+        const sex = extractedData.sex as 'male' | 'female' | null;
+        const goalWeight = extractedData.goalWeight as number | null;
+        this.logger.log(`Parsed values - height: ${height}, age: ${age}, sex: ${sex}`);
+
+        const profileData: {
+          weight?: number;
+          height?: number;
+          age?: number;
+          sex?: 'male' | 'female';
+          goalWeight?: number;
+        } = {};
+
+        // Validate and add each field
+        if (weight != null && weight >= 30 && weight <= 300) {
+          profileData.weight = weight;
+          // Also create a weight log for this initial weight
+          await deps.createWeightLog({
+            userId: request.userId,
+            weight,
+            date: new Date(),
+          });
+          lastWeightLog = { weight, date: new Date(), daysSince: 0 };
+          needsWeightPrompt = false;
+        }
+        if (height != null && height >= 100 && height <= 250) {
+          profileData.height = height;
+        }
+        if (age != null && age >= 10 && age <= 120) {
+          profileData.age = age;
+        }
+        if (sex != null) {
+          profileData.sex = sex;
+        }
+        if (goalWeight != null && goalWeight >= 30 && goalWeight <= 300) {
+          profileData.goalWeight = goalWeight;
+        }
+
+        if (Object.keys(profileData).length > 0) {
+          this.logger.debug(`Creating/updating profile for new user: ${JSON.stringify(profileData)}`);
+          const updatedProfile = await deps.updateProfile(request.userId, profileData);
+          context.profile = updatedProfile;
+        }
+      }
+
       // Step 9: Get today's calorie entries for daily summary
       const todayEntries = await deps.getTodayCalorieEntries(request.userId);
       const todayIntake = todayEntries
         .filter((e) => e.type === 'intake')
         .reduce((sum, e) => sum + e.calories, 0);
-      const todayBurn = todayEntries
+
+      // Check if user has Whoop connected and get calories from there
+      let todayBurn = todayEntries
         .filter((e) => e.type === 'burn')
         .reduce((sum, e) => sum + e.calories, 0);
+      let burnSource: 'manual' | 'whoop' = 'manual';
+
+      // Try to get Whoop data if connected
+      try {
+        const userMetadata = await deps.getUserMetadata(request.userId);
+        if (userMetadata) {
+          const metadata = JSON.parse(userMetadata);
+          if (metadata.whoop?.accessToken) {
+            let accessToken = metadata.whoop.accessToken;
+
+            // Refresh token if expired
+            if (metadata.whoop.expiresAt && Date.now() > metadata.whoop.expiresAt) {
+              try {
+                const newTokens = await this.whoopService.refreshTokens(metadata.whoop.refreshToken);
+                accessToken = newTokens.access_token;
+                this.logger.debug('Whoop token refreshed successfully');
+              } catch {
+                this.logger.warn('Failed to refresh Whoop token');
+              }
+            }
+
+            // Get Whoop daily summary
+            const whoopSummary = await this.whoopService.getDailySummary(accessToken);
+            if (whoopSummary.caloriesBurned > 0) {
+              todayBurn = whoopSummary.caloriesBurned;
+              burnSource = 'whoop';
+              this.logger.debug(`Using Whoop calories: ${todayBurn}`);
+            }
+          }
+        }
+      } catch (error) {
+        this.logger.debug(`Whoop data not available: ${error}`);
+      }
 
       const dailySummary = this.metabolicAgent.calculateDailySummary(
         context.profile,
@@ -203,11 +317,17 @@ export class OrchestratorService {
         todayBurn,
         lastWeightLog?.weight,
         context.profile?.goalWeight,
+        firstWeightLog,
+        burnSource,
       );
 
       // Step 10: Integrate responses
       // Profile is incomplete if user hasn't set a goalWeight
       const isProfileIncomplete = !context.profile?.goalWeight;
+      // New user has no profile at all
+      const isNewUser = !context.profile;
+      // Profile has default values if height=170, age=30 (the defaults from upsert)
+      const hasDefaultProfileData = context.profile?.height === 170 && context.profile?.age === 30;
 
       const integratorInput: IntegratorInput = {
         context,
@@ -219,6 +339,8 @@ export class OrchestratorService {
         lastWeightLog,
         needsWeightPrompt,
         isProfileIncomplete,
+        isNewUser,
+        hasDefaultProfileData,
       };
 
       const response = await this.integratorAgent.integrate(integratorInput);

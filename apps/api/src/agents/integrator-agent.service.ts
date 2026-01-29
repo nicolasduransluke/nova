@@ -24,6 +24,8 @@ export interface IntegratorInput extends AgentInput {
   lastWeightLog?: LastWeightLogInfo;
   needsWeightPrompt: boolean;
   isProfileIncomplete?: boolean;
+  isNewUser?: boolean;
+  hasDefaultProfileData?: boolean; // true if height=170, age=30 (default values)
 }
 
 @Injectable()
@@ -285,6 +287,15 @@ DO NOT say you couldn't detect data. The data IS in the agent analysis above. US
         if (context.profile?.targetWeeks) {
           goalTask += ` The user set a target of ${context.profile.targetWeeks} weeks.`;
         }
+        // If user has set their pace but profile still has default values, ask for basic data
+        if (input.hasDefaultProfileData) {
+          goalTask += `
+
+IMPORTANT: The user's profile is missing basic data (height, age, sex are still default values).
+After acknowledging their goal, ask them to complete their profile so you can give accurate recommendations.
+Ask for: height (cm), age (years), and sex (male/female).
+Example: "Para darte recomendaciones más precisas, ¿podrías compartirme tu altura, edad y sexo? Por ejemplo: 'mido 175 cm, tengo 32 años, soy hombre'"`;
+        }
       } else if (!hasExplicitPace && dailySummary?.goalWeight != null) {
         // User set goalWeight but not pace - ask them about their preferred pace
         goalTask += ` The user set their goal weight but did NOT specify a timeline or pace.
@@ -312,6 +323,16 @@ Keep it brief and encouraging.`;
         weightTask += ` Show trend if available. Keep it brief.`;
       }
       prompt += weightTask;
+    } else if (intent === 'profile_setup') {
+      prompt += `The user just provided their profile information. A profile has been created/updated with their data.
+
+Your response MUST:
+1. Thank them and confirm you've saved their information
+2. Summarize what you recorded (weight, height, age, sex, goal weight - only mention what was provided)
+3. Briefly explain how you'll help them (track food and activity to maintain deficit)
+4. Encourage them to start by logging their first meal or activity
+
+Keep it warm, welcoming, and brief (max 6 lines). This is their first interaction after setup.`;
     } else if (intent === 'question') {
       const remainingToEat = dailySummary ? (dailySummary.tdee + dailySummary.burn - dailySummary.targetDeficit - dailySummary.intake) : null;
       const isFoodQuestion = message.toLowerCase().match(/almorzar|cenar|desayunar|comer|snack|merienda|lunch|dinner|breakfast|eat|porción|porcion/);
@@ -347,7 +368,35 @@ Be a helpful coach - give concrete, actionable suggestions, not just numbers.`;
     } else {
       // greeting or general
       let generalTask = `Respond naturally.`;
-      if (needsWeightPrompt && !lastWeightLog) {
+
+      // New user onboarding - ask for basic profile info
+      if (input.isNewUser) {
+        generalTask = `This is a NEW USER who doesn't have a profile yet. You need to collect their basic information to personalize their experience.
+
+Your response MUST:
+1. Greet them warmly and introduce yourself as NOVA, their calorie deficit coach
+2. Explain you need some basic info to give personalized recommendations
+3. Ask them to provide IN A SINGLE MESSAGE:
+   - Their current weight (in kg)
+   - Their height (in cm)
+   - Their age
+   - Their sex (male/female)
+   - Their weight goal (target weight in kg)
+
+Example response:
+"¡Hola! Soy NOVA, tu coach de déficit calórico. Para darte recomendaciones personalizadas, necesito conocerte un poco mejor.
+
+Por favor, compárteme en un solo mensaje:
+- Tu peso actual (ej: 85 kg)
+- Tu altura (ej: 175 cm)
+- Tu edad (ej: 32 años)
+- Tu sexo (hombre/mujer)
+- Tu meta de peso (ej: quiero llegar a 75 kg)
+
+Ejemplo: 'Peso 85 kg, mido 175 cm, tengo 32 años, soy hombre y quiero llegar a 75 kg'"
+
+Keep it friendly and encouraging. Use Spanish.`;
+      } else if (needsWeightPrompt && !lastWeightLog) {
         generalTask += ` The user has never logged their weight. Ask them to share their current weight so you can track their progress.`;
       } else if (needsWeightPrompt && lastWeightLog) {
         generalTask += ` The user hasn't logged their weight in ${lastWeightLog.daysSince} days. Suggest they weigh in today.`;

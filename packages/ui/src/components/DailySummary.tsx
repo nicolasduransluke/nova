@@ -7,8 +7,9 @@ export interface DailySummaryCardProps {
 }
 
 export function DailySummaryCard({ summary, compact = false }: DailySummaryCardProps) {
-  const { intake, burn, tdee, deficit, targetDeficit, goalWeight, currentWeight, weightProgress } = summary;
-  const totalBurn = tdee + burn;
+  const { intake, burn, burnSource, tdee, deficit, targetDeficit, goalWeight, currentWeight, weightProgress } = summary;
+  // If burn comes from Whoop, it already includes TDEE
+  const totalBurn = burnSource === 'whoop' ? burn : tdee + burn;
   const progress = totalBurn > 0 ? Math.min((intake / totalBurn) * 100, 100) : 0;
   const isOnTrack = deficit >= targetDeficit * 0.8;
   const tomorrowWeight = currentWeight != null ? currentWeight - (deficit / 7700) : null;
@@ -71,7 +72,17 @@ export function DailySummaryCard({ summary, compact = false }: DailySummaryCardP
         </div>
         <div className="bg-white/5 rounded-lg p-3">
           <p className="text-2xl font-bold text-green-400">{burn}</p>
-          <p className="text-xs text-indigo-300">Ejercicio</p>
+          <p className="text-xs text-indigo-300 flex items-center justify-center gap-1">
+            Quemadas
+            {burnSource === 'whoop' && (
+              <span className="inline-flex items-center" title="Datos de Whoop">
+                <svg className="w-3 h-3 text-green-400" viewBox="0 0 24 24" fill="currentColor">
+                  <circle cx="12" cy="12" r="10" />
+                  <text x="12" y="16" textAnchor="middle" fill="white" fontSize="10" fontWeight="bold">W</text>
+                </svg>
+              </span>
+            )}
+          </p>
         </div>
       </div>
 

@@ -215,6 +215,7 @@ export interface DailySummary {
   date: Date;
   intake: number;
   burn: number;
+  burnSource?: 'manual' | 'whoop'; // source of burn calories
   tdee: number;
   deficit: number;
   targetDeficit: number;
@@ -256,8 +257,10 @@ export type MessageType =
   | 'text'
   | 'image'
   | 'weight'
+  | 'sleep'
   | 'meal'
-  | 'workout';
+  | 'workout'
+  | 'energy';
 
 export type MessageSender = 'user' | 'agent';
 
@@ -293,6 +296,7 @@ export type MessageIntent =
   | 'activity_log'
   | 'weight_log'
   | 'goal_set'
+  | 'profile_setup'
   | 'confirmation'
   | 'question'
   | 'greeting'

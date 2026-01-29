@@ -104,7 +104,15 @@ function DayCard({ day }: { day: HistoryDay }) {
         <span className="text-white font-medium">{formatDate(day.date)}</span>
         <div className="flex items-center gap-4 text-sm">
           <span className="text-green-300">{summary.intake} kcal</span>
-          <span className="text-orange-300">{summary.burn} kcal</span>
+          <span className="text-orange-300 flex items-center gap-1">
+            {summary.burn} kcal
+            {summary.burnSource === 'whoop' && (
+              <svg className="w-3 h-3 text-orange-400" viewBox="0 0 24 24" fill="currentColor" title="Whoop">
+                <circle cx="12" cy="12" r="10" />
+                <text x="12" y="16" textAnchor="middle" fill="white" fontSize="10" fontWeight="bold">W</text>
+              </svg>
+            )}
+          </span>
           <span className={`font-semibold ${summary.deficit >= 0 ? 'text-indigo-300' : 'text-red-300'}`}>
             {summary.deficit >= 0 ? '+' : ''}{summary.deficit} déficit
           </span>

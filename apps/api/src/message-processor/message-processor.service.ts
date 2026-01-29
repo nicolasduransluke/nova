@@ -207,20 +207,30 @@ export class MessageProcessorService {
         };
       },
 
-      updateProfile: async (userId: string, data: { goalWeight?: number; weeklyGoal?: number; targetWeeks?: number }): Promise<Profile> => {
+      updateProfile: async (userId: string, data: {
+        weight?: number;
+        height?: number;
+        age?: number;
+        sex?: 'male' | 'female';
+        goalWeight?: number;
+        weeklyGoal?: number;
+        targetWeeks?: number;
+      }): Promise<Profile> => {
         const updated = await this.prisma.profile.upsert({
           where: { userId },
           update: data,
           create: {
             id: generateId(),
             userId,
-            weight: 70,
-            height: 170,
-            age: 30,
-            sex: 'male',
+            weight: data.weight ?? 70,
+            height: data.height ?? 170,
+            age: data.age ?? 30,
+            sex: data.sex ?? 'male',
             objective: 'weight_loss',
             activityLevel: 'moderate',
-            ...data,
+            goalWeight: data.goalWeight,
+            weeklyGoal: data.weeklyGoal,
+            targetWeeks: data.targetWeeks,
           },
         });
 
@@ -255,6 +265,14 @@ export class MessageProcessorService {
           date: log.date,
           createdAt: log.createdAt,
         }));
+      },
+
+      getUserMetadata: async (userId: string): Promise<string | null> => {
+        const user = await this.prisma.user.findUnique({
+          where: { id: userId },
+          select: { metadata: true },
+        });
+        return user?.metadata ?? null;
       },
     };
   }

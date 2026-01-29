@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import type { AgentOutput, DailyEntry, DailySummary, Profile, WeightProgress } from '@nova/types';
 import { BaseAgent, AgentInput } from './base-agent.abstract';
 import { ClaudeClientService } from '../claude-client/claude-client.service';
@@ -11,6 +11,8 @@ interface WeightTrend {
 
 @Injectable()
 export class MetabolicAgentService extends BaseAgent {
+  private readonly logger = new Logger(MetabolicAgentService.name);
+
   constructor(claudeClient: ClaudeClientService) {
     super('metabolic', claudeClient);
   }
@@ -142,10 +144,15 @@ Keep responses brief, data-focused, and in the user's language.`;
     todayBurn: number,
     lastWeight?: number,
     goalWeight?: number,
+    firstWeightLog?: number,
+    burnSource?: 'manual' | 'whoop',
   ): DailySummary {
     const tdee = this.calculateTDEE(profile);
-    const totalBurn = tdee + todayBurn;
+    // If burn comes from Whoop, it already includes TDEE, so don't add it again
+    const totalBurn = burnSource === 'whoop' ? todayBurn : tdee + todayBurn;
     const deficit = totalBurn - todayIntake;
+
+    this.logger.debug(`DailySummary calc: burnSource=${burnSource}, burn=${todayBurn}, tdee=${tdee}, totalBurn=${totalBurn}, intake=${todayIntake}, deficit=${deficit}`);
     // Derive targetDeficit from user's weeklyGoal: kg/week * 7700 kcal/kg / 7 days
     const weeklyGoal = profile?.weeklyGoal ?? 0.5;
     const targetDeficit = Math.round((weeklyGoal * 7700) / 7);
@@ -154,7 +161,9 @@ Keep responses brief, data-focused, and in the user's language.`;
     const effectiveGoalWeight = goalWeight ?? profile?.goalWeight;
     let weightProgress: WeightProgress | undefined;
     if (lastWeight != null && effectiveGoalWeight != null) {
-      const startingWeight = profile?.weight;
+      // Use first weight log as starting weight if available, fallback to profile.weight
+      // This prevents showing incorrect "change from start" when profile has default weight (70 kg)
+      const startingWeight = firstWeightLog ?? profile?.weight;
       const remaining = Number((lastWeight - effectiveGoalWeight).toFixed(1));
       let estimatedWeeks: number | undefined;
       if (remaining > 0 && weeklyGoal > 0) {
@@ -175,6 +184,7 @@ Keep responses brief, data-focused, and in the user's language.`;
       date: new Date(),
       intake: todayIntake,
       burn: todayBurn,
+      burnSource,
       tdee: Math.round(tdee),
       deficit: Math.round(deficit),
       targetDeficit,

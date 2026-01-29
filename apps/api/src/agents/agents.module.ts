@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ClaudeClientModule } from '../claude-client/claude-client.module';
+import { WhoopModule } from '../whoop/whoop.module';
 import { OrchestratorService } from './orchestrator.service';
 import { MetabolicAgentService } from './metabolic-agent.service';
 import { IntegratorAgentService } from './integrator-agent.service';
@@ -8,7 +9,7 @@ import { ActivityBurnAgentService } from './activity-burn-agent.service';
 import { AgentRegistryService } from './agent-registry.service';
 
 @Module({
-  imports: [ClaudeClientModule],
+  imports: [ClaudeClientModule, WhoopModule],
   providers: [
     // Specialized Agents
     MetabolicAgentService,

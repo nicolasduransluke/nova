@@ -30,6 +30,10 @@ export function UserProfile({
 }: UserProfileProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
+    weight: profile?.weight ?? 70,
+    height: profile?.height ?? 170,
+    age: profile?.age ?? 30,
+    sex: profile?.sex ?? 'male',
     goalWeight: profile?.goalWeight ?? '',
     weeklyGoal: profile?.weeklyGoal ?? 0.5,
     activityLevel: profile?.activityLevel ?? 'moderate',
@@ -38,6 +42,10 @@ export function UserProfile({
   useEffect(() => {
     if (profile) {
       setFormData({
+        weight: profile.weight,
+        height: profile.height,
+        age: profile.age,
+        sex: profile.sex,
         goalWeight: profile.goalWeight ?? '',
         weeklyGoal: profile.weeklyGoal ?? 0.5,
         activityLevel: profile.activityLevel ?? 'moderate',
@@ -48,6 +56,18 @@ export function UserProfile({
   const handleSave = async () => {
     const updates: Partial<Profile> = {};
 
+    if (formData.weight !== profile?.weight) {
+      updates.weight = formData.weight;
+    }
+    if (formData.height !== profile?.height) {
+      updates.height = formData.height;
+    }
+    if (formData.age !== profile?.age) {
+      updates.age = formData.age;
+    }
+    if (formData.sex !== profile?.sex) {
+      updates.sex = formData.sex as Profile['sex'];
+    }
     if (formData.goalWeight !== '' && formData.goalWeight !== profile?.goalWeight) {
       updates.goalWeight = Number(formData.goalWeight);
     }
@@ -235,6 +255,8 @@ export function UserProfile({
                   <option value={0.5}>0.5 kg (recomendado)</option>
                   <option value={0.75}>0.75 kg (moderado)</option>
                   <option value={1.0}>1.0 kg (agresivo)</option>
+                  <option value={1.5}>1.5 kg (muy agresivo)</option>
+                  <option value={2.0}>2.0 kg (máximo)</option>
                 </select>
               ) : (
                 <p className="text-gray-900 dark:text-white font-medium">
@@ -266,26 +288,117 @@ export function UserProfile({
             </div>
           </div>
 
-          {/* Static Info */}
+          {/* Basic Info */}
           <div className="pt-4 border-t border-gray-200 dark:border-gray-700 space-y-3">
             <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
               Datos básicos
             </h3>
-            <div className="grid grid-cols-3 gap-4 text-center">
-              <div>
-                <p className="text-lg font-semibold text-gray-900 dark:text-white">{profile.height} cm</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Altura</p>
+            {isEditing ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Altura (cm)</label>
+                    <input
+                      type="number"
+                      value={formData.height}
+                      onChange={(e) => setFormData({ ...formData, height: Number(e.target.value) })}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                      min="100"
+                      max="250"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Edad</label>
+                    <input
+                      type="number"
+                      value={formData.age}
+                      onChange={(e) => setFormData({ ...formData, age: Number(e.target.value) })}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                      min="10"
+                      max="120"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Peso actual (kg)</label>
+                    <input
+                      type="number"
+                      value={formData.weight}
+                      onChange={(e) => setFormData({ ...formData, weight: Number(e.target.value) })}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                      min="30"
+                      max="300"
+                      step="0.1"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Sexo</label>
+                    <select
+                      value={formData.sex}
+                      onChange={(e) => setFormData({ ...formData, sex: e.target.value as 'male' | 'female' })}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                    >
+                      <option value="male">Masculino</option>
+                      <option value="female">Femenino</option>
+                    </select>
+                  </div>
+                </div>
               </div>
-              <div>
-                <p className="text-lg font-semibold text-gray-900 dark:text-white">{profile.age}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Edad</p>
+            ) : (
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div>
+                  <p className="text-lg font-semibold text-gray-900 dark:text-white">{profile.height} cm</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Altura</p>
+                </div>
+                <div>
+                  <p className="text-lg font-semibold text-gray-900 dark:text-white">{profile.age}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Edad</p>
+                </div>
+                <div>
+                  <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                    {profile.sex === 'male' ? 'M' : profile.sex === 'female' ? 'F' : '—'}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Sexo</p>
+                </div>
               </div>
-              <div>
-                <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                  {profile.sex === 'male' ? 'M' : profile.sex === 'female' ? 'F' : '—'}
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Sexo</p>
+            )}
+          </div>
+
+          {/* Whoop Integration */}
+          <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+              Integraciones
+            </h3>
+            <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-black rounded-full flex items-center justify-center">
+                  <span className="text-white text-xs font-bold">W</span>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">Whoop</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Sincroniza calorías quemadas</p>
+                </div>
               </div>
+              <button
+                onClick={() => {
+                  const whoopClientId = '8e820c10-a75d-4701-867f-72fd8225d967';
+                  // Use localhost for development, production URL for deployed app
+                  const isLocalhost = typeof window !== 'undefined' && window.location.hostname === 'localhost';
+                  const redirectUri = encodeURIComponent(
+                    isLocalhost
+                      ? 'http://localhost:3000/auth/whoop/callback'
+                      : 'https://nova-ebon-seven.vercel.app/auth/whoop/callback'
+                  );
+                  const scopes = encodeURIComponent('read:profile read:cycles read:recovery read:workout read:body_measurement offline');
+                  const state = Math.random().toString(36).substring(2, 10); // 8 chars required
+                  const authUrl = `https://api.prod.whoop.com/oauth/oauth2/auth?client_id=${whoopClientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scopes}&state=${state}`;
+                  window.location.href = authUrl;
+                }}
+                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors"
+              >
+                Conectar
+              </button>
             </div>
           </div>
 
