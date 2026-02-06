@@ -127,16 +127,30 @@ const SPANISH_TO_ENGLISH: Record<string, string> = {
   'hamburguesa': 'hamburger',
   'pizza': 'pizza',
 
-  // Drinks
+  // Drinks (specific variants first - longer phrases matched first due to sort)
+  'café sin azúcar': 'coffee black unsweetened',
+  'cafe sin azucar': 'coffee black unsweetened',
+  'café negro': 'black coffee',
+  'cafe negro': 'black coffee',
+  'café con leche': 'coffee with milk',
+  'cafe con leche': 'coffee with milk',
+  'café con azúcar': 'coffee with sugar',
+  'cafe con azucar': 'coffee with sugar',
   'café': 'coffee',
   'cafe': 'coffee',
+  'té sin azúcar': 'tea unsweetened',
+  'te sin azucar': 'tea unsweetened',
+  'té verde': 'green tea',
+  'te verde': 'green tea',
   'té': 'tea',
   'te': 'tea',
+  'jugo natural': 'fresh juice',
   'jugo': 'juice',
   'agua': 'water',
   'refresco': 'soda',
   'cerveza': 'beer',
   'vino': 'wine',
+  'licuado': 'smoothie',
 
   // Snacks & Sweets
   'galletas': 'cookies',
@@ -151,12 +165,26 @@ const SPANISH_TO_ENGLISH: Record<string, string> = {
   'maní': 'peanuts',
   'mani': 'peanuts',
 
-  // Cooking methods (for context)
+  // Dairy variants
+  'leche descremada': 'skim milk',
+  'leche entera': 'whole milk',
+  'leche deslactosada': 'lactose free milk',
+  'yogurt natural': 'plain yogurt',
+  'yogurt griego': 'greek yogurt',
+
+  // Cooking methods & modifiers
+  'sin azúcar': 'unsweetened',
+  'sin azucar': 'unsweetened',
+  'con azúcar': 'with sugar',
+  'con azucar': 'with sugar',
+  'sin grasa': 'fat free',
+  'integral': 'whole grain',
   'frito': 'fried',
   'asado': 'grilled',
   'hervido': 'boiled',
   'al horno': 'baked',
   'a la plancha': 'grilled',
+  'al vapor': 'steamed',
 };
 
 @Injectable()

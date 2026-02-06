@@ -181,7 +181,7 @@ Respond with ONLY the category name, nothing else.`;
 
     const extractionPrompts: Record<string, string> = {
       weight_log: `Extract weight data from this message. Return JSON with: { "weight": number (in kg), "unit": "kg" or "lb" }`,
-      meal_log: `Extract meal data from this message. Return JSON with: { "items": [{"name": "food item", "quantity": number or null, "unit": "g" or "oz" or "portion" or null}], "totalCalories": null }. Just identify the food items, we will look up calories separately.`,
+      meal_log: `Extract meal data from this message. Return JSON with: { "items": [{"name": "food item with modifiers", "quantity": number or null, "unit": "g" or "oz" or "portion" or null}], "totalCalories": null }. IMPORTANT: Preserve all modifiers and descriptors in the item name (e.g. "café sin azúcar" NOT just "café", "pollo a la plancha" NOT just "pollo", "leche descremada" NOT just "leche"). Just identify the food items, we will look up calories separately.`,
       activity_log: `Extract activity data from this message. Return JSON with: { "activity": "activity name", "durationMinutes": number, "caloriesBurned": estimated_calories_burned }`,
       goal_set: `Extract weight goal data from this message. Return JSON with: { "goalWeight": number or null (target weight in kg), "weeklyGoal": number or null (kg per week to lose), "targetWeeks": number or null (weeks to reach goal) }. If the user mentions pounds, convert to kg.`,
       profile_setup: `Extract profile data from this message. Return JSON with: { "weight": number or null (kg), "height": number or null (cm), "age": number or null, "sex": "male" or "female" or null, "goalWeight": number or null (kg) }. Convert meters to cm for height. Convert pounds to kg for weight.`,
@@ -298,6 +298,8 @@ Respond with ONLY valid JSON, nothing else.`;
 
 Items: ${itemsNeedingEstimate.map(i => i.name).join(', ')}
 Original message for context: "${originalMessage}"
+
+IMPORTANT: Pay close attention to modifiers in the original message like "sin azúcar" (no sugar), "negro" (black), "con leche" (with milk), "descremado" (skim), etc. These significantly affect calorie counts. For example, "café sin azúcar" is ~5 kcal, while "café con azúcar" is ~30-50 kcal.
 
 Return ONLY valid JSON:
 {
