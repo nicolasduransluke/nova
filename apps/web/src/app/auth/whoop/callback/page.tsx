@@ -64,6 +64,7 @@ export default function WhoopCallback() {
         if (response.ok) {
           setStatus('success');
           setMessage('¡Whoop conectado exitosamente! Redirigiendo...');
+          localStorage.removeItem('nova-onboarding-whoop-pending');
           setTimeout(() => {
             window.location.href = '/';
           }, 2000);

@@ -83,6 +83,8 @@ export interface CreateProfileDTO {
   sex: Sex;
   objective: Objective;
   activityLevel?: ActivityLevel;
+  goalWeight?: number;
+  weeklyGoal?: number;
 }
 
 // Daily Entry Domain (legacy)

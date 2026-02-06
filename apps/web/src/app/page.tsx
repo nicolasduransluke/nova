@@ -1,17 +1,58 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Button, Card, UserProfile } from '@nova/ui';
 import { DailySummaryCard } from '@nova/ui';
 import { useChatStore } from '@/store/chat.store';
-import { useProfileStore } from '@/store/profile.store';
+import { useProfileStore, selectIsOnboarded } from '@/store/profile.store';
 import { useAuthStore } from '@/store/auth.store';
 
+function DashboardSkeleton() {
+  return (
+    <main className="min-h-screen bg-gradient-to-br from-nova-dark via-indigo-900 to-purple-900 p-8">
+      <div className="max-w-4xl mx-auto">
+        <header className="text-center mb-12">
+          <div className="h-12 w-32 bg-white/10 rounded-lg mx-auto mb-2 animate-pulse" />
+          <div className="h-5 w-48 bg-white/5 rounded-lg mx-auto animate-pulse" />
+        </header>
+
+        <div className="bg-white/10 backdrop-blur-lg border border-white/20 rounded-xl p-6 mb-8">
+          <div className="h-6 w-40 bg-white/10 rounded mb-4 animate-pulse" />
+          <div className="mb-4">
+            <div className="flex justify-between mb-2">
+              <div className="h-4 w-32 bg-white/5 rounded animate-pulse" />
+              <div className="h-4 w-24 bg-white/5 rounded animate-pulse" />
+            </div>
+            <div className="w-full bg-white/10 rounded-full h-3 animate-pulse" />
+          </div>
+          <div className="grid grid-cols-2 gap-4 text-center mb-4">
+            {[1, 2].map((i) => (
+              <div key={i} className="bg-white/5 rounded-lg p-3">
+                <div className="h-8 w-16 bg-white/10 rounded mx-auto mb-1 animate-pulse" />
+                <div className="h-3 w-20 bg-white/5 rounded mx-auto animate-pulse" />
+              </div>
+            ))}
+          </div>
+          <div className="h-4 w-56 bg-white/5 rounded mx-auto animate-pulse" />
+        </div>
+
+        <div className="text-center space-y-4">
+          <div className="h-14 w-48 bg-white/10 rounded-lg mx-auto animate-pulse" />
+          <div className="h-12 w-36 bg-white/5 rounded-lg mx-auto animate-pulse" />
+        </div>
+      </div>
+    </main>
+  );
+}
+
 export default function Home() {
+  const router = useRouter();
   const { dailySummary } = useChatStore();
   const { user, logout } = useAuthStore();
   const [showProfile, setShowProfile] = useState(false);
+  const [checkingOnboarding, setCheckingOnboarding] = useState(true);
 
   const userId = user?.id;
 
@@ -23,6 +64,27 @@ export default function Home() {
     loadWeightLogs,
     updateProfile,
   } = useProfileStore();
+  const isOnboarded = useProfileStore(selectIsOnboarded);
+
+  useEffect(() => {
+    if (!userId) {
+      setCheckingOnboarding(false);
+      return;
+    }
+
+    loadProfile(userId)
+      .then(() => setCheckingOnboarding(false))
+      .catch(() => {
+        // No profile found - redirect to onboarding
+        router.replace('/onboarding');
+      });
+  }, [userId, loadProfile, router]);
+
+  useEffect(() => {
+    if (!checkingOnboarding && !isOnboarded && userId) {
+      router.replace('/onboarding');
+    }
+  }, [checkingOnboarding, isOnboarded, userId, router]);
 
   const handleProfile = useCallback(() => {
     if (!profile && userId) {
@@ -49,6 +111,10 @@ export default function Home() {
     logout();
     window.location.href = '/login';
   }, [logout]);
+
+  if (checkingOnboarding) {
+    return <DashboardSkeleton />;
+  }
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-nova-dark via-indigo-900 to-purple-900 p-8">

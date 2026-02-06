@@ -14,6 +14,7 @@ export interface ProfileActions {
   loadProfile: (userId: string) => Promise<void>;
   loadWeightLogs: (userId: string) => Promise<void>;
   updateProfile: (userId: string, data: Partial<Profile>) => Promise<void>;
+  createProfile: (data: Record<string, unknown>) => Promise<boolean>;
   setError: (error: string | null) => void;
 }
 
@@ -79,6 +80,25 @@ export const useProfileStore = create<ProfileStore>()(
         }
       },
 
+      createProfile: async (data: Record<string, unknown>) => {
+        set({ isLoading: true, error: null });
+        try {
+          const response = await api.post<Profile>('/api/profiles', data);
+          if (response.success && response.data) {
+            set({ profile: response.data, isLoading: false });
+            return true;
+          }
+          set({ isLoading: false, error: response.error || 'No se pudo crear el perfil' });
+          return false;
+        } catch (error) {
+          set({
+            isLoading: false,
+            error: error instanceof Error ? error.message : 'Error de conexión',
+          });
+          return false;
+        }
+      },
+
       setError: (error) => {
         set({ error });
       },
@@ -92,3 +112,9 @@ export const useProfileStore = create<ProfileStore>()(
     }
   )
 );
+
+export const selectIsOnboarded = (state: ProfileStore): boolean => {
+  const p = state.profile;
+  if (!p) return false;
+  return p.weight > 0 && p.height > 0 && p.age > 0 && !!p.sex && p.goalWeight != null;
+};
