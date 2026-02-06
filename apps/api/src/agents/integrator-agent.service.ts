@@ -333,6 +333,32 @@ Your response MUST:
 4. Encourage them to start by logging their first meal or activity
 
 Keep it warm, welcoming, and brief (max 6 lines). This is their first interaction after setup.`;
+    } else if (intent === 'entry_edit') {
+      const deletedEntry = input.extractedData?.deletedEntry as {
+        description: string;
+        calories: number;
+        items: CalorieEntryItem[];
+        type: string;
+      } | null;
+
+      if (deletedEntry) {
+        const itemsList = Array.isArray(deletedEntry.items)
+          ? deletedEntry.items.map((i: CalorieEntryItem) => `${i.name}: ~${i.calories} kcal`).join(', ')
+          : `${deletedEntry.calories} kcal`;
+        prompt += `The user asked to edit/delete an entry. The last entry has been DELETED:
+- Description: "${deletedEntry.description}"
+- Items: ${itemsList}
+- Type: ${deletedEntry.type}
+
+Your response MUST:
+1. Confirm the entry was deleted (${isSpanish ? '"He eliminado el último registro"' : '"I\'ve deleted the last entry"'})
+2. Briefly show what was deleted
+3. Ask if they want to log a corrected version (${isSpanish ? '"¿Quieres registrar la versión correcta?"' : '"Would you like to log the correct version?"'})
+Keep it brief (max 4 lines).`;
+      } else {
+        prompt += `The user asked to edit/delete an entry but no entries were found for today.
+Your response MUST tell them there are no entries to modify today. Keep it brief.`;
+      }
     } else if (intent === 'question') {
       const remainingToEat = dailySummary ? (dailySummary.tdee + dailySummary.burn - dailySummary.targetDeficit - dailySummary.intake) : null;
       const isFoodQuestion = message.toLowerCase().match(/almorzar|cenar|desayunar|comer|snack|merienda|lunch|dinner|breakfast|eat|porción|porcion/);

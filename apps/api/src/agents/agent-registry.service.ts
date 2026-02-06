@@ -21,6 +21,7 @@ export class AgentRegistryService {
     weight_log: ['metabolic'],
     goal_set: [], // Handled by orchestrator directly
     profile_setup: [], // Handled by orchestrator directly (new user onboarding)
+    entry_edit: [], // Handled by orchestrator directly (delete/modify entries)
     confirmation: [], // Handled by orchestrator directly
     question: ['metabolic'],
     greeting: [],

@@ -142,9 +142,22 @@ Rules:
 
   private fallbackEstimate(description: string): CalorieIntakeResult {
     const lower = description.toLowerCase();
-    const items: CalorieEntryItem[] = [];
 
-    const foodCalories: Record<string, number> = {
+    // Compound phrases (matched first due to length sorting)
+    const compoundPhrases: Record<string, number> = {
+      'café sin azúcar': 5, 'cafe sin azucar': 5,
+      'café con leche': 70, 'cafe con leche': 70,
+      'café con azúcar': 50, 'cafe con azucar': 50,
+      'café negro': 5, 'cafe negro': 5,
+      'té sin azúcar': 2, 'te sin azucar': 2,
+      'arroz integral': 180, 'arroz blanco': 200,
+      'pollo a la plancha': 200, 'pollo asado': 220, 'pollo frito': 350,
+      'pescado a la plancha': 180, 'pescado frito': 300,
+      'yogurt natural': 100, 'yogurt griego': 130,
+      'pan integral': 100, 'papas fritas': 350,
+    };
+
+    const baseFoods: Record<string, number> = {
       pollo: 250, chicken: 250,
       arroz: 200, rice: 200,
       ensalada: 80, salad: 80,
@@ -162,25 +175,18 @@ Rules:
       fruta: 80, fruit: 80,
       yogurt: 120,
       cereal: 200,
-      // Frutas
       'plátano': 105, platano: 105, banana: 105,
       manzana: 95, apple: 95,
       naranja: 65, orange: 65,
       uvas: 70, grapes: 70,
       mango: 100, papaya: 60, fresa: 50, durazno: 60, pera: 60,
-      // Lácteos
       leche: 120, milk: 120, queso: 110, cheese: 110,
       'café': 5, cafe: 5, coffee: 5,
-      // Granos
       avena: 150, oatmeal: 150, granola: 200, quinoa: 180,
-      // Comida latina
       tacos: 250, burrito: 400, empanada: 300,
       arepa: 200, pupusa: 250, tamales: 300,
-      // Snacks
       galletas: 150, chocolate: 200, helado: 250,
-      // Bebidas
       jugo: 120, licuado: 200, batido: 250,
-      // Otros
       aguacate: 160, avocado: 160,
       'atún': 150, atun: 150, tuna: 150,
       papas: 200, papa: 130,
@@ -189,10 +195,29 @@ Rules:
       nueces: 200, almendras: 170,
     };
 
-    for (const [food, cal] of Object.entries(foodCalories)) {
-      if (lower.includes(food)) {
-        items.push({ name: food, calories: cal });
+    // Merge and sort by key length DESC (longest match first)
+    const allFoods: Record<string, number> = { ...baseFoods, ...compoundPhrases };
+    const sortedKeys = Object.keys(allFoods).sort((a, b) => b.length - a.length);
+    const items: CalorieEntryItem[] = [];
+    const consumedRanges: Array<[number, number]> = [];
+
+    const isConsumed = (start: number, end: number): boolean =>
+      consumedRanges.some(([s, e]) => start < e && end > s);
+
+    for (const food of sortedKeys) {
+      const idx = lower.indexOf(food);
+      if (idx === -1) continue;
+      const end = idx + food.length;
+      if (isConsumed(idx, end)) continue;
+
+      // Skip words preceded by modifiers (e.g. "azúcar" in "sin azúcar")
+      const before = lower.substring(Math.max(0, idx - 5), idx).trim();
+      if (before.endsWith('sin') || before.endsWith('con') || before.endsWith('la') || before.endsWith('al')) {
+        continue;
       }
+
+      items.push({ name: food, calories: allFoods[food] });
+      consumedRanges.push([idx, end]);
     }
 
     const totalCalories = items.reduce((sum, item) => sum + item.calories, 0) || 400;

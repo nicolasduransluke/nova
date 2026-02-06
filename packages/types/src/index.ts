@@ -297,6 +297,7 @@ export type MessageIntent =
   | 'weight_log'
   | 'goal_set'
   | 'profile_setup'
+  | 'entry_edit'
   | 'confirmation'
   | 'question'
   | 'greeting'

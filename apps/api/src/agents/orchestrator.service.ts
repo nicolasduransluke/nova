@@ -49,6 +49,8 @@ export interface OrchestratorDependencies {
     targetWeeks?: number;
   }) => Promise<Profile>;
   getUserMetadata: (userId: string) => Promise<string | null>;
+  deleteCalorieEntry: (entryId: string) => Promise<void>;
+  getLastCalorieEntry: (userId: string) => Promise<CalorieEntry | null>;
 }
 
 @Injectable()
@@ -264,6 +266,25 @@ export class OrchestratorService {
           this.logger.debug(`Creating/updating profile for new user: ${JSON.stringify(profileData)}`);
           const updatedProfile = await deps.updateProfile(request.userId, profileData);
           context.profile = updatedProfile;
+        }
+      }
+
+      // Step 8e: Handle entry_edit (delete/modify last entry)
+      if (intent === 'entry_edit') {
+        const lastEntry = await deps.getLastCalorieEntry(request.userId);
+        if (lastEntry) {
+          await deps.deleteCalorieEntry(lastEntry.id);
+          this.logger.log(`Deleted calorie entry ${lastEntry.id} for user ${request.userId}`);
+          extractedData.deletedEntry = {
+            id: lastEntry.id,
+            description: lastEntry.description,
+            calories: lastEntry.calories,
+            items: lastEntry.items,
+            type: lastEntry.type,
+          };
+        } else {
+          extractedData.deletedEntry = null;
+          extractedData.noEntryFound = true;
         }
       }
 

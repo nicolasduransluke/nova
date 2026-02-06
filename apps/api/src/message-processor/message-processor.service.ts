@@ -280,6 +280,42 @@ export class MessageProcessorService {
           ? user.metadata
           : JSON.stringify(user.metadata);
       },
+
+      deleteCalorieEntry: async (entryId: string): Promise<void> => {
+        await this.prisma.calorieEntry.delete({
+          where: { id: entryId },
+        });
+      },
+
+      getLastCalorieEntry: async (userId: string): Promise<CalorieEntry | null> => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+
+        const entry = await this.prisma.calorieEntry.findFirst({
+          where: {
+            userId,
+            date: { gte: today, lt: tomorrow },
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+
+        if (!entry) return null;
+
+        return {
+          id: entry.id,
+          userId: entry.userId,
+          date: entry.date,
+          type: entry.type as CalorieEntry['type'],
+          description: entry.description,
+          calories: entry.calories,
+          items: entry.items as unknown as CalorieEntry['items'],
+          confirmed: entry.confirmed,
+          createdAt: entry.createdAt,
+          updatedAt: entry.updatedAt,
+        };
+      },
     };
   }
 

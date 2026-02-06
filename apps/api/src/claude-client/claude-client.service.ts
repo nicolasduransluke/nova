@@ -121,7 +121,7 @@ export class ClaudeClientService implements OnModuleInit {
     this.logger.debug(`Keyword intent: ${keywordIntent} for "${message}"`);
 
     // For data-logging intents and explicit questions, keywords are reliable — use them directly
-    if (['meal_log', 'activity_log', 'weight_log', 'goal_set', 'profile_setup', 'confirmation', 'question'].includes(keywordIntent)) {
+    if (['meal_log', 'activity_log', 'weight_log', 'goal_set', 'profile_setup', 'entry_edit', 'confirmation', 'question'].includes(keywordIntent)) {
       return keywordIntent;
     }
 
@@ -135,6 +135,7 @@ export class ClaudeClientService implements OnModuleInit {
 - activity_log: User is reporting exercise/physical activity
 - weight_log: User is reporting their weight
 - goal_set: User is setting or changing their weight goal or weekly loss target
+- entry_edit: User wants to edit, correct, or delete a previous entry (e.g., "borra el último", "eso está mal", "pusiste mal", "modifica")
 - question: User is asking a question about their progress or the system
 - greeting: User is saying hello or greeting
 - general: Any other type of message
@@ -155,7 +156,7 @@ Respond with ONLY the category name, nothing else.`;
 
       const validIntents: MessageIntent[] = [
         'meal_log', 'activity_log', 'weight_log', 'goal_set',
-        'question', 'greeting', 'general',
+        'entry_edit', 'question', 'greeting', 'general',
       ];
 
       if (validIntents.includes(cleaned as MessageIntent)) {
@@ -181,7 +182,14 @@ Respond with ONLY the category name, nothing else.`;
 
     const extractionPrompts: Record<string, string> = {
       weight_log: `Extract weight data from this message. Return JSON with: { "weight": number (in kg), "unit": "kg" or "lb" }`,
-      meal_log: `Extract meal data from this message. Return JSON with: { "items": [{"name": "food item with modifiers", "quantity": number or null, "unit": "g" or "oz" or "portion" or null}], "totalCalories": null }. IMPORTANT: Preserve all modifiers and descriptors in the item name (e.g. "café sin azúcar" NOT just "café", "pollo a la plancha" NOT just "pollo", "leche descremada" NOT just "leche"). Just identify the food items, we will look up calories separately.`,
+      meal_log: `Extract meal data from this message. Return JSON with: { "items": [{"name": "food item with ALL modifiers", "quantity": number or null, "unit": "g" or "oz" or "portion" or null}], "totalCalories": null }.
+
+CRITICAL: NEVER split a food phrase with modifiers into separate items.
+- "café sin azúcar" = ONE item "café sin azúcar", NOT two items "café" + "azúcar"
+- "pollo a la plancha" = ONE item, NOT "pollo" + "plancha"
+- "leche descremada" = ONE item, NOT "leche" + "descremada"
+- Modifiers like "sin", "con", "a la", "al", "descremado/a", "integral" are PART of the food name.
+Just identify the food items, we will look up calories separately.`,
       activity_log: `Extract activity data from this message. Return JSON with: { "activity": "activity name", "durationMinutes": number, "caloriesBurned": estimated_calories_burned }`,
       goal_set: `Extract weight goal data from this message. Return JSON with: { "goalWeight": number or null (target weight in kg), "weeklyGoal": number or null (kg per week to lose), "targetWeeks": number or null (weeks to reach goal) }. If the user mentions pounds, convert to kg.`,
       profile_setup: `Extract profile data from this message. Return JSON with: { "weight": number or null (kg), "height": number or null (cm), "age": number or null, "sex": "male" or "female" or null, "goalWeight": number or null (kg) }. Convert meters to cm for height. Convert pounds to kg for weight.`,
@@ -611,6 +619,26 @@ Determine the user's intention. Return ONLY valid JSON:
         lower.includes('bici') || lower.includes('caminé') || lower.includes('camine'))
       return 'activity_log';
 
+    // Entry edit/delete detection (check BEFORE meal_log to prevent
+    // correction messages like "pusiste con azucar" from being classified as new meals)
+    const editDeletePatterns = [
+      'modifica', 'modificar', 'modificalo',
+      'borra', 'borrar', 'bórralo', 'borralo',
+      'elimina', 'eliminar', 'elimínalo', 'eliminalo',
+      'quita', 'quitar', 'quítalo', 'quitalo',
+      'corrige', 'corregir', 'corrígelo', 'corrigelo',
+      'está mal', 'esta mal', 'estuvo mal',
+      'pusiste mal', 'lo pusiste',
+      'podemos cambiar', 'podemos modificar',
+      'cambia el', 'cambiar el',
+      'el último', 'el ultimo', 'la última', 'la ultima',
+      'delete', 'remove', 'undo', 'wrong',
+      'no era', 'no fue eso',
+      'quita eso', 'sin eso',
+    ];
+    if (editDeletePatterns.some((p) => lower.includes(p)))
+      return 'entry_edit';
+
     // Meal logging
     const mealVerbs = [
       'ate', 'eaten', 'eating', 'meal', 'food', 'snack',
@@ -629,7 +657,7 @@ Determine the user's intention. Return ONLY valid JSON:
       'aguacate', 'avocado', 'atún', 'atun', 'tuna', 'jamón', 'jamon',
       'papas', 'papa', 'patata', 'camote', 'yuca', 'choclo', 'elote',
       'lentejas', 'garbanzos', 'quinoa', 'granola', 'nueces', 'almendras',
-      'mantequilla', 'mermelada', 'miel', 'azúcar', 'azucar',
+      'mantequilla', 'mermelada', 'miel',
       'chicken', 'rice', 'eggs', 'bread', 'salad', 'soup', 'beans',
       'beef', 'fish', 'fruit', 'cake', 'oatmeal', 'cheese', 'milk',
     ];
@@ -669,63 +697,7 @@ Determine the user's intention. Return ONLY valid JSON:
       }
 
       case 'meal_log': {
-        const items: CalorieEntryItem[] = [];
-        const foodCalories: Record<string, number> = {
-          pollo: 250, chicken: 250,
-          arroz: 200, rice: 200,
-          ensalada: 80, salad: 80,
-          huevos: 150, eggs: 150, huevo: 80,
-          pan: 120, bread: 120,
-          pasta: 350, fideos: 350,
-          torta: 400, cake: 400,
-          pizza: 300,
-          pescado: 200, fish: 200,
-          carne: 300, beef: 300, meat: 300,
-          frijoles: 150, beans: 150,
-          tortilla: 100,
-          sandwich: 350,
-          sopa: 150, soup: 150,
-          fruta: 80, fruit: 80,
-          yogurt: 120,
-          cereal: 200,
-          // Frutas
-          'plátano': 105, platano: 105, banana: 105,
-          manzana: 95, apple: 95,
-          naranja: 65, orange: 65,
-          uvas: 70, grapes: 70,
-          piña: 80, pineapple: 80,
-          mango: 100, papaya: 60, sandía: 50, melón: 50,
-          fresa: 50, strawberry: 50, durazno: 60, pera: 60,
-          // Lácteos
-          leche: 120, milk: 120, queso: 110, cheese: 110,
-          'café': 5, cafe: 5, coffee: 5,
-          // Granos y cereales
-          avena: 150, oatmeal: 150, granola: 200,
-          quinoa: 180,
-          // Comida latina
-          tacos: 250, burrito: 400, empanada: 300,
-          arepa: 200, pupusa: 250, tamales: 300, tostada: 150,
-          // Snacks y postres
-          galletas: 150, chocolate: 200, helado: 250,
-          // Bebidas
-          jugo: 120, licuado: 200, batido: 250, smoothie: 250,
-          // Vegetales y otros
-          aguacate: 160, avocado: 160,
-          'atún': 150, atun: 150, tuna: 150,
-          'jamón': 150, jamon: 150,
-          papas: 200, papa: 130, patata: 130,
-          camote: 120, yuca: 150,
-          lentejas: 180, garbanzos: 180,
-          nueces: 200, almendras: 170,
-          mantequilla: 100, butter: 100,
-          miel: 60, honey: 60,
-        };
-
-        for (const [food, cal] of Object.entries(foodCalories)) {
-          if (lower.includes(food)) {
-            items.push({ name: food, calories: cal });
-          }
-        }
+        const items = this.extractCompoundFoodItems(message);
 
         if (items.length === 0) {
           items.push({ name: 'comida', calories: 500 });
@@ -918,5 +890,107 @@ Determine the user's intention. Return ONLY valid JSON:
 
     // Default: confirm
     return { action: 'confirm' };
+  }
+
+  /**
+   * Extract food items from a message using compound-aware matching.
+   * Longer phrases are matched first to prevent "café sin azúcar" from
+   * being split into "café" + "azúcar".
+   */
+  private extractCompoundFoodItems(message: string): CalorieEntryItem[] {
+    const lower = message.toLowerCase();
+    const items: CalorieEntryItem[] = [];
+    const consumedRanges: Array<[number, number]> = [];
+
+    // Compound food phrases (higher priority, matched first due to length)
+    const compoundPhrases: Record<string, number> = {
+      'café sin azúcar': 5, 'cafe sin azucar': 5,
+      'café con leche': 70, 'cafe con leche': 70,
+      'café con azúcar': 50, 'cafe con azucar': 50,
+      'café negro': 5, 'cafe negro': 5,
+      'té sin azúcar': 2, 'te sin azucar': 2,
+      'té con azúcar': 30, 'te con azucar': 30,
+      'té verde': 2, 'te verde': 2,
+      'leche descremada': 80, 'leche deslactosada': 100,
+      'leche entera': 150,
+      'arroz integral': 180, 'arroz blanco': 200,
+      'pollo a la plancha': 200, 'pollo asado': 220,
+      'pollo frito': 350,
+      'pescado a la plancha': 180, 'pescado frito': 300,
+      'yogurt natural': 100, 'yogurt griego': 130,
+      'pan integral': 100,
+      'papas fritas': 350,
+      'jugo natural': 100,
+    };
+
+    // Base food items
+    const baseFoods: Record<string, number> = {
+      pollo: 250, chicken: 250,
+      arroz: 200, rice: 200,
+      ensalada: 80, salad: 80,
+      huevos: 150, eggs: 150, huevo: 80,
+      pan: 120, bread: 120,
+      pasta: 350, fideos: 350,
+      torta: 400, cake: 400,
+      pizza: 300,
+      pescado: 200, fish: 200,
+      carne: 300, beef: 300, meat: 300,
+      frijoles: 150, beans: 150,
+      tortilla: 100,
+      sandwich: 350,
+      sopa: 150, soup: 150,
+      fruta: 80, fruit: 80,
+      yogurt: 120,
+      cereal: 200,
+      'plátano': 105, platano: 105, banana: 105,
+      manzana: 95, apple: 95,
+      naranja: 65, orange: 65,
+      uvas: 70, grapes: 70,
+      piña: 80, pineapple: 80,
+      mango: 100, papaya: 60, sandía: 50, melón: 50,
+      fresa: 50, strawberry: 50, durazno: 60, pera: 60,
+      leche: 120, milk: 120, queso: 110, cheese: 110,
+      'café': 5, cafe: 5, coffee: 5,
+      avena: 150, oatmeal: 150, granola: 200,
+      quinoa: 180,
+      tacos: 250, burrito: 400, empanada: 300,
+      arepa: 200, pupusa: 250, tamales: 300, tostada: 150,
+      galletas: 150, chocolate: 200, helado: 250,
+      jugo: 120, licuado: 200, batido: 250, smoothie: 250,
+      aguacate: 160, avocado: 160,
+      'atún': 150, atun: 150, tuna: 150,
+      'jamón': 150, jamon: 150,
+      papas: 200, papa: 130, patata: 130,
+      camote: 120, yuca: 150,
+      lentejas: 180, garbanzos: 180,
+      nueces: 200, almendras: 170,
+      mantequilla: 100, butter: 100,
+      miel: 60, honey: 60,
+    };
+
+    // Merge all foods, sort by key length DESC (longest match first)
+    const allFoods: Record<string, number> = { ...baseFoods, ...compoundPhrases };
+    const sortedKeys = Object.keys(allFoods).sort((a, b) => b.length - a.length);
+
+    const isConsumed = (start: number, end: number): boolean =>
+      consumedRanges.some(([s, e]) => start < e && end > s);
+
+    for (const food of sortedKeys) {
+      const idx = lower.indexOf(food);
+      if (idx === -1) continue;
+      const end = idx + food.length;
+      if (isConsumed(idx, end)) continue;
+
+      // Skip words that are part of a negative modifier (e.g. "azúcar" in "sin azúcar")
+      const before = lower.substring(Math.max(0, idx - 5), idx).trim();
+      if (before.endsWith('sin') || before.endsWith('con') || before.endsWith('la') || before.endsWith('al')) {
+        continue;
+      }
+
+      items.push({ name: food, calories: allFoods[food] });
+      consumedRanges.push([idx, end]);
+    }
+
+    return items;
   }
 }
