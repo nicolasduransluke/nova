@@ -80,12 +80,8 @@ export class HistoryService {
       grouped.get(dateKey)!.push(entry);
     }
 
-    // Also add dates that only have Whoop data
-    for (const dateKey of whoopCaloriesByDate.keys()) {
-      if (!grouped.has(dateKey)) {
-        grouped.set(dateKey, []);
-      }
-    }
+    // NOTE: Do NOT add days that only have Whoop data but no manual entries.
+    // Showing Whoop burn with 0 intake creates misleading huge deficits.
 
     // Build HistoryDay array
     const result: HistoryDay[] = [];
@@ -115,8 +111,10 @@ export class HistoryService {
         });
       }
 
-      // Use Whoop calories if available, otherwise use manual
-      const whoopBurn = whoopCaloriesByDate.get(dateKey);
+      // Only use Whoop data if the day has intake entries (food logs)
+      // Otherwise Whoop burn with 0 intake shows a misleading huge deficit
+      const hasIntakeEntries = intake > 0;
+      const whoopBurn = hasIntakeEntries ? whoopCaloriesByDate.get(dateKey) : undefined;
       const burn = whoopBurn ?? manualBurn;
       const burnSource = whoopBurn ? 'whoop' : 'manual';
 
