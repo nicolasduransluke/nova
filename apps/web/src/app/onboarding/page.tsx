@@ -10,37 +10,43 @@ export default function OnboardingPage() {
   const router = useRouter();
   const { user } = useAuthStore();
   const { loadProfile } = useProfileStore();
-  const isOnboarded = useProfileStore(selectIsOnboarded);
   const [ready, setReady] = useState(false);
+  // null = not checked yet, true/false = onboarded status at load time
+  const [wasOnboardedOnLoad, setWasOnboardedOnLoad] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (!user?.id) return;
 
     loadProfile(user.id)
-      .then(() => setReady(true))
+      .then(() => {
+        // Capture onboarded status at load time (before form interaction)
+        const onboarded = selectIsOnboarded(useProfileStore.getState());
+        setWasOnboardedOnLoad(onboarded);
+        setReady(true);
+      })
       .catch(() => {
         // 404 expected for new users - show form
+        setWasOnboardedOnLoad(false);
         setReady(true);
       });
   }, [user?.id, loadProfile]);
 
+  // Only redirect if user was already onboarded when the page first loaded
   useEffect(() => {
-    if (ready && isOnboarded) {
+    if (wasOnboardedOnLoad === true) {
       router.replace('/');
     }
-  }, [ready, isOnboarded, router]);
+  }, [wasOnboardedOnLoad, router]);
 
   if (!user) return null;
 
-  if (!ready) {
+  if (!ready || wasOnboardedOnLoad === true) {
     return (
       <main className="min-h-screen bg-gradient-to-br from-nova-dark via-indigo-900 to-purple-900 flex items-center justify-center">
         <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-white" />
       </main>
     );
   }
-
-  if (isOnboarded) return null;
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-nova-dark via-indigo-900 to-purple-900 flex items-center justify-center p-4">
