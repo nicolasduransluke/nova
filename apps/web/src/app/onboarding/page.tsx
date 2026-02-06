@@ -34,7 +34,7 @@ export default function OnboardingPage() {
   // Only redirect if user was already onboarded when the page first loaded
   useEffect(() => {
     if (wasOnboardedOnLoad === true) {
-      router.replace('/');
+      router.replace('/chat');
     }
   }, [wasOnboardedOnLoad, router]);
 

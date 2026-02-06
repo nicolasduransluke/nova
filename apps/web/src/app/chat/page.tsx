@@ -10,15 +10,16 @@ import {
 } from '@nova/ui';
 import { DailySummaryCard } from '@nova/ui';
 import { useChatStore } from '@/store/chat.store';
-import { useProfileStore } from '@/store/profile.store';
+import { useProfileStore, selectIsOnboarded } from '@/store/profile.store';
 import { useAuthStore } from '@/store/auth.store';
 
 export default function ChatPage() {
   const router = useRouter();
   const [showSummary, setShowSummary] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  const [checkingOnboarding, setCheckingOnboarding] = useState(true);
 
-  const { user } = useAuthStore();
+  const { user, logout } = useAuthStore();
   const userId = user?.id;
 
   const {
@@ -38,6 +39,27 @@ export default function ChatPage() {
     loadWeightLogs,
     updateProfile,
   } = useProfileStore();
+  const isOnboarded = useProfileStore(selectIsOnboarded);
+
+  // Check onboarding status
+  useEffect(() => {
+    if (!userId) {
+      setCheckingOnboarding(false);
+      return;
+    }
+
+    loadProfile(userId)
+      .then(() => setCheckingOnboarding(false))
+      .catch(() => {
+        router.replace('/onboarding');
+      });
+  }, [userId, loadProfile, router]);
+
+  useEffect(() => {
+    if (!checkingOnboarding && !isOnboarded && userId) {
+      router.replace('/onboarding');
+    }
+  }, [checkingOnboarding, isOnboarded, userId, router]);
 
   useEffect(() => {
     loadHistory();
@@ -50,16 +72,11 @@ export default function ChatPage() {
     [sendUserMessage]
   );
 
-  const handleBack = useCallback(() => {
-    router.push('/');
-  }, [router]);
-
   const handleSettings = useCallback(() => {
     setShowSummary((prev) => !prev);
   }, []);
 
   const handleProfile = useCallback(() => {
-    // Always reload profile to get latest data (might have been updated via chat)
     if (userId) {
       loadProfile(userId);
       loadWeightLogs(userId);
@@ -80,13 +97,21 @@ export default function ChatPage() {
     [userId, updateProfile]
   );
 
-  if (isLoading) {
+  const handleHistory = useCallback(() => {
+    router.push('/history');
+  }, [router]);
+
+  const handleLogout = useCallback(() => {
+    logout();
+    window.location.href = '/login';
+  }, [logout]);
+
+  if (checkingOnboarding || isLoading) {
     return (
       <div className="flex flex-col h-screen bg-white dark:bg-gray-900">
         <ChatHeader
           title="NOVA"
-          subtitle="Loading..."
-          onBack={handleBack}
+          subtitle="Cargando..."
         />
         <div className="flex-1 flex items-center justify-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" />
@@ -100,9 +125,10 @@ export default function ChatPage() {
       <ChatHeader
         title="NOVA"
         subtitle="Coach de Déficit Calórico"
-        onBack={handleBack}
         onSettings={handleSettings}
         onProfile={handleProfile}
+        onHistory={handleHistory}
+        onLogout={handleLogout}
       />
 
       {showSummary && dailySummary && (

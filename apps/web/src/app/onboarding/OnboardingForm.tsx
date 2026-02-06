@@ -329,7 +329,7 @@ export default function OnboardingForm({ userId }: { userId: string }) {
   };
 
   const handleSkipWhoop = () => {
-    router.push('/');
+    router.push('/chat');
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

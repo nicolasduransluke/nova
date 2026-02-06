@@ -66,7 +66,7 @@ export default function WhoopCallback() {
           setMessage('¡Whoop conectado exitosamente! Redirigiendo...');
           localStorage.removeItem('nova-onboarding-whoop-pending');
           setTimeout(() => {
-            window.location.href = '/';
+            window.location.href = '/chat';
           }, 2000);
         } else {
           const data = await response.json();
@@ -106,7 +106,7 @@ export default function WhoopCallback() {
             <div className="text-red-400 text-5xl mb-4">✗</div>
             <p className="text-white text-lg mb-4">{message}</p>
             <a
-              href="/"
+              href="/chat"
               className="inline-block px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors"
             >
               Volver al inicio
