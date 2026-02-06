@@ -99,7 +99,7 @@ Be calm, data-driven, brief. No hype language.`;
   }
 
   private buildDataResponse(input: IntegratorInput): string {
-    const isSpanish = this.detectSpanishMessage(input.message);
+    const isSpanish = this.detectSpanishMessage(input.message, input.context);
     const { intent, agentOutputs, dailySummary } = input;
 
     // Extract items from agent outputs or extracted data
@@ -256,7 +256,7 @@ ${intent}
       });
     }
 
-    const isSpanish = this.detectSpanishMessage(message);
+    const isSpanish = this.detectSpanishMessage(message, context);
 
     prompt += `
 ## Language Requirement
@@ -396,10 +396,29 @@ Your response MUST tell them there are no entries to modify today. Keep it brief
       }
     } else if (intent === 'question') {
       const remainingToEat = dailySummary ? (dailySummary.tdee + dailySummary.burn - dailySummary.targetDeficit - dailySummary.intake) : null;
-      const isFoodQuestion = message.toLowerCase().match(/almorzar|cenar|desayunar|comer|snack|merienda|lunch|dinner|breakfast|eat|porción|porcion/);
-      const isAskingAboutSpecificFood = message.toLowerCase().match(/frutos?\s*secos?|nueces|almendras|galletas?|chocolate|pizza|helado|pan\b|queso|yogur?t?|fruta|banana|manzana|chips|papas?|torta|postre|dulces?|refresco|soda|cerveza|vino|nuts|cookies?|ice cream|candy|maní|mani|cacahuate|snack/);
+      const lowerMsg = message.toLowerCase();
+      const isComparisonQuestion = lowerMsg.match(/más calor[ií]as|mas calor[ií]as|tiene más|tiene mas|qué engorda|que engorda|cuál tiene|cual tiene| o una? /);
+      const isFoodQuestion = lowerMsg.match(/almorzar|cenar|desayunar|comer|snack|merienda|lunch|dinner|breakfast|eat|porción|porcion/);
+      const isAskingAboutSpecificFood = lowerMsg.match(/frutos?\s*secos?|nueces|almendras|galletas?|chocolate|pizza|helado|pan\b|queso|yogur?t?|fruta|banana|manzana|chips|papas?|torta|postre|dulces?|refresco|soda|cerveza|vino|nuts|cookies?|ice cream|candy|maní|mani|cacahuate|snack|coke|coca.cola|pepsi|hamburgues|chai|latte|café|cafe|coffee/);
+      const isProgressQuestion = lowerMsg.match(/cómo voy|como voy|mi progreso|my progress|how am i|resumen|summary/);
 
-      if (isFoodQuestion && remainingToEat != null) {
+      if (isComparisonQuestion) {
+        prompt += `The user is COMPARING foods or asking which has more calories: "${message}".
+
+Your response MUST:
+1. Answer the comparison directly (which one has more calories and roughly how many each)
+2. Keep it brief (2-3 lines max)
+3. Do NOT show daily totals or deficit - this is an informational question, nothing was registered
+4. Do NOT say "Registrado" - nothing was logged`;
+      } else if (isAskingAboutSpecificFood && !isFoodQuestion) {
+        prompt += `The user is asking about a SPECIFIC food's calories: "${message}".
+
+Your response MUST:
+1. Give the typical calories PER PORTION of that food
+2. Keep it brief (2-3 lines max)
+3. Do NOT show daily totals or deficit - this is an informational question, nothing was registered
+4. Do NOT say "Registrado" - nothing was logged`;
+      } else if (isFoodQuestion && remainingToEat != null) {
         if (isAskingAboutSpecificFood) {
           prompt += `The user is asking about a SPECIFIC food: "${message}". Their remaining calorie budget is ${remainingToEat} kcal.
 
@@ -415,16 +434,15 @@ Be specific to what they asked about. Don't give generic meal suggestions.`;
 
 Your response MUST:
 1. State how many calories they have left to eat
-2. Suggest 2-3 SPECIFIC meal options with estimated calories that fit their budget, for example:
-   - Light option (~300-400 kcal): e.g., grilled chicken salad, vegetable soup
-   - Medium option (~500-600 kcal): e.g., rice with beans and meat, pasta with vegetables
-   - Heavier option (~700-800 kcal): e.g., full plate with protein, carbs, and sides
+2. Suggest 2-3 SPECIFIC meal options with estimated calories that fit their budget
 3. Mention how much budget they'd have left after each option
 
 Be a helpful coach - give concrete, actionable suggestions, not just numbers.`;
         }
+      } else if (isProgressQuestion || (!isComparisonQuestion && !isAskingAboutSpecificFood)) {
+        prompt += `Answer the user's question using the data available. Show daily summary if relevant. Be helpful and specific.`;
       } else {
-        prompt += `Answer using the data available. Focus on deficit progress and daily summary. Be helpful and specific.`;
+        prompt += `Answer the user's question briefly. Be helpful and specific.`;
       }
     } else {
       // greeting or general
@@ -470,7 +488,7 @@ Keep it conversational and brief (max 6 lines).`;
     return prompt;
   }
 
-  private detectSpanishMessage(message: string): boolean {
+  private detectSpanishMessage(message: string, context?: AgentContext): boolean {
     const lower = message.toLowerCase();
     const spanishIndicators = [
       'hola', 'cómo', 'como', 'qué', 'que', 'hoy', 'día', 'dia',
@@ -481,8 +499,23 @@ Keep it conversational and brief (max 6 lines).`;
       'desayuno', 'almuerzo', 'almor', 'cena', 'comida',
       'correr', 'gimnasio', 'ejercicio', 'cansado', 'cansada',
       'sí', 'dale', 'ponle', 'bórralo', 'borralo',
+      'más', 'mas', 'calorías', 'calorias', 'tiene',
     ];
-    return spanishIndicators.some((word) => lower.includes(word));
+    if (spanishIndicators.some((word) => lower.includes(word))) return true;
+
+    // For short/ambiguous messages ("ok", "sí", "dale"), check conversation history
+    if (context?.conversationHistory) {
+      const recentUserMessages = context.conversationHistory
+        .filter((m) => m.sender === 'user')
+        .slice(-5);
+      for (const msg of recentUserMessages) {
+        if (spanishIndicators.some((word) => msg.content.toLowerCase().includes(word))) {
+          return true;
+        }
+      }
+    }
+
+    return false;
   }
 
   private parseResponse(response: string): {
