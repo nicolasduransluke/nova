@@ -155,6 +155,9 @@ Rules:
       'pescado a la plancha': 180, 'pescado frito': 300,
       'yogurt natural': 100, 'yogurt griego': 130,
       'pan integral': 100, 'papas fritas': 350,
+      'hamburguesa con queso': 500, 'hamburguesa doble': 700,
+      'hamburguesa sencilla': 400, 'hamburguesa simple': 400,
+      'hot dog': 300, 'perro caliente': 300,
     };
 
     const baseFoods: Record<string, number> = {
@@ -183,8 +186,9 @@ Rules:
       leche: 120, milk: 120, queso: 110, cheese: 110,
       'café': 5, cafe: 5, coffee: 5,
       avena: 150, oatmeal: 150, granola: 200, quinoa: 180,
-      tacos: 250, burrito: 400, empanada: 300,
-      arepa: 200, pupusa: 250, tamales: 300,
+      hamburguesa: 450, hamburguesas: 450,
+      tacos: 250, taco: 250, burrito: 400, empanada: 300,
+      arepa: 200, pupusa: 250, tamales: 300, tamal: 300,
       galletas: 150, chocolate: 200, helado: 250,
       jugo: 120, licuado: 200, batido: 250,
       aguacate: 160, avocado: 160,
@@ -216,7 +220,18 @@ Rules:
         continue;
       }
 
-      items.push({ name: food, calories: allFoods[food] });
+      // Extract quantity (e.g., "2 hamburguesas", "3 tacos")
+      let quantity = 1;
+      const beforeText = lower.substring(Math.max(0, idx - 4), idx);
+      const qtyMatch = beforeText.match(/(\d+)\s*$/);
+      if (qtyMatch) {
+        quantity = parseInt(qtyMatch[1], 10);
+        if (quantity > 10) quantity = 1; // sanity check
+      }
+
+      const totalCal = allFoods[food] * quantity;
+      const displayName = quantity > 1 ? `${quantity} ${food}` : food;
+      items.push({ name: displayName, calories: totalCal });
       consumedRanges.push([idx, end]);
     }
 

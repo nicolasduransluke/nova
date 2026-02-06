@@ -577,14 +577,26 @@ Determine the user's intention. Return ONLY valid JSON:
       'qué debería', 'que debería', 'qué deberia', 'que deberia',
       'qué puedo', 'que puedo', 'qué como', 'que como',
       'what should', 'what could', 'what can i', 'how much should',
+      'how many calories', 'how much calories',
       'cuánto puedo', 'cuanto puedo', 'cuántas calorías', 'cuantas calorias',
+      'cuántas calorías tiene', 'cuantas calorias tiene',
+      'tiene calorías', 'tiene calorias', 'tiene calorías?', 'tiene calorias?',
       'recomienda', 'me recomiendas', 'sugieres', 'suggest', 'recommend',
       'qué porción', 'que porción', 'qué porcion', 'que porcion',
       'cuánto debería', 'cuanto debería', 'cuánto deberia', 'cuanto deberia',
       'es buena idea', 'is it ok', 'está bien si', 'esta bien si',
       'puedo comer', 'debería comer', 'deberia comer',
+      'estás seguro', 'estas seguro', 'es correcto', 'are you sure',
+      'seguro que', 'de verdad', 'en serio',
+      'es mucho', 'es poco', 'no es mucho', 'no es poco',
+      'cuánto tiene', 'cuanto tiene', 'cuánto es', 'cuanto es',
     ];
     if (questionPatterns.some((p) => lower.includes(p)))
+      return 'question';
+
+    // Messages with "?" that mention food are questions ABOUT food, not meal logs
+    // e.g., "El café tiene calorías?" = question, NOT a meal log
+    if (lower.includes('?'))
       return 'question';
 
     // Profile setup - user providing multiple profile fields (height, weight, age, sex)
@@ -652,6 +664,7 @@ Determine the user's intention. Return ONLY valid JSON:
       'carne', 'pescado', 'ensalada', 'sopa', 'frijoles', 'sandwich',
       'torta', 'yogurt', 'cereal', 'fruta', 'leche', 'queso', 'café',
       'plátano', 'platano', 'banana', 'manzana', 'naranja', 'avena',
+      'hamburguesa', 'hamburguesas', 'hot dog',
       'tacos', 'burrito', 'empanada', 'arepa', 'pupusa', 'tamales',
       'galletas', 'chocolate', 'helado', 'jugo', 'licuado', 'batido',
       'aguacate', 'avocado', 'atún', 'atun', 'tuna', 'jamón', 'jamon',
@@ -921,6 +934,9 @@ Determine the user's intention. Return ONLY valid JSON:
       'pan integral': 100,
       'papas fritas': 350,
       'jugo natural': 100,
+      'hamburguesa con queso': 500, 'hamburguesa doble': 700,
+      'hamburguesa sencilla': 400, 'hamburguesa simple': 400,
+      'hot dog': 300, 'perro caliente': 300,
     };
 
     // Base food items
@@ -953,8 +969,9 @@ Determine the user's intention. Return ONLY valid JSON:
       'café': 5, cafe: 5, coffee: 5,
       avena: 150, oatmeal: 150, granola: 200,
       quinoa: 180,
-      tacos: 250, burrito: 400, empanada: 300,
-      arepa: 200, pupusa: 250, tamales: 300, tostada: 150,
+      hamburguesa: 450, hamburguesas: 450,
+      tacos: 250, taco: 250, burrito: 400, empanada: 300,
+      arepa: 200, pupusa: 250, tamales: 300, tamal: 300, tostada: 150,
       galletas: 150, chocolate: 200, helado: 250,
       jugo: 120, licuado: 200, batido: 250, smoothie: 250,
       aguacate: 160, avocado: 160,
@@ -987,7 +1004,18 @@ Determine the user's intention. Return ONLY valid JSON:
         continue;
       }
 
-      items.push({ name: food, calories: allFoods[food] });
+      // Extract quantity (e.g., "2 hamburguesas", "3 tacos")
+      let quantity = 1;
+      const beforeText = lower.substring(Math.max(0, idx - 4), idx);
+      const qtyMatch = beforeText.match(/(\d+)\s*$/);
+      if (qtyMatch) {
+        quantity = parseInt(qtyMatch[1], 10);
+        if (quantity > 10) quantity = 1; // sanity check
+      }
+
+      const totalCal = allFoods[food] * quantity;
+      const displayName = quantity > 1 ? `${quantity} ${food}` : food;
+      items.push({ name: displayName, calories: totalCal });
       consumedRanges.push([idx, end]);
     }
 
