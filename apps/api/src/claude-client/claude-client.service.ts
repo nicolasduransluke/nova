@@ -131,14 +131,16 @@ export class ClaudeClientService implements OnModuleInit {
     }
 
     const prompt = `Classify the following user message into exactly ONE of these categories:
-- meal_log: User is sharing what they ate or drank
+- meal_log: User is TELLING you what they ate or drank (e.g., "comí 2 hamburguesas", "tomé un café")
 - activity_log: User is reporting exercise/physical activity
 - weight_log: User is reporting their weight
 - goal_set: User is setting or changing their weight goal or weekly loss target
 - entry_edit: User wants to edit, correct, or delete a previous entry (e.g., "borra el último", "eso está mal", "pusiste mal", "modifica")
-- question: User is asking a question about their progress or the system
+- question: User is ASKING about food, calories, progress, or the system. ANY message with "?" or "¿" is a question. Comparing foods ("qué tiene más calorías X o Y") is a question, NOT a meal_log.
 - greeting: User is saying hello or greeting
 - general: Any other type of message
+
+IMPORTANT: If the message contains "?" or "¿", it is ALWAYS a question, never a meal_log.
 
 User message: "${message}"
 
@@ -590,13 +592,17 @@ Determine the user's intention. Return ONLY valid JSON:
       'seguro que', 'de verdad', 'en serio',
       'es mucho', 'es poco', 'no es mucho', 'no es poco',
       'cuánto tiene', 'cuanto tiene', 'cuánto es', 'cuanto es',
+      'tiene más calorías', 'tiene mas calorias', 'tiene más calorías',
+      'qué tiene más', 'que tiene mas', 'cuál tiene más', 'cual tiene mas',
+      'qué engorda más', 'que engorda mas', 'es mejor comer', 'es peor comer',
+      'qué es mejor', 'que es mejor', 'qué es peor', 'que es peor',
     ];
     if (questionPatterns.some((p) => lower.includes(p)))
       return 'question';
 
-    // Messages with "?" that mention food are questions ABOUT food, not meal logs
-    // e.g., "El café tiene calorías?" = question, NOT a meal log
-    if (lower.includes('?'))
+    // Messages with "?" or "¿" are questions — not meal logs
+    // e.g., "El café tiene calorías?" or "¿Qué tiene más calorías?"
+    if (lower.includes('?') || lower.includes('¿'))
       return 'question';
 
     // Profile setup - user providing multiple profile fields (height, weight, age, sex)
