@@ -11,8 +11,6 @@ interface WeightTrend {
 
 @Injectable()
 export class MetabolicAgentService extends BaseAgent {
-  private readonly logger = new Logger(MetabolicAgentService.name);
-
   constructor(claudeClient: ClaudeClientService) {
     super('metabolic', claudeClient);
   }

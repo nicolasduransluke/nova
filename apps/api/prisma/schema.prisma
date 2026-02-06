@@ -1,13 +1,13 @@
 // NOVA Database Schema
 // Calorie Deficit Coach
-// SQLite version for local development
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -26,7 +26,7 @@ model User {
   resetToken    String?   @map("reset_token")
   resetTokenExp DateTime? @map("reset_token_exp")
   refreshToken  String?   @map("refresh_token")
-  metadata      String    @default("{}")
+  metadata      Json      @default("{}")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
@@ -75,7 +75,7 @@ model DailyEntry {
   userId     String   @map("user_id")
   date       DateTime
   type       String   // food, exercise, sleep, mood, energy, custom
-  data       String   @default("{}")
+  data       Json     @default("{}")
   novaPoints Int      @default(0) @map("nova_points")
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
@@ -100,7 +100,7 @@ model CalorieEntry {
   type        String   // intake, burn
   description String
   calories    Int
-  items       String   @default("[]") // JSON array: [{name, calories}]
+  items       Json     @default("[]") // JSON array: [{name, calories}]
   confirmed   Boolean  @default(false)
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")

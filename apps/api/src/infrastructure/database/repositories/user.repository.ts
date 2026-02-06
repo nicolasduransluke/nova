@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { UserEntity } from '../../../domain/entities/user.entity';
 import { IUserRepository } from '../../../domain/repositories/user.repository.interface';
@@ -18,7 +19,7 @@ export class UserRepository implements IUserRepository {
       id: user.id,
       email: user.email,
       name: user.name,
-      metadata: user.metadata as Record<string, unknown>,
+      metadata: (user.metadata ?? {}) as Record<string, unknown>,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     });
@@ -35,7 +36,7 @@ export class UserRepository implements IUserRepository {
       id: user.id,
       email: user.email,
       name: user.name,
-      metadata: user.metadata as Record<string, unknown>,
+      metadata: (user.metadata ?? {}) as Record<string, unknown>,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     });
@@ -51,7 +52,7 @@ export class UserRepository implements IUserRepository {
         id: user.id,
         email: user.email,
         name: user.name,
-        metadata: user.metadata as Record<string, unknown>,
+        metadata: (user.metadata ?? {}) as Record<string, unknown>,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
       }),
@@ -64,7 +65,7 @@ export class UserRepository implements IUserRepository {
         id: user.id,
         email: user.email,
         name: user.name,
-        metadata: user.metadata,
+        metadata: user.metadata as Prisma.InputJsonValue,
       },
     });
 
@@ -72,7 +73,7 @@ export class UserRepository implements IUserRepository {
       id: created.id,
       email: created.email,
       name: created.name,
-      metadata: created.metadata as Record<string, unknown>,
+      metadata: (created.metadata ?? {}) as Record<string, unknown>,
       createdAt: created.createdAt,
       updatedAt: created.updatedAt,
     });
@@ -83,7 +84,7 @@ export class UserRepository implements IUserRepository {
       where: { id: user.id },
       data: {
         name: user.name,
-        metadata: user.metadata,
+        metadata: user.metadata as Prisma.InputJsonValue,
       },
     });
 
@@ -91,7 +92,7 @@ export class UserRepository implements IUserRepository {
       id: updated.id,
       email: updated.email,
       name: updated.name,
-      metadata: updated.metadata as Record<string, unknown>,
+      metadata: (updated.metadata ?? {}) as Record<string, unknown>,
       createdAt: updated.createdAt,
       updatedAt: updated.updatedAt,
     });

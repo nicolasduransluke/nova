@@ -40,7 +40,7 @@ export class HistoryService {
       });
 
       if (user?.metadata) {
-        const metadata = JSON.parse(user.metadata as string);
+        const metadata = (user.metadata ?? {}) as Record<string, any>;
         if (metadata.whoop?.accessToken) {
           let accessToken = metadata.whoop.accessToken;
 
@@ -100,7 +100,7 @@ export class HistoryService {
 
         let items = [];
         try {
-          items = JSON.parse(e.items);
+          items = e.items as any;
         } catch {
           items = [];
         }

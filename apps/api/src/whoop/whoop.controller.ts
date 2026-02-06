@@ -78,7 +78,7 @@ export class WhoopController {
         select: { metadata: true },
       });
 
-      const currentMetadata = user?.metadata ? JSON.parse(user.metadata as string) : {};
+      const currentMetadata = (user?.metadata ?? {}) as Record<string, any>;
       const updatedMetadata = {
         ...currentMetadata,
         whoop: {
@@ -94,7 +94,7 @@ export class WhoopController {
       await this.prisma.user.update({
         where: { id: userId },
         data: {
-          metadata: JSON.stringify(updatedMetadata),
+          metadata: updatedMetadata,
         },
       });
 
@@ -128,7 +128,7 @@ export class WhoopController {
       select: { metadata: true },
     });
 
-    const metadata = user?.metadata ? JSON.parse(user.metadata as string) : {};
+    const metadata = (user?.metadata ?? {}) as Record<string, any>;
     const whoopData = metadata.whoop as {
       accessToken?: string;
       refreshToken?: string;
@@ -163,7 +163,7 @@ export class WhoopController {
         await this.prisma.user.update({
           where: { id: userId },
           data: {
-            metadata: JSON.stringify(updatedMetadata),
+            metadata: updatedMetadata,
           },
         });
       } catch (error) {
@@ -204,13 +204,13 @@ export class WhoopController {
       select: { metadata: true },
     });
 
-    const metadata = user?.metadata ? JSON.parse(user.metadata as string) : {};
+    const metadata = (user?.metadata ?? {}) as Record<string, any>;
     delete metadata.whoop;
 
     await this.prisma.user.update({
       where: { id: userId },
       data: {
-        metadata: JSON.stringify(metadata),
+        metadata: metadata,
       },
     });
 

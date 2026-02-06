@@ -149,7 +149,7 @@ export class OrchestratorService {
 
           // For new users or first weight log, also update profile.weight as their starting weight
           // This prevents incorrect "change from start" calculations using default values
-          const isFirstWeightLog = recentWeightLogs.length === 0;
+          const isFirstWeightLog = allWeightLogs.length === 0;
           const profileHasDefaultWeight = !context.profile || context.profile.weight === 70;
           if (isFirstWeightLog || profileHasDefaultWeight) {
             const updatedProfile = await deps.updateProfile(request.userId, { weight: newWeight });

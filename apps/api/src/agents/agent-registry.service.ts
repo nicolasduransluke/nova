@@ -32,7 +32,7 @@ export class AgentRegistryService {
     private readonly nutritionAgent: NutritionAgentService,
     private readonly activityAgent: ActivityBurnAgentService,
   ) {
-    this.agents = new Map([
+    this.agents = new Map<RegisteredAgentType, BaseAgent>([
       ['metabolic', this.metabolicAgent],
       ['nutrition', this.nutritionAgent],
       ['activity', this.activityAgent],

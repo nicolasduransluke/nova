@@ -11,12 +11,12 @@ import type { MessageType } from '@nova/types';
 export class ProcessMessageDto {
   @IsString()
   @IsNotEmpty()
-  userId: string;
+  userId!: string;
 
   @IsString()
   @IsNotEmpty()
   @MaxLength(2000)
-  content: string;
+  content!: string;
 
   @IsOptional()
   @IsUrl()

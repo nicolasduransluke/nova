@@ -9,6 +9,7 @@ import type {
   CalorieEntry,
   WeightLog,
 } from '@nova/types';
+import { Prisma } from '@prisma/client';
 import { OrchestratorService, OrchestratorDependencies } from '../agents/orchestrator.service';
 import { PrismaService } from '../infrastructure/database/prisma.service';
 import { generateId } from '@nova/utils';
@@ -38,7 +39,9 @@ export class MessageProcessorService {
           id: user.id,
           email: user.email,
           name: user.name,
-          metadata: user.metadata as Record<string, unknown>,
+          provider: user.provider as User['provider'],
+          emailVerified: user.emailVerified,
+          metadata: (user.metadata ?? {}) as Record<string, unknown>,
           createdAt: user.createdAt,
           updatedAt: user.updatedAt,
         };
@@ -83,7 +86,7 @@ export class MessageProcessorService {
           userId: entry.userId,
           date: entry.date,
           type: entry.type as DailyEntry['type'],
-          data: entry.data as Record<string, unknown>,
+          data: (entry.data ?? {}) as Record<string, unknown>,
           novaPoints: entry.novaPoints,
           createdAt: entry.createdAt,
           updatedAt: entry.updatedAt,
@@ -104,7 +107,7 @@ export class MessageProcessorService {
             userId: entry.userId!,
             date: entry.date || new Date(),
             type: entry.type!,
-            data: entry.data || {},
+            data: (entry.data ?? {}) as Prisma.InputJsonValue,
             novaPoints: entry.novaPoints || 0,
           },
         });
@@ -114,7 +117,7 @@ export class MessageProcessorService {
           userId: created.userId,
           date: created.date,
           type: created.type as DailyEntry['type'],
-          data: created.data as Record<string, unknown>,
+          data: (created.data ?? {}) as Record<string, unknown>,
           novaPoints: created.novaPoints,
           createdAt: created.createdAt,
           updatedAt: created.updatedAt,
@@ -138,7 +141,7 @@ export class MessageProcessorService {
             type: data.type,
             description: data.description,
             calories: data.calories,
-            items: JSON.stringify(data.items),
+            items: data.items as unknown as Prisma.InputJsonValue,
             confirmed: data.confirmed,
           },
         });
@@ -150,7 +153,7 @@ export class MessageProcessorService {
           type: created.type as CalorieEntry['type'],
           description: created.description,
           calories: created.calories,
-          items: JSON.parse(created.items as string),
+          items: created.items as unknown as CalorieEntry['items'],
           confirmed: created.confirmed,
           createdAt: created.createdAt,
           updatedAt: created.updatedAt,
@@ -177,7 +180,7 @@ export class MessageProcessorService {
           type: entry.type as CalorieEntry['type'],
           description: entry.description,
           calories: entry.calories,
-          items: JSON.parse(entry.items as string),
+          items: entry.items as unknown as CalorieEntry['items'],
           confirmed: entry.confirmed,
           createdAt: entry.createdAt,
           updatedAt: entry.updatedAt,
@@ -272,7 +275,10 @@ export class MessageProcessorService {
           where: { id: userId },
           select: { metadata: true },
         });
-        return user?.metadata ?? null;
+        if (!user?.metadata) return null;
+        return typeof user.metadata === 'string'
+          ? user.metadata
+          : JSON.stringify(user.metadata);
       },
     };
   }
