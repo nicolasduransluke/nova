@@ -131,9 +131,55 @@ export default function ChatPage() {
         onLogout={handleLogout}
       />
 
-      {showSummary && dailySummary && (
-        <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
-          <DailySummaryCard summary={dailySummary} compact />
+      {showSummary && (
+        <div className="absolute top-14 left-0 right-0 z-30">
+          <div
+            className="fixed inset-0 bg-black/30 z-20"
+            onClick={() => setShowSummary(false)}
+          />
+          <div className="relative z-30 mx-4 mt-2 bg-gradient-to-br from-nova-dark via-indigo-900 to-purple-900 rounded-xl shadow-2xl">
+            {dailySummary ? (
+              <div className="relative">
+                <DailySummaryCard summary={dailySummary} />
+                <button
+                  onClick={() => setShowSummary(false)}
+                  className="absolute top-3 right-3 p-1 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+                  aria-label="Cerrar"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
+            ) : (
+              <div className="p-6 text-center">
+                <p className="text-indigo-200 text-lg mb-2">
+                  Registra tu primera comida para ver tu resumen del día
+                </p>
+                <div className="flex justify-center gap-8 mt-4 text-indigo-300">
+                  <div>
+                    <p className="text-2xl font-bold text-white">0</p>
+                    <p className="text-sm">kcal consumidas</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-white">0</p>
+                    <p className="text-sm">kcal quemadas</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-white">--</p>
+                    <p className="text-sm">déficit</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowSummary(false)}
+                  className="mt-4 text-indigo-400 hover:text-white text-sm transition-colors"
+                >
+                  Cerrar
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
