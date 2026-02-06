@@ -340,21 +340,56 @@ Keep it warm, welcoming, and brief (max 6 lines). This is their first interactio
         items: CalorieEntryItem[];
         type: string;
       } | null;
+      const deletedEntries = input.extractedData?.deletedEntries as Array<{
+        description: string;
+        calories: number;
+        type: string;
+      }> | undefined;
+      const deletedCount = input.extractedData?.deletedCount as number | undefined;
+      const todayEntries = input.extractedData?.todayEntries as Array<{
+        index: number;
+        description: string;
+        calories: number;
+        type: string;
+      }> | undefined;
 
-      if (deletedEntry) {
+      if (deletedCount && deletedEntries) {
+        // All entries were deleted
+        const totalCals = deletedEntries.reduce((sum, e) => sum + e.calories, 0);
+        prompt += `The user asked to delete ALL entries. ${deletedCount} entries have been DELETED (total: ${totalCals} kcal).
+
+Your response MUST:
+1. Confirm all ${deletedCount} entries were deleted
+2. Mention the total calories removed
+Keep it brief (max 3 lines).`;
+      } else if (deletedEntry) {
+        // Single entry deleted
         const itemsList = Array.isArray(deletedEntry.items)
           ? deletedEntry.items.map((i: CalorieEntryItem) => `${i.name}: ~${i.calories} kcal`).join(', ')
           : `${deletedEntry.calories} kcal`;
-        prompt += `The user asked to edit/delete an entry. The last entry has been DELETED:
+        prompt += `The user asked to edit/delete an entry. This entry has been DELETED:
 - Description: "${deletedEntry.description}"
 - Items: ${itemsList}
 - Type: ${deletedEntry.type}
 
 Your response MUST:
-1. Confirm the entry was deleted (${isSpanish ? '"He eliminado el último registro"' : '"I\'ve deleted the last entry"'})
+1. Confirm the entry was deleted
 2. Briefly show what was deleted
-3. Ask if they want to log a corrected version (${isSpanish ? '"¿Quieres registrar la versión correcta?"' : '"Would you like to log the correct version?"'})
+3. Ask if they want to log a corrected version
 Keep it brief (max 4 lines).`;
+      } else if (todayEntries && todayEntries.length > 0) {
+        // Could not determine which entry to delete - show list
+        const entryList = todayEntries.map((e) =>
+          `${e.index}. ${e.description} (${e.calories} kcal, ${e.type === 'intake' ? 'comida' : 'actividad'})`
+        ).join('\n');
+        prompt += `The user asked to delete an entry but we couldn't determine which one. Show them today's entries and ask which one to delete.
+
+Today's entries:
+${entryList}
+
+Your response MUST:
+1. ${isSpanish ? 'Show the numbered list and ask "¿Cuál quieres que borre? (indica el número)"' : 'Show the numbered list and ask "Which one should I delete? (give the number)"'}
+Keep it brief.`;
       } else {
         prompt += `The user asked to edit/delete an entry but no entries were found for today.
 Your response MUST tell them there are no entries to modify today. Keep it brief.`;

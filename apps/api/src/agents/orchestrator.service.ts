@@ -269,19 +269,51 @@ export class OrchestratorService {
         }
       }
 
-      // Step 8e: Handle entry_edit (delete/modify last entry)
+      // Step 8e: Handle entry_edit (delete/modify entries)
       if (intent === 'entry_edit') {
-        const lastEntry = await deps.getLastCalorieEntry(request.userId);
-        if (lastEntry) {
-          await deps.deleteCalorieEntry(lastEntry.id);
-          this.logger.log(`Deleted calorie entry ${lastEntry.id} for user ${request.userId}`);
-          extractedData.deletedEntry = {
-            id: lastEntry.id,
-            description: lastEntry.description,
-            calories: lastEntry.calories,
-            items: lastEntry.items,
-            type: lastEntry.type,
-          };
+        const todayAllEntries = await deps.getTodayCalorieEntries(request.userId);
+        const lowerMsg = request.content.toLowerCase();
+
+        // Check if user wants to delete everything
+        const deleteAllPatterns = ['borra todo', 'elimina todo', 'quita todo', 'borrar todo', 'eliminar todo', 'delete all', 'remove all'];
+        const wantsDeleteAll = deleteAllPatterns.some((p) => lowerMsg.includes(p));
+
+        if (wantsDeleteAll && todayAllEntries.length > 0) {
+          // Delete all today's entries
+          for (const entry of todayAllEntries) {
+            await deps.deleteCalorieEntry(entry.id);
+          }
+          this.logger.log(`Deleted all ${todayAllEntries.length} calorie entries for user ${request.userId}`);
+          extractedData.deletedEntries = todayAllEntries.map((e) => ({
+            description: e.description,
+            calories: e.calories,
+            type: e.type,
+          }));
+          extractedData.deletedCount = todayAllEntries.length;
+        } else if (todayAllEntries.length > 0) {
+          // Try to find a specific entry by matching food keywords in the message
+          const matched = this.findMatchingEntry(lowerMsg, todayAllEntries);
+
+          if (matched) {
+            await deps.deleteCalorieEntry(matched.id);
+            this.logger.log(`Deleted calorie entry ${matched.id} (matched: "${matched.description}") for user ${request.userId}`);
+            extractedData.deletedEntry = {
+              id: matched.id,
+              description: matched.description,
+              calories: matched.calories,
+              items: matched.items,
+              type: matched.type,
+            };
+          } else {
+            // No specific match found - show list so user can pick
+            extractedData.deletedEntry = null;
+            extractedData.todayEntries = todayAllEntries.map((e, i) => ({
+              index: i + 1,
+              description: e.description,
+              calories: e.calories,
+              type: e.type,
+            }));
+          }
         } else {
           extractedData.deletedEntry = null;
           extractedData.noEntryFound = true;
@@ -433,5 +465,57 @@ export class OrchestratorService {
     );
 
     return outputs;
+  }
+
+  /**
+   * Find a calorie entry matching food keywords in the user's message.
+   * Falls back to the most recent entry if only generic delete words are used.
+   */
+  private findMatchingEntry(
+    lowerMsg: string,
+    entries: CalorieEntry[],
+  ): CalorieEntry | null {
+    // Check if user references a specific entry by number (e.g., "borra el 2", "elimina el #3")
+    const numberMatch = lowerMsg.match(/(?:el|la|#|número|numero)\s*(\d+)/);
+    if (numberMatch) {
+      const idx = parseInt(numberMatch[1], 10) - 1;
+      if (idx >= 0 && idx < entries.length) {
+        return entries[idx];
+      }
+    }
+
+    // Try to match by food keywords in the message against entry descriptions
+    // Common food words that might appear in the user's delete request
+    const foodKeywords = [
+      'café', 'cafe', 'coffee', 'desayuno', 'almuerzo', 'cena', 'merienda',
+      'pollo', 'arroz', 'huevos', 'pan', 'pasta', 'pizza', 'carne',
+      'pescado', 'ensalada', 'sopa', 'frijoles', 'tortilla', 'sandwich',
+      'fruta', 'yogurt', 'cereal', 'avena', 'tacos', 'burrito', 'empanada',
+      'galletas', 'chocolate', 'helado', 'jugo', 'licuado', 'leche',
+      'aguacate', 'atún', 'atun', 'papas', 'nueces',
+    ];
+
+    // Extract food words present in the user's message
+    const msgFoods = foodKeywords.filter((kw) => lowerMsg.includes(kw));
+
+    if (msgFoods.length > 0) {
+      // Find the most recent entry whose description contains any of the matched foods
+      // Entries are ordered by createdAt DESC (most recent first)
+      for (const entry of entries) {
+        const entryLower = entry.description.toLowerCase();
+        if (msgFoods.some((food) => entryLower.includes(food))) {
+          return entry;
+        }
+      }
+    }
+
+    // Check for "último"/"ultima"/"last" patterns - return most recent
+    const lastPatterns = ['último', 'ultimo', 'última', 'ultima', 'last', 'el de'];
+    if (lastPatterns.some((p) => lowerMsg.includes(p))) {
+      return entries[0]; // Most recent (entries are DESC)
+    }
+
+    // Default: if message is a generic delete request, delete the most recent entry
+    return entries[0];
   }
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import type { HistoryDay, WeightEntry, HistoryDayEntry } from '@nova/types';
 import { useAuthStore } from '@/store/auth.store';
@@ -69,24 +69,55 @@ function WeightChart({ data }: { data: WeightEntry[] }) {
   );
 }
 
-function EntryRow({ entry }: { entry: HistoryDayEntry }) {
+function EntryRow({ entry, onDelete }: { entry: HistoryDayEntry; onDelete?: (id: string) => void }) {
   const isIntake = entry.type === 'intake';
+  const isWhoop = entry.id.startsWith('whoop-');
+  const [confirming, setConfirming] = useState(false);
+
+  const handleDelete = async () => {
+    if (!confirming) {
+      setConfirming(true);
+      return;
+    }
+    try {
+      await api.delete(`/api/history/entries/${entry.id}`);
+      onDelete?.(entry.id);
+    } catch (err) {
+      console.error('Error deleting entry:', err);
+    }
+    setConfirming(false);
+  };
+
   return (
-    <div className="flex items-center justify-between py-2 px-3 border-b border-white/5 last:border-0">
-      <div className="flex items-center gap-2">
-        <span className={`text-xs px-2 py-0.5 rounded ${isIntake ? 'bg-green-500/20 text-green-300' : 'bg-orange-500/20 text-orange-300'}`}>
+    <div className="flex items-center justify-between py-2 px-3 border-b border-white/5 last:border-0 group">
+      <div className="flex items-center gap-2 min-w-0 flex-1">
+        <span className={`text-xs px-2 py-0.5 rounded shrink-0 ${isIntake ? 'bg-green-500/20 text-green-300' : 'bg-orange-500/20 text-orange-300'}`}>
           {isIntake ? 'ingesta' : 'quema'}
         </span>
-        <span className="text-indigo-100 text-sm">{entry.description}</span>
+        <span className="text-indigo-100 text-sm truncate">{entry.description}</span>
       </div>
-      <span className={`font-mono text-sm ${isIntake ? 'text-green-300' : 'text-orange-300'}`}>
-        {isIntake ? '+' : '-'}{entry.calories} kcal
-      </span>
+      <div className="flex items-center gap-2 shrink-0">
+        <span className={`font-mono text-sm ${isIntake ? 'text-green-300' : 'text-orange-300'}`}>
+          {isIntake ? '+' : '-'}{entry.calories} kcal
+        </span>
+        {!isWhoop && onDelete && (
+          <button
+            onClick={handleDelete}
+            className={`text-xs px-2 py-1 rounded transition-all ${
+              confirming
+                ? 'bg-red-500/30 text-red-300 border border-red-500/50'
+                : 'opacity-0 group-hover:opacity-100 text-red-400/60 hover:text-red-300 hover:bg-red-500/20'
+            }`}
+          >
+            {confirming ? 'Confirmar' : 'Borrar'}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
 
-function DayCard({ day }: { day: HistoryDay }) {
+function DayCard({ day, onEntryDeleted }: { day: HistoryDay; onEntryDeleted: () => void }) {
   const [open, setOpen] = useState(false);
   const { summary } = day;
 
@@ -124,7 +155,7 @@ function DayCard({ day }: { day: HistoryDay }) {
       {open && day.entries.length > 0 && (
         <div className="border-t border-white/10 bg-white/5">
           {day.entries.map((e) => (
-            <EntryRow key={e.id} entry={e} />
+            <EntryRow key={e.id} entry={e} onDelete={onEntryDeleted} />
           ))}
         </div>
       )}
@@ -146,7 +177,7 @@ export default function HistoryPage() {
   const [weight, setWeight] = useState<WeightEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const fetchData = useCallback(() => {
     if (!userId) return;
 
     setLoading(true);
@@ -161,6 +192,10 @@ export default function HistoryPage() {
       .catch((err) => console.error('Error fetching history:', err))
       .finally(() => setLoading(false));
   }, [days, userId]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-nova-dark via-indigo-900 to-purple-900 p-6">
@@ -202,7 +237,7 @@ export default function HistoryPage() {
             No hay registros en los últimos {days} días
           </div>
         ) : (
-          history.map((day) => <DayCard key={day.date} day={day} />)
+          history.map((day) => <DayCard key={day.date} day={day} onEntryDeleted={fetchData} />)
         )}
       </div>
     </main>
