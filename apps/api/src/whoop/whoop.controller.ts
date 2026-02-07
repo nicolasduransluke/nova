@@ -27,29 +27,17 @@ export class WhoopController {
   ) {}
 
   /**
-   * Return Whoop OAuth URL as JSON (for mobile clients)
-   */
-  @Get('auth-url')
-  @UseGuards(JwtAuthGuard)
-  getAuthUrl(@Req() req: AuthenticatedRequest) {
-    if (!this.whoopService.isConfigured()) {
-      throw new HttpException(
-        'Whoop integration not configured',
-        HttpStatus.SERVICE_UNAVAILABLE,
-      );
-    }
-
-    const state = `mobile_${req.user.sub}`;
-    const authUrl = this.whoopService.getAuthorizationUrl(state);
-    return { url: authUrl };
-  }
-
-  /**
    * Initiate Whoop OAuth flow
+   * Web: GET /api/auth/whoop (JWT in Authorization header)
+   * Mobile: GET /api/auth/whoop?token=JWT&mobile=true (JWT in query param)
    */
   @Get()
   @UseGuards(JwtAuthGuard)
-  initiateOAuth(@Req() req: AuthenticatedRequest, @Res() res: Response) {
+  initiateOAuth(
+    @Req() req: AuthenticatedRequest,
+    @Res() res: Response,
+    @Query('mobile') mobile?: string,
+  ) {
     if (!this.whoopService.isConfigured()) {
       throw new HttpException(
         'Whoop integration not configured',
@@ -57,7 +45,9 @@ export class WhoopController {
       );
     }
 
-    const state = req.user.sub; // Use userId as state for security
+    const state = mobile === 'true'
+      ? `mobile_${req.user.sub}`
+      : req.user.sub;
     const authUrl = this.whoopService.getAuthorizationUrl(state);
     res.redirect(authUrl);
   }

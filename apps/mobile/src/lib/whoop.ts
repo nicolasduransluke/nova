@@ -8,10 +8,9 @@ export async function connectWhoop(): Promise<{ success: boolean; error?: string
     return { success: false, error: 'No estás autenticado' };
   }
 
-  // Open our web page which fetches the OAuth URL and redirects to Whoop
-  // This replicates the exact web flow (web page → API → Whoop redirect)
-  const WEB_URL = 'https://nova-ebon-seven.vercel.app';
-  const connectUrl = `${WEB_URL}/auth/whoop/connect?token=${encodeURIComponent(accessToken)}`;
+  // Open the API's OAuth redirect endpoint directly (same as web flow)
+  // API validates JWT from query param, then 302 redirects to Whoop
+  const connectUrl = `${API_URL}/api/auth/whoop?token=${encodeURIComponent(accessToken)}&mobile=true`;
 
   try {
     // Opens in-app browser; returns when URL matches nova:// scheme
