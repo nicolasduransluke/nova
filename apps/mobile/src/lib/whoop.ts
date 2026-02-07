@@ -8,24 +8,14 @@ export async function connectWhoop(): Promise<{ success: boolean; error?: string
     return { success: false, error: 'No estás autenticado' };
   }
 
-  // Fetch the OAuth URL from our API (built with server-side config)
-  let authUrl: string;
-  try {
-    const urlRes = await fetch(`${API_URL}/api/auth/whoop/auth-url`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    if (!urlRes.ok) {
-      return { success: false, error: 'No se pudo obtener la URL de Whoop' };
-    }
-    const urlData = await urlRes.json();
-    authUrl = urlData.url;
-  } catch {
-    return { success: false, error: 'Error de conexión con el servidor' };
-  }
+  // Open our web page which fetches the OAuth URL and redirects to Whoop
+  // This replicates the exact web flow (web page → API → Whoop redirect)
+  const WEB_URL = 'https://nova-ebon-seven.vercel.app';
+  const connectUrl = `${WEB_URL}/auth/whoop/connect?token=${encodeURIComponent(accessToken)}`;
 
   try {
     // Opens in-app browser; returns when URL matches nova:// scheme
-    const result = await WebBrowser.openAuthSessionAsync(authUrl, 'nova://');
+    const result = await WebBrowser.openAuthSessionAsync(connectUrl, 'nova://');
 
     if (result.type !== 'success' || !result.url) {
       return { success: false, error: 'Autorización cancelada' };
