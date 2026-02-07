@@ -16,6 +16,17 @@ export default function WhoopCallback() {
 
     const code = searchParams.get('code');
     const error = searchParams.get('error');
+    const state = searchParams.get('state');
+
+    // Mobile deep link flow: web flow always sends state=userId, mobile sends no state
+    if (!state) {
+      if (code) {
+        window.location.href = `nova://whoop/callback?code=${encodeURIComponent(code)}`;
+      } else {
+        window.location.href = `nova://whoop/callback?error=${encodeURIComponent(error || 'unknown')}`;
+      }
+      return;
+    }
 
     if (error) {
       setStatus('error');
