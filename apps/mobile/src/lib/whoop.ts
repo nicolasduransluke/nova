@@ -2,33 +2,26 @@ import * as WebBrowser from 'expo-web-browser';
 import { API_URL } from '@/config/env';
 import { useAuthStore } from '@/store/auth.store';
 
-const WHOOP_CLIENT_ID = '8e820c10-a75d-4701-867f-72fd8225d967';
-const WHOOP_AUTH_URL = 'https://api.prod.whoop.com/oauth/oauth2/auth';
-const WHOOP_REDIRECT_URI = 'https://nova-ebon-seven.vercel.app/auth/whoop/callback';
-const WHOOP_SCOPES = [
-  'read:profile',
-  'read:cycles',
-  'read:recovery',
-  'read:workout',
-  'read:sleep',
-  'read:body_measurement',
-].join(' ');
-
 export async function connectWhoop(): Promise<{ success: boolean; error?: string }> {
   const accessToken = useAuthStore.getState().accessToken;
   if (!accessToken) {
     return { success: false, error: 'No estás autenticado' };
   }
 
-  // Build Whoop OAuth URL (no state param — web callback detects mobile by absence of state)
-  const params = new URLSearchParams({
-    client_id: WHOOP_CLIENT_ID,
-    redirect_uri: WHOOP_REDIRECT_URI,
-    response_type: 'code',
-    scope: WHOOP_SCOPES,
-  });
-
-  const authUrl = `${WHOOP_AUTH_URL}?${params.toString()}`;
+  // Fetch the OAuth URL from our API (built with server-side config)
+  let authUrl: string;
+  try {
+    const urlRes = await fetch(`${API_URL}/api/auth/whoop/auth-url`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!urlRes.ok) {
+      return { success: false, error: 'No se pudo obtener la URL de Whoop' };
+    }
+    const urlData = await urlRes.json();
+    authUrl = urlData.url;
+  } catch {
+    return { success: false, error: 'Error de conexión con el servidor' };
+  }
 
   try {
     // Opens in-app browser; returns when URL matches nova:// scheme

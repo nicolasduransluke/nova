@@ -5,6 +5,7 @@ import {
   Body,
   Req,
   Res,
+  Query,
   UseGuards,
   HttpException,
   HttpStatus,
@@ -24,6 +25,24 @@ export class WhoopController {
     private readonly whoopService: WhoopService,
     private readonly prisma: PrismaService,
   ) {}
+
+  /**
+   * Return Whoop OAuth URL as JSON (for mobile clients)
+   */
+  @Get('auth-url')
+  @UseGuards(JwtAuthGuard)
+  getAuthUrl(@Req() req: AuthenticatedRequest) {
+    if (!this.whoopService.isConfigured()) {
+      throw new HttpException(
+        'Whoop integration not configured',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+
+    const state = `mobile_${req.user.sub}`;
+    const authUrl = this.whoopService.getAuthorizationUrl(state);
+    return { url: authUrl };
+  }
 
   /**
    * Initiate Whoop OAuth flow
