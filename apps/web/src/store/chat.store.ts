@@ -187,6 +187,7 @@ export const useChatStore = create<ChatStore>()(
           if (data.success && data.data?.response?.message) {
             const responseData = data.data.response;
             const intent = data.data.intent;
+            console.log('[NOVA] API response:', { intent, foodItems: responseData.foodItems, keys: Object.keys(responseData) });
             addMessage({
               type: intent === 'meal_log' ? 'meal' : 'text',
               content: responseData.message,

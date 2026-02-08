@@ -81,6 +81,7 @@ Be calm, data-driven, brief. No hype language.`;
         ? items.map(item => ({ ...item, imageUrl: getFoodImageUrl(item.name) }))
         : undefined;
 
+      this.logger.debug(`[FOOD_IMAGES] items=${items.length}, foodItems=${foodItems?.length ?? 0}, sample=${JSON.stringify(foodItems?.[0])}`);
       return { message, tone, dailySummary: input.dailySummary, foodItems };
     }
 
