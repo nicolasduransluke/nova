@@ -33,7 +33,7 @@ function FoodItemCard({ item }: { item: CalorieEntryItem }) {
   const hasImage = !!item.imageUrl && !imageError;
 
   return (
-    <div className="flex items-center gap-2.5 bg-white/5 border border-white/10 rounded-xl p-2 mb-1.5">
+    <div className="flex items-center gap-2.5 bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-xl p-2 mb-1.5">
       {hasImage ? (
         <img
           src={item.imageUrl}
@@ -43,13 +43,13 @@ function FoodItemCard({ item }: { item: CalorieEntryItem }) {
           loading="lazy"
         />
       ) : (
-        <div className="w-12 h-12 rounded-lg bg-white/10 flex items-center justify-center text-xl">
+        <div className="w-12 h-12 rounded-lg bg-black/10 dark:bg-white/10 flex items-center justify-center text-xl">
           🍽️
         </div>
       )}
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-white truncate">{item.name}</p>
-        <p className="text-xs text-gray-400">~{item.calories} kcal</p>
+        <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{item.name}</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400">~{item.calories} kcal</p>
       </div>
     </div>
   );
