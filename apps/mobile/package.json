@@ -6,7 +6,10 @@
   "scripts": {
     "start": "expo start",
     "ios": "expo start --ios",
-    "android": "expo start --android"
+    "android": "expo start --android",
+    "build:ios": "eas build --platform ios --profile production",
+    "build:preview": "eas build --platform ios --profile preview",
+    "submit:ios": "eas submit --platform ios --profile production"
   },
   "dependencies": {
     "@nova/types": "*",

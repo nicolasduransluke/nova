@@ -115,6 +115,7 @@ export type CalorieEntryType = 'intake' | 'burn';
 export interface CalorieEntryItem {
   name: string;
   calories: number;
+  imageUrl?: string;
 }
 
 export interface CalorieEntry {
@@ -329,6 +330,7 @@ export interface FinalResponse {
   actionItems?: string[];
   nextSteps?: string[];
   dailySummary?: DailySummary;
+  foodItems?: CalorieEntryItem[];
 }
 
 export interface ProcessMessageRequest {

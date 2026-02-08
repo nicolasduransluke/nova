@@ -9,6 +9,7 @@ import type {
   CalorieEntryItem,
 } from '@nova/types';
 import { BaseAgent, AgentInput } from './base-agent.abstract';
+import { getFoodImageUrl } from './food-images';
 import { ClaudeClientService, ClaudeMessage } from '../claude-client/claude-client.service';
 
 export interface LastWeightLogInfo {
@@ -73,7 +74,14 @@ Be calm, data-driven, brief. No hype language.`;
     // For meal/activity logs, build response directly from data (don't rely on LLM)
     if (input.intent === 'meal_log' || input.intent === 'activity_log') {
       const message = this.buildDataResponse(input);
-      return { message, tone, dailySummary: input.dailySummary };
+      const items = this.extractItems(input);
+
+      // Enrich items with catalog images for meal_log
+      const foodItems = input.intent === 'meal_log' && items.length > 0
+        ? items.map(item => ({ ...item, imageUrl: getFoodImageUrl(item.name) }))
+        : undefined;
+
+      return { message, tone, dailySummary: input.dailySummary, foodItems };
     }
 
     // For other intents, use LLM

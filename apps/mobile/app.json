@@ -17,11 +17,23 @@
     ],
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.nova.mobile"
+      "bundleIdentifier": "com.nova.mobile",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSCameraUsageDescription": "NOVA necesita acceso a tu cámara para tomar fotos de tus comidas.",
+        "NSPhotoLibraryUsageDescription": "NOVA necesita acceso a tus fotos para seleccionar imágenes de tus comidas."
+      }
     },
     "plugins": [
       "expo-secure-store",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "NOVA necesita acceso a tus fotos para seleccionar imágenes de tus comidas.",
+          "cameraPermission": "NOVA necesita acceso a tu cámara para tomar fotos de tus comidas."
+        }
+      ]
     ]
   }
 }

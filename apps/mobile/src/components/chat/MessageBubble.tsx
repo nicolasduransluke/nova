@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
-import type { Message, MessageType } from '@nova/types';
+import type { Message, MessageType, CalorieEntryItem } from '@nova/types';
+import { FoodItemCard } from './FoodItemCard';
 import { colors } from '@/theme';
 
 function formatTime(date: Date): string {
@@ -32,6 +33,43 @@ export function MessageBubble({ message }: Props) {
   const isUser = message.sender === 'user';
   const icon = getMessageTypeIcon(message.type);
 
+  // Extract food items from metadata for meal_log responses
+  const foodItems = message.metadata?.foodItems as CalorieEntryItem[] | undefined;
+  const hasFoodCards = !isUser && foodItems && foodItems.length > 0;
+
+  // Split message text: header, items (replaced by cards), summary
+  let headerText = '';
+  let summaryText = '';
+
+  if (hasFoodCards && message.content) {
+    const lines = message.content.split('\n');
+    const headerLines: string[] = [];
+    const summaryLines: string[] = [];
+    let pastItems = false;
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      // Food item lines start with "- " — we replace these with cards
+      if (trimmed.startsWith('- ') && !pastItems) continue;
+
+      if (trimmed.startsWith('Total:') || trimmed.startsWith('Total quemado:') ||
+          trimmed.startsWith('Hoy:') || trimmed.startsWith('Today:')) {
+        pastItems = true;
+      }
+
+      if (pastItems) {
+        summaryLines.push(trimmed);
+      } else {
+        headerLines.push(trimmed);
+      }
+    }
+
+    headerText = headerLines.join('\n');
+    summaryText = summaryLines.join('\n');
+  }
+
   return (
     <View style={[styles.row, isUser ? styles.rowRight : styles.rowLeft]}>
       <View style={[styles.bubble, isUser ? styles.userBubble : styles.agentBubble]}>
@@ -45,7 +83,27 @@ export function MessageBubble({ message }: Props) {
           />
         )}
 
-        {message.content ? (
+        {hasFoodCards ? (
+          <>
+            {headerText ? (
+              <Text style={[styles.content, styles.agentText, styles.headerLabel]}>
+                {headerText}
+              </Text>
+            ) : null}
+
+            <View style={styles.foodCardsContainer}>
+              {foodItems.map((item, index) => (
+                <FoodItemCard key={`${item.name}-${index}`} item={item} />
+              ))}
+            </View>
+
+            {summaryText ? (
+              <Text style={[styles.content, styles.agentText, styles.summaryText]}>
+                {summaryText}
+              </Text>
+            ) : null}
+          </>
+        ) : message.content ? (
           <Text style={[styles.content, isUser ? styles.userText : styles.agentText]}>
             {message.content}
           </Text>
@@ -113,5 +171,19 @@ const styles = StyleSheet.create({
   },
   agentTime: {
     color: colors.text.dimmed,
+  },
+  foodCardsContainer: {
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  headerLabel: {
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  summaryText: {
+    marginTop: 4,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.text.muted,
   },
 });
