@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
 import type { Message, MessageType, CalorieEntryItem } from '@nova/types';
 import { FoodItemCard } from './FoodItemCard';
+import { parseFoodItemsFromText } from '@/lib/food-images';
 import { colors } from '@/theme';
 
 function formatTime(date: Date): string {
@@ -33,8 +34,13 @@ export function MessageBubble({ message }: Props) {
   const isUser = message.sender === 'user';
   const icon = getMessageTypeIcon(message.type);
 
-  // Extract food items from metadata for meal_log responses
-  const foodItems = message.metadata?.foodItems as CalorieEntryItem[] | undefined;
+  // Extract food items from metadata, or parse from text as fallback
+  const apiFoodItems = message.metadata?.foodItems as CalorieEntryItem[] | undefined;
+  const parsedFoodItems = useMemo(
+    () => (!apiFoodItems && !isUser && message.content) ? parseFoodItemsFromText(message.content) : undefined,
+    [apiFoodItems, isUser, message.content],
+  );
+  const foodItems = apiFoodItems || parsedFoodItems;
   const hasFoodCards = !isUser && foodItems && foodItems.length > 0;
 
   // Split message text: header, items (replaced by cards), summary

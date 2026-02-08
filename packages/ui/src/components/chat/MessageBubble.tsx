@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import type { Message, MessageType, CalorieEntryItem } from '@nova/types';
+import { parseFoodItemsFromText } from '../../lib/food-images';
 
 export interface MessageBubbleProps {
   message: Message;
@@ -58,8 +59,13 @@ export function MessageBubble({ message, showTimestamp = true }: MessageBubblePr
   const isUser = message.sender === 'user';
   const icon = getMessageTypeIcon(message.type);
 
-  // Extract food items from metadata for meal_log responses
-  const foodItems = message.metadata?.foodItems as CalorieEntryItem[] | undefined;
+  // Extract food items from metadata, or parse from text as fallback
+  const apiFoodItems = message.metadata?.foodItems as CalorieEntryItem[] | undefined;
+  const parsedFoodItems = useMemo(
+    () => (!apiFoodItems && !isUser && message.content) ? parseFoodItemsFromText(message.content) : undefined,
+    [apiFoodItems, isUser, message.content],
+  );
+  const foodItems = apiFoodItems || parsedFoodItems;
   const hasFoodCards = !isUser && foodItems && foodItems.length > 0;
 
   // Split message text: header, items (replaced by cards), summary
