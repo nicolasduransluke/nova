@@ -3,14 +3,16 @@ import { API_URL } from '@/config/env';
 import { useAuthStore } from '@/store/auth.store';
 
 export async function connectWhoop(): Promise<{ success: boolean; error?: string }> {
+  // Refresh token to ensure it's fresh before putting it in a URL
+  await useAuthStore.getState().refreshTokens();
   const accessToken = useAuthStore.getState().accessToken;
   if (!accessToken) {
     return { success: false, error: 'No estás autenticado' };
   }
 
-  // Open the API's OAuth redirect endpoint directly (same as web flow)
-  // API validates JWT from query param, then 302 redirects to Whoop
-  const connectUrl = `${API_URL}/api/auth/whoop?token=${encodeURIComponent(accessToken)}&mobile=true`;
+  // Open our web page which builds the OAuth URL and redirects to Whoop
+  const WEB_URL = 'https://nova-ebon-seven.vercel.app';
+  const connectUrl = `${WEB_URL}/auth/whoop/connect?token=${encodeURIComponent(accessToken)}`;
 
   try {
     // Opens in-app browser; returns when URL matches nova:// scheme
@@ -33,12 +35,16 @@ export async function connectWhoop(): Promise<{ success: boolean; error?: string
       return { success: false, error: 'No se recibió código de autorización' };
     }
 
+    // Refresh again in case token expired during the OAuth flow
+    await useAuthStore.getState().refreshTokens();
+    const freshToken = useAuthStore.getState().accessToken;
+
     // Exchange code via our API
     const response = await fetch(`${API_URL}/api/auth/whoop/callback`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
+        Authorization: `Bearer ${freshToken}`,
       },
       body: JSON.stringify({ code }),
     });

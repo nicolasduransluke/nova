@@ -3,6 +3,11 @@
 import { useEffect, useState, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 
+const WHOOP_CLIENT_ID = '8e820c10-a75d-4701-867f-72fd8225d967';
+const WHOOP_AUTH_URL = 'https://api.prod.whoop.com/oauth/oauth2/auth';
+const WHOOP_REDIRECT_URI = 'https://nova-ebon-seven.vercel.app/auth/whoop/callback';
+const WHOOP_SCOPES = 'read:profile read:cycles read:recovery read:workout read:sleep read:body_measurement';
+
 export default function WhoopConnect() {
   const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
@@ -18,23 +23,24 @@ export default function WhoopConnect() {
       return;
     }
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    // Decode JWT to get userId for state (no verification needed - API verifies later)
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      const state = `mobile_${payload.sub}`;
 
-    // Fetch the Whoop OAuth URL from our API, then redirect
-    fetch(`${apiUrl}/api/auth/whoop/auth-url`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error('Failed to get auth URL');
-        return res.json();
-      })
-      .then((data) => {
-        // Navigate to Whoop OAuth (same as web flow redirect)
-        window.location.href = data.url;
-      })
-      .catch(() => {
-        setError('Error al conectar con el servidor');
+      const params = new URLSearchParams({
+        client_id: WHOOP_CLIENT_ID,
+        redirect_uri: WHOOP_REDIRECT_URI,
+        response_type: 'code',
+        scope: WHOOP_SCOPES,
+        state,
       });
+
+      // Redirect to Whoop OAuth (from our web domain, like the web flow)
+      window.location.href = `${WHOOP_AUTH_URL}?${params.toString()}`;
+    } catch {
+      setError('Token inválido');
+    }
   }, [searchParams]);
 
   return (
