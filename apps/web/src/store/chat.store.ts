@@ -157,13 +157,19 @@ export const useChatStore = create<ChatStore>()(
               setAgentTyping(false);
 
               if (retryData.success && retryData.data?.response?.message) {
+                const retryResponse = retryData.data.response;
+                const retryIntent = retryData.data.intent;
                 addMessage({
-                  type: 'text',
-                  content: retryData.data.response.message,
+                  type: retryIntent === 'meal_log' ? 'meal' : 'text',
+                  content: retryResponse.message,
                   sender: 'agent',
+                  metadata: {
+                    ...(retryResponse.foodItems ? { foodItems: retryResponse.foodItems } : {}),
+                    ...(retryIntent ? { intent: retryIntent } : {}),
+                  },
                 });
-                if (retryData.data.response.dailySummary) {
-                  set({ dailySummary: retryData.data.response.dailySummary });
+                if (retryResponse.dailySummary) {
+                  set({ dailySummary: retryResponse.dailySummary });
                 }
                 return;
               }
@@ -179,15 +185,21 @@ export const useChatStore = create<ChatStore>()(
           setAgentTyping(false);
 
           if (data.success && data.data?.response?.message) {
+            const responseData = data.data.response;
+            const intent = data.data.intent;
             addMessage({
-              type: 'text',
-              content: data.data.response.message,
+              type: intent === 'meal_log' ? 'meal' : 'text',
+              content: responseData.message,
               sender: 'agent',
+              metadata: {
+                ...(responseData.foodItems ? { foodItems: responseData.foodItems } : {}),
+                ...(intent ? { intent } : {}),
+              },
             });
 
             // Update daily summary from response
-            if (data.data.response.dailySummary) {
-              set({ dailySummary: data.data.response.dailySummary });
+            if (responseData.dailySummary) {
+              set({ dailySummary: responseData.dailySummary });
             }
           } else {
             addMessage({

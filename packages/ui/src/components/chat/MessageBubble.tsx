@@ -1,5 +1,5 @@
-import React from 'react';
-import type { Message, MessageType } from '@nova/types';
+import React, { useState } from 'react';
+import type { Message, MessageType, CalorieEntryItem } from '@nova/types';
 
 export interface MessageBubbleProps {
   message: Message;
@@ -27,9 +27,69 @@ function getMessageTypeIcon(type: MessageType): string | null {
   return icons[type];
 }
 
+function FoodItemCard({ item }: { item: CalorieEntryItem }) {
+  const [imageError, setImageError] = useState(false);
+  const hasImage = !!item.imageUrl && !imageError;
+
+  return (
+    <div className="flex items-center gap-2.5 bg-white/5 border border-white/10 rounded-xl p-2 mb-1.5">
+      {hasImage ? (
+        <img
+          src={item.imageUrl}
+          alt={item.name}
+          className="w-12 h-12 rounded-lg object-cover"
+          onError={() => setImageError(true)}
+          loading="lazy"
+        />
+      ) : (
+        <div className="w-12 h-12 rounded-lg bg-white/10 flex items-center justify-center text-xl">
+          🍽️
+        </div>
+      )}
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-white truncate">{item.name}</p>
+        <p className="text-xs text-gray-400">~{item.calories} kcal</p>
+      </div>
+    </div>
+  );
+}
+
 export function MessageBubble({ message, showTimestamp = true }: MessageBubbleProps) {
   const isUser = message.sender === 'user';
   const icon = getMessageTypeIcon(message.type);
+
+  // Extract food items from metadata for meal_log responses
+  const foodItems = message.metadata?.foodItems as CalorieEntryItem[] | undefined;
+  const hasFoodCards = !isUser && foodItems && foodItems.length > 0;
+
+  // Split message text: header, items (replaced by cards), summary
+  let headerText = '';
+  let summaryText = '';
+
+  if (hasFoodCards && message.content) {
+    const lines = message.content.split('\n');
+    const headerLines: string[] = [];
+    const summaryLines: string[] = [];
+    let pastItems = false;
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      if (trimmed.startsWith('- ') && !pastItems) continue;
+      if (trimmed.startsWith('Total:') || trimmed.startsWith('Total quemado:') ||
+          trimmed.startsWith('Hoy:') || trimmed.startsWith('Today:')) {
+        pastItems = true;
+      }
+      if (pastItems) {
+        summaryLines.push(trimmed);
+      } else {
+        headerLines.push(trimmed);
+      }
+    }
+
+    headerText = headerLines.join('\n');
+    summaryText = summaryLines.join('\n');
+  }
 
   return (
     <div
@@ -62,11 +122,31 @@ export function MessageBubble({ message, showTimestamp = true }: MessageBubblePr
           </div>
         )}
 
-        {message.content && (
+        {hasFoodCards ? (
+          <>
+            {headerText && (
+              <p className="text-sm sm:text-base font-semibold mb-1.5 whitespace-pre-wrap">
+                {headerText}
+              </p>
+            )}
+
+            <div className="my-1.5">
+              {foodItems.map((item, index) => (
+                <FoodItemCard key={`${item.name}-${index}`} item={item} />
+              ))}
+            </div>
+
+            {summaryText && (
+              <p className="text-xs sm:text-sm text-gray-400 mt-1.5 whitespace-pre-wrap">
+                {summaryText}
+              </p>
+            )}
+          </>
+        ) : message.content ? (
           <p className="text-sm sm:text-base leading-relaxed whitespace-pre-wrap break-words">
             {message.content}
           </p>
-        )}
+        ) : null}
 
         {showTimestamp && (
           <p
