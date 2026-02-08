@@ -49,6 +49,19 @@ export class HistoryService {
             try {
               const newTokens = await this.whoopService.refreshTokens(metadata.whoop.refreshToken);
               accessToken = newTokens.access_token;
+
+              // Persist new tokens so refresh token stays valid
+              metadata.whoop = {
+                ...metadata.whoop,
+                accessToken: newTokens.access_token,
+                refreshToken: newTokens.refresh_token,
+                expiresAt: Date.now() + newTokens.expires_in * 1000,
+              };
+              await this.prisma.user.update({
+                where: { id: userId },
+                data: { metadata: metadata as any },
+              });
+              this.logger.debug('Whoop token refreshed and persisted (history)');
             } catch {
               this.logger.warn('Failed to refresh Whoop token for history');
             }

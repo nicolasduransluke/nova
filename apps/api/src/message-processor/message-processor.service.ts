@@ -281,6 +281,13 @@ export class MessageProcessorService {
           : JSON.stringify(user.metadata);
       },
 
+      updateUserMetadata: async (userId: string, metadata: Record<string, any>): Promise<void> => {
+        await this.prisma.user.update({
+          where: { id: userId },
+          data: { metadata: metadata as any },
+        });
+      },
+
       deleteCalorieEntry: async (entryId: string): Promise<void> => {
         await this.prisma.calorieEntry.delete({
           where: { id: entryId },

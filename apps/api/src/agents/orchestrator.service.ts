@@ -49,6 +49,7 @@ export interface OrchestratorDependencies {
     targetWeeks?: number;
   }) => Promise<Profile>;
   getUserMetadata: (userId: string) => Promise<string | null>;
+  updateUserMetadata: (userId: string, metadata: Record<string, any>) => Promise<void>;
   deleteCalorieEntry: (entryId: string) => Promise<void>;
   getLastCalorieEntry: (userId: string) => Promise<CalorieEntry | null>;
 }
@@ -216,11 +217,7 @@ export class OrchestratorService {
       }
 
       // Step 8c: Handle profile_setup (new user providing their info via chat)
-      console.log('=== CHECKING PROFILE_SETUP ===');
-      console.log('Intent:', intent);
-      console.log('Is profile_setup?', intent === 'profile_setup');
       if (intent === 'profile_setup') {
-        console.log('=== PROFILE_SETUP HANDLER ENTERED ===');
         this.logger.log(`PROFILE_SETUP intent detected. Extracted data: ${JSON.stringify(extractedData)}`);
         const weight = extractedData.weight as number | null;
         const height = extractedData.height as number | null;
@@ -345,7 +342,16 @@ export class OrchestratorService {
               try {
                 const newTokens = await this.whoopService.refreshTokens(metadata.whoop.refreshToken);
                 accessToken = newTokens.access_token;
-                this.logger.debug('Whoop token refreshed successfully');
+
+                // Persist new tokens so refresh token stays valid
+                metadata.whoop = {
+                  ...metadata.whoop,
+                  accessToken: newTokens.access_token,
+                  refreshToken: newTokens.refresh_token,
+                  expiresAt: Date.now() + newTokens.expires_in * 1000,
+                };
+                await deps.updateUserMetadata(request.userId, metadata);
+                this.logger.debug('Whoop token refreshed and persisted');
               } catch {
                 this.logger.warn('Failed to refresh Whoop token');
               }
