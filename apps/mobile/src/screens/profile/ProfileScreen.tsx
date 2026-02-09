@@ -15,6 +15,7 @@ import { useProfileStore } from '@/store/profile.store';
 import { StatCard } from '@/components/profile/StatCard';
 import { EditProfileForm } from '@/components/profile/EditProfileForm';
 import { GlassCard } from '@/components/common/GlassCard';
+import { AccountHeader } from '@/components/profile/AccountHeader';
 import { colors } from '@/theme';
 import { connectWhoop, getWhoopStatus, disconnectWhoop } from '@/lib/whoop';
 
@@ -140,6 +141,15 @@ export default function ProfileScreen() {
       >
         {profile ? (
           <>
+            {/* Account */}
+            {user && (
+              <AccountHeader
+                name={user.name}
+                email={user.email}
+                provider={user.provider}
+              />
+            )}
+
             {/* Stats */}
             <View style={styles.statsRow}>
               <StatCard label="Peso actual" value={profile.weight} unit="kg" />

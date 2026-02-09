@@ -203,6 +203,7 @@ export default function ChatPage() {
           onUpdate={handleUpdateProfile}
           onClose={handleCloseProfile}
           isLoading={profileLoading}
+          user={user}
         />
       )}
     </div>
