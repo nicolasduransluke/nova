@@ -9,7 +9,6 @@ dist
 *.db-journal
 coverage
 *.log
-*.md
 .turbo
 .vscode
 .idea
@@ -18,4 +17,7 @@ coverage
 **/test/
 apps/web/.next
 apps/web/out
-apps/mobile
+apps/mobile/ios
+apps/mobile/android
+apps/mobile/.expo
+apps/mobile/node_modules
