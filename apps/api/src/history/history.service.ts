@@ -94,6 +94,13 @@ export class HistoryService {
       grouped.get(dateKey)!.push(entry);
     }
 
+    // DEBUG: Log date key comparison
+    const foodDateKeys = Array.from(grouped.keys());
+    const whoopDateKeys = Array.from(whoopCaloriesByDate.keys());
+    this.logger.debug(`Food entry date keys: ${JSON.stringify(foodDateKeys)}`);
+    this.logger.debug(`Whoop date keys: ${JSON.stringify(whoopDateKeys)}`);
+    this.logger.debug(`Sample food entry raw dates: ${entries.slice(0, 3).map(e => `${e.date.toISOString()} -> ${this.toLocalDateKey(e.date)}`).join(', ')}`);
+
     // NOTE: Do NOT add days that only have Whoop data but no manual entries.
     // Showing Whoop burn with 0 intake creates misleading huge deficits.
 
