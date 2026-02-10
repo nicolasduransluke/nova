@@ -42,6 +42,7 @@ export class HistoryService {
       if (user?.metadata) {
         const metadata = (user.metadata ?? {}) as Record<string, any>;
         if (metadata.whoop?.accessToken) {
+          this.logger.debug(`Whoop found in metadata, expiresAt: ${metadata.whoop.expiresAt}, now: ${Date.now()}, expired: ${metadata.whoop.expiresAt && Date.now() > metadata.whoop.expiresAt}`);
           let accessToken = metadata.whoop.accessToken;
 
           // Refresh token if expired

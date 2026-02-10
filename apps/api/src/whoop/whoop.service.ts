@@ -316,12 +316,14 @@ export class WhoopService {
     );
 
     if (!response.ok) {
-      this.logger.error(`Failed to get cycles: ${response.statusText}`);
+      const body = await response.text().catch(() => '');
+      this.logger.error(`Failed to get cycles: ${response.status} ${response.statusText} - ${body}`);
       return new Map();
     }
 
     const data = await response.json();
     const records = data.records || [];
+    this.logger.debug(`Whoop getCyclesForRange: ${records.length} records from ${start} to ${end}`);
 
     // Map date -> calories burned
     const caloriesByDate = new Map<string, number>();
@@ -333,6 +335,7 @@ export class WhoopService {
       }
     }
 
+    this.logger.debug(`Whoop calories by date: ${JSON.stringify(Object.fromEntries(caloriesByDate))}`);
     return caloriesByDate;
   }
 
