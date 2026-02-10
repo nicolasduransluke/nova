@@ -178,6 +178,9 @@ export class HistoryService {
     // Sort descending by date
     result.sort((a, b) => b.date.localeCompare(a.date));
 
+    // DEBUG: Log final response summary
+    this.logger.debug(`History response: ${result.map(r => `${r.date}: intake=${r.summary.intake}, burn=${r.summary.burn}, source=${r.summary.burnSource}`).join(' | ')}`);
+
     return result;
   }
 
