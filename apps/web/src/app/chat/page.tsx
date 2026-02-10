@@ -122,9 +122,13 @@ export default function ChatPage() {
     async (updates: Parameters<typeof updateProfile>[1]) => {
       if (userId) {
         await updateProfile(userId, updates);
+        // Reload weight logs so the stat card reflects any weight change
+        if ('weight' in updates) {
+          await loadWeightLogs(userId);
+        }
       }
     },
-    [userId, updateProfile]
+    [userId, updateProfile, loadWeightLogs]
   );
 
   const handleHistory = useCallback(() => {

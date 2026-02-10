@@ -131,7 +131,8 @@ export function UserProfile({
   };
 
   const tdee = calculateTDEE();
-  const displayWeight = currentWeight ?? profile?.weight;
+  // Prefer profile.weight (updated via form) over currentWeight (from stale daily summary/weight logs)
+  const displayWeight = profile?.weight ?? currentWeight;
   const remaining = displayWeight && profile?.goalWeight
     ? (displayWeight - profile.goalWeight).toFixed(1)
     : null;
