@@ -305,36 +305,50 @@ export class WhoopService {
   ): Promise<Map<string, number>> {
     const start = startDate.toISOString();
     const end = endDate.toISOString();
+    const caloriesByDate = new Map<string, number>();
 
-    const response = await fetch(
-      `${this.baseUrl}/cycle?start=${start}&end=${end}`,
-      {
+    // Whoop API paginates with default limit=10, so we must follow next_token
+    let nextToken: string | null = null;
+    let totalRecords = 0;
+
+    do {
+      const url = new URL(`${this.baseUrl}/cycle`);
+      url.searchParams.set('start', start);
+      url.searchParams.set('end', end);
+      url.searchParams.set('limit', '50');
+      if (nextToken) url.searchParams.set('nextToken', nextToken);
+
+      const response = await fetch(url.toString(), {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
-      },
-    );
+      });
 
-    if (!response.ok) {
-      const body = await response.text().catch(() => '');
-      this.logger.error(`Failed to get cycles: ${response.status} ${response.statusText} - ${body}`);
-      return new Map();
-    }
-
-    const data = await response.json();
-    const records = data.records || [];
-    this.logger.debug(`Whoop getCyclesForRange: ${records.length} records from ${start} to ${end}`);
-
-    // Map date -> calories burned
-    const caloriesByDate = new Map<string, number>();
-    for (const cycle of records) {
-      if (cycle.score?.kilojoule) {
-        const dateKey = cycle.start.split('T')[0];
-        const calories = Math.round(cycle.score.kilojoule * 0.239);
-        caloriesByDate.set(dateKey, calories);
+      if (!response.ok) {
+        const body = await response.text().catch(() => '');
+        this.logger.error(`Failed to get cycles: ${response.status} ${response.statusText} - ${body}`);
+        return caloriesByDate;
       }
-    }
 
+      const data = await response.json();
+      const records = data.records || [];
+      totalRecords += records.length;
+
+      for (const cycle of records) {
+        if (cycle.score?.kilojoule) {
+          const dateKey = cycle.start.split('T')[0];
+          const calories = Math.round(cycle.score.kilojoule * 0.239);
+          caloriesByDate.set(dateKey, calories);
+          this.logger.debug(`Whoop cycle: start=${cycle.start}, dateKey=${dateKey}, kJ=${cycle.score.kilojoule}, cal=${calories}`);
+        } else {
+          this.logger.debug(`Whoop cycle skipped: start=${cycle.start}, score_state=${cycle.score_state}, score=${JSON.stringify(cycle.score)}`);
+        }
+      }
+
+      nextToken = data.next_token || null;
+    } while (nextToken);
+
+    this.logger.debug(`Whoop getCyclesForRange: ${totalRecords} total records, ${caloriesByDate.size} with calories, from ${start} to ${end}`);
     this.logger.debug(`Whoop calories by date: ${JSON.stringify(Object.fromEntries(caloriesByDate))}`);
     return caloriesByDate;
   }
