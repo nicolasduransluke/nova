@@ -127,8 +127,9 @@ export function UserProfile({
   };
 
   const tdee = calculateTDEE();
-  const remaining = currentWeight && profile?.goalWeight
-    ? (currentWeight - profile.goalWeight).toFixed(1)
+  const displayWeight = currentWeight ?? profile?.weight;
+  const remaining = displayWeight && profile?.goalWeight
+    ? (displayWeight - profile.goalWeight).toFixed(1)
     : null;
 
   if (!profile) {
@@ -213,7 +214,7 @@ export function UserProfile({
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4 text-center">
               <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                {currentWeight ?? profile.weight} kg
+                {displayWeight ?? profile.weight} kg
               </p>
               <p className="text-xs text-gray-500 dark:text-gray-400">Peso actual</p>
             </div>
@@ -226,7 +227,7 @@ export function UserProfile({
           </div>
 
           {/* Weight Goal Progress */}
-          {profile.goalWeight && currentWeight && (
+          {profile.goalWeight && displayWeight && (
             <div className="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-xl p-4 text-white">
               <div className="flex justify-between items-center mb-2">
                 <span className="text-sm opacity-90">Meta de peso</span>
