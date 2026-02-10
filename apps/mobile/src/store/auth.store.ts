@@ -5,6 +5,8 @@ import { secureStorage } from '@/lib/storage';
 import { API_URL } from '@/config/env';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useProfileStore } from '@/store/profile.store';
+import { useChatStore } from '@/store/chat.store';
+import * as WebBrowser from 'expo-web-browser';
 
 export interface AuthState {
   user: User | null;
@@ -18,7 +20,7 @@ export interface AuthState {
 export interface AuthActions {
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   refreshTokens: () => Promise<boolean>;
   forgotPassword: (email: string) => Promise<{ message: string }>;
   resetPassword: (token: string, password: string) => Promise<void>;
@@ -27,11 +29,15 @@ export interface AuthActions {
   setError: (error: string | null) => void;
   clearAuth: () => void;
   handleOAuthCallback: (accessToken: string, refreshToken: string) => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
 }
 
 export type AuthStore = AuthState & AuthActions;
 
 const clearUserData = async () => {
+  // Clear in-memory stores first, then AsyncStorage
+  useChatStore.getState().clearMessages();
+  useProfileStore.getState().clearProfile();
   await AsyncStorage.multiRemove(['nova-chat-storage', 'nova-profile-storage']).catch(() => {});
 };
 
@@ -117,7 +123,7 @@ export const useAuthStore = create<AuthStore>()(
         }
       },
 
-      logout: () => {
+      logout: async () => {
         const { accessToken } = get();
 
         if (accessToken) {
@@ -130,8 +136,7 @@ export const useAuthStore = create<AuthStore>()(
           }).catch(() => {});
         }
 
-        clearUserData();
-        useProfileStore.getState().clearProfile();
+        await clearUserData();
         set({
           user: null,
           accessToken: null,
@@ -272,6 +277,40 @@ export const useAuthStore = create<AuthStore>()(
           }
         } catch {
           set({ isLoading: false });
+        }
+      },
+
+      loginWithGoogle: async () => {
+        set({ isLoading: true, error: null });
+        await clearUserData();
+
+        try {
+          const WEB_URL = 'https://nova-ebon-seven.vercel.app';
+          const result = await WebBrowser.openAuthSessionAsync(
+            `${WEB_URL}/auth/google/connect`,
+            'nova://',
+          );
+
+          if (result.type !== 'success' || !result.url) {
+            set({ isLoading: false });
+            return;
+          }
+
+          const url = new URL(result.url);
+          const accessToken = url.searchParams.get('accessToken');
+          const refreshToken = url.searchParams.get('refreshToken');
+
+          if (!accessToken || !refreshToken) {
+            set({ isLoading: false, error: 'No se recibieron tokens de autenticación' });
+            return;
+          }
+
+          await get().handleOAuthCallback(accessToken, refreshToken);
+        } catch (error) {
+          set({
+            isLoading: false,
+            error: error instanceof Error ? error.message : 'Error al iniciar sesión con Google',
+          });
         }
       },
     }),

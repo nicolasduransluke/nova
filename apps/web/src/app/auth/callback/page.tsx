@@ -14,6 +14,14 @@ function OAuthCallbackHandler() {
     const refreshToken = searchParams.get('refreshToken');
 
     if (accessToken && refreshToken) {
+      // Check if this OAuth flow was initiated from the mobile app
+      const isMobile = localStorage.getItem('oauth_mobile') === 'true';
+      if (isMobile) {
+        localStorage.removeItem('oauth_mobile');
+        window.location.href = `nova://callback?accessToken=${encodeURIComponent(accessToken)}&refreshToken=${encodeURIComponent(refreshToken)}`;
+        return;
+      }
+
       handleOAuthCallback(accessToken, refreshToken).then(() => {
         router.push('/');
       });

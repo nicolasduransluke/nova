@@ -22,7 +22,7 @@ type Nav = NativeStackNavigationProp<AuthStackParamList, 'Login'>;
 
 export default function LoginScreen() {
   const navigation = useNavigation<Nav>();
-  const { login, isLoading, error, setError } = useAuthStore();
+  const { login, loginWithGoogle, isLoading, error, setError } = useAuthStore();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -108,6 +108,15 @@ export default function LoginScreen() {
               <View style={styles.dividerLine} />
             </View>
 
+            <Pressable
+              style={styles.googleButton}
+              onPress={loginWithGoogle}
+              disabled={isLoading}
+            >
+              <Text style={styles.googleIcon}>G</Text>
+              <Text style={styles.googleText}>Continuar con Google</Text>
+            </Pressable>
+
             <View style={styles.registerContainer}>
               <Text style={styles.registerText}>¿No tienes cuenta? </Text>
               <Pressable onPress={() => navigation.navigate('Register')}>
@@ -185,6 +194,26 @@ const styles = StyleSheet.create({
     color: colors.text.muted,
     marginHorizontal: 12,
     fontSize: 14,
+  },
+  googleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    paddingVertical: 14,
+    marginBottom: 20,
+  },
+  googleIcon: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#4285F4',
+    marginRight: 10,
+  },
+  googleText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1f1f1f',
   },
   registerContainer: {
     flexDirection: 'row',

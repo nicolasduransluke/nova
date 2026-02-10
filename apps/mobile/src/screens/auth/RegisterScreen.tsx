@@ -22,7 +22,7 @@ type Nav = NativeStackNavigationProp<AuthStackParamList, 'Register'>;
 
 export default function RegisterScreen() {
   const navigation = useNavigation<Nav>();
-  const { register, isLoading, error, setError } = useAuthStore();
+  const { register, loginWithGoogle, isLoading, error, setError } = useAuthStore();
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -121,6 +121,21 @@ export default function RegisterScreen() {
               disabled={!name.trim() || !email.trim() || !password.trim() || !confirmPassword.trim()}
             />
 
+            <View style={styles.divider}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>o</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            <Pressable
+              style={styles.googleButton}
+              onPress={loginWithGoogle}
+              disabled={isLoading}
+            >
+              <Text style={styles.googleIcon}>G</Text>
+              <Text style={styles.googleText}>Continuar con Google</Text>
+            </Pressable>
+
             <View style={styles.loginContainer}>
               <Text style={styles.loginText}>¿Ya tienes cuenta? </Text>
               <Pressable onPress={() => navigation.navigate('Login')}>
@@ -170,10 +185,44 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
   },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.glass.border,
+  },
+  dividerText: {
+    color: colors.text.muted,
+    marginHorizontal: 12,
+    fontSize: 14,
+  },
+  googleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    paddingVertical: 14,
+    marginBottom: 20,
+  },
+  googleIcon: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#4285F4',
+    marginRight: 10,
+  },
+  googleText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1f1f1f',
+  },
   loginContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 20,
   },
   loginText: {
     color: colors.text.secondary,
