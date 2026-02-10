@@ -88,7 +88,7 @@ export default function ChatPage() {
       });
       if (res.ok) {
         const data = await res.json();
-        setWhoopConnected(data.data?.connected ?? false);
+        setWhoopConnected(data.connected ?? data.data?.connected ?? false);
       }
     } catch {}
   }, [API_URL]);
