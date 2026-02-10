@@ -26,6 +26,8 @@ export interface UserProfileProps {
   onClose: () => void;
   isLoading?: boolean;
   user?: { name: string; email: string; provider: string } | null;
+  whoopConnected?: boolean;
+  onDisconnectWhoop?: () => void;
 }
 
 const activityLevelLabels: Record<ActivityLevel, string> = {
@@ -45,6 +47,8 @@ export function UserProfile({
   onClose,
   isLoading = false,
   user,
+  whoopConnected = false,
+  onDisconnectWhoop,
 }: UserProfileProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
@@ -437,28 +441,38 @@ export function UserProfile({
                 </div>
                 <div>
                   <p className="text-sm font-medium text-gray-900 dark:text-white">Whoop</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Sincroniza calorías quemadas</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {whoopConnected ? 'Conectado' : 'Sincroniza calorías quemadas'}
+                  </p>
                 </div>
               </div>
-              <button
-                onClick={() => {
-                  const whoopClientId = '8e820c10-a75d-4701-867f-72fd8225d967';
-                  // Use localhost for development, production URL for deployed app
-                  const isLocalhost = typeof window !== 'undefined' && window.location.hostname === 'localhost';
-                  const redirectUri = encodeURIComponent(
-                    isLocalhost
-                      ? 'http://localhost:3000/auth/whoop/callback'
-                      : 'https://nova-ebon-seven.vercel.app/auth/whoop/callback'
-                  );
-                  const scopes = encodeURIComponent('read:profile read:cycles read:recovery read:workout read:body_measurement offline');
-                  const state = Math.random().toString(36).substring(2, 10); // 8 chars required
-                  const authUrl = `https://api.prod.whoop.com/oauth/oauth2/auth?client_id=${whoopClientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scopes}&state=${state}`;
-                  window.location.href = authUrl;
-                }}
-                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors"
-              >
-                Conectar
-              </button>
+              {whoopConnected ? (
+                <button
+                  onClick={onDisconnectWhoop}
+                  className="px-3 py-1.5 border border-red-300 dark:border-red-500/30 text-red-500 text-sm font-medium rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
+                >
+                  Desconectar
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    const whoopClientId = '8e820c10-a75d-4701-867f-72fd8225d967';
+                    const isLocalhost = typeof window !== 'undefined' && window.location.hostname === 'localhost';
+                    const redirectUri = encodeURIComponent(
+                      isLocalhost
+                        ? 'http://localhost:3000/auth/whoop/callback'
+                        : 'https://nova-ebon-seven.vercel.app/auth/whoop/callback'
+                    );
+                    const scopes = encodeURIComponent('read:profile read:cycles read:recovery read:workout read:body_measurement offline');
+                    const state = Math.random().toString(36).substring(2, 10);
+                    const authUrl = `https://api.prod.whoop.com/oauth/oauth2/auth?client_id=${whoopClientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scopes}&state=${state}`;
+                    window.location.href = authUrl;
+                  }}
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors"
+                >
+                  Conectar
+                </button>
+              )}
             </div>
           </div>
 

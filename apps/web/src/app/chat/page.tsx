@@ -18,6 +18,7 @@ export default function ChatPage() {
   const [showSummary, setShowSummary] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [checkingOnboarding, setCheckingOnboarding] = useState(true);
+  const [whoopConnected, setWhoopConnected] = useState(false);
 
   const { user, logout } = useAuthStore();
   const userId = user?.id;
@@ -76,13 +77,42 @@ export default function ChatPage() {
     setShowSummary((prev) => !prev);
   }, []);
 
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
+  const checkWhoopStatus = useCallback(async () => {
+    const token = useAuthStore.getState().accessToken;
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_URL}/api/auth/whoop/status`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setWhoopConnected(data.data?.connected ?? false);
+      }
+    } catch {}
+  }, [API_URL]);
+
+  const handleDisconnectWhoop = useCallback(async () => {
+    const token = useAuthStore.getState().accessToken;
+    if (!token) return;
+    try {
+      await fetch(`${API_URL}/api/auth/whoop/disconnect`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setWhoopConnected(false);
+    } catch {}
+  }, [API_URL]);
+
   const handleProfile = useCallback(() => {
     if (userId) {
       loadProfile(userId);
       loadWeightLogs(userId);
     }
+    checkWhoopStatus();
     setShowProfile(true);
-  }, [userId, loadProfile, loadWeightLogs]);
+  }, [userId, loadProfile, loadWeightLogs, checkWhoopStatus]);
 
   const handleCloseProfile = useCallback(() => {
     setShowProfile(false);
@@ -204,6 +234,8 @@ export default function ChatPage() {
           onClose={handleCloseProfile}
           isLoading={profileLoading}
           user={user}
+          whoopConnected={whoopConnected}
+          onDisconnectWhoop={handleDisconnectWhoop}
         />
       )}
     </div>
