@@ -315,7 +315,7 @@ export class WhoopService {
       const url = new URL(`${this.baseUrl}/cycle`);
       url.searchParams.set('start', start);
       url.searchParams.set('end', end);
-      url.searchParams.set('limit', '50');
+      url.searchParams.set('limit', '25');
       if (nextToken) url.searchParams.set('nextToken', nextToken);
 
       const response = await fetch(url.toString(), {
