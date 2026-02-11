@@ -78,6 +78,7 @@ export const useChatStore = create<ChatStore>()(
         set({ isLoading: true, error: null });
         const authState = useAuthStore.getState();
         const accessToken = authState.accessToken;
+        console.log('[loadHistory] called, hasToken:', !!accessToken);
 
         try {
           if (accessToken) {
@@ -105,6 +106,7 @@ export const useChatStore = create<ChatStore>()(
               }
             } else {
               const data = await response.json();
+              console.log('[loadHistory] API response:', data.success, 'messages:', data.data?.length);
               if (data.success && data.data) {
                 set({ messages: data.data });
               }

@@ -79,10 +79,12 @@ export const useChatStore = create<ChatStore>()(
         set({ isLoading: true, error: null });
         const authState = useAuthStore.getState();
         const accessToken = authState.accessToken;
+        console.log('[web loadHistory] called, hasToken:', !!accessToken);
 
         try {
           if (accessToken) {
             const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+            console.log('[web loadHistory] fetching from:', API_URL);
             const response = await fetch(`${API_URL}/api/messages/history?limit=50`, {
               headers: {
                 'Content-Type': 'application/json',
@@ -107,10 +109,13 @@ export const useChatStore = create<ChatStore>()(
               }
             } else {
               const data = await response.json();
+              console.log('[web loadHistory] response:', data.success, 'count:', data.data?.length);
               if (data.success && data.data) {
                 set({ messages: data.data });
               }
             }
+          } else {
+            console.log('[web loadHistory] no accessToken, skipping fetch');
           }
 
           set({ isLoading: false });
