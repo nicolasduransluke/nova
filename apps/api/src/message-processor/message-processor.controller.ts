@@ -1,14 +1,16 @@
 import {
   Controller,
   Post,
+  Get,
   Body,
+  Query,
   HttpCode,
   HttpStatus,
   Logger,
   UseGuards,
   ForbiddenException,
 } from '@nestjs/common';
-import type { ApiResponse, ProcessMessageResponse } from '@nova/types';
+import type { ApiResponse, ProcessMessageResponse, Message } from '@nova/types';
 import { MessageProcessorService } from './message-processor.service';
 import { ProcessMessageDto } from './dto/process-message.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -61,6 +63,28 @@ export class MessageProcessorController {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
         message: 'Failed to process message',
+      };
+    }
+  }
+
+  @Get('history')
+  async getMessageHistory(
+    @CurrentUser() user: JwtPayload,
+    @Query('limit') limitParam?: string,
+  ): Promise<ApiResponse<Message[]>> {
+    const limit = Math.min(Math.max(parseInt(limitParam || '50', 10) || 50, 1), 100);
+
+    try {
+      const messages = await this.messageProcessor.getMessageHistory(user.sub, limit);
+      return {
+        success: true,
+        data: messages,
+      };
+    } catch (error) {
+      this.logger.error(`Error fetching message history: ${error}`);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }

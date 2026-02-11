@@ -267,10 +267,11 @@ export class WhoopController {
       debug.rangeEnd = now.toISOString();
       debug.steps.push(`Fetching cycles from ${since.toISOString()} to ${now.toISOString()}`);
 
-      const caloriesByDate = await this.whoopService.getCyclesForRange(accessToken, since, now);
+      const { caloriesByDate, timezoneOffsetMinutes } = await this.whoopService.getCyclesForRange(accessToken, since, now);
       debug.whoopCyclesCount = caloriesByDate.size;
       debug.whoopCaloriesByDate = Object.fromEntries(caloriesByDate);
-      debug.steps.push(`Got ${caloriesByDate.size} days of Whoop data`);
+      debug.whoopTimezoneOffset = timezoneOffsetMinutes;
+      debug.steps.push(`Got ${caloriesByDate.size} days of Whoop data, tz=${timezoneOffsetMinutes}min`);
 
       // Also get food entry date keys for comparison
       const entries = await this.prisma.calorieEntry.findMany({

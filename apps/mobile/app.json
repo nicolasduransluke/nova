@@ -41,6 +41,17 @@
         "projectId": "662ca1ff-c27e-410a-93f6-29f0eb944ac2"
       }
     },
-    "owner": "nicolasdurans"
+    "owner": "nicolasdurans",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/662ca1ff-c27e-410a-93f6-29f0eb944ac2"
+    },
+    "android": {
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
+    }
   }
 }

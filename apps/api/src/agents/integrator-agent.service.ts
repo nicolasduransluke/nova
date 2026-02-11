@@ -23,6 +23,7 @@ export interface IntegratorInput extends AgentInput {
   agentOutputs: AgentOutput[];
   dailySummary?: DailySummary;
   lastWeightLog?: LastWeightLogInfo;
+  previousWeight?: number; // weight before this new log, for change calculation
   needsWeightPrompt: boolean;
   isProfileIncomplete?: boolean;
   isNewUser?: boolean;
@@ -196,7 +197,7 @@ Be calm, data-driven, brief. No hype language.`;
   }
 
   private buildIntegrationPrompt(input: IntegratorInput): string {
-    const { message, context, intent, agentOutputs, dailySummary, lastWeightLog, needsWeightPrompt } = input;
+    const { message, context, intent, agentOutputs, dailySummary, lastWeightLog, previousWeight, needsWeightPrompt } = input;
 
     let prompt = `## User Message
 "${message}"
@@ -316,7 +317,7 @@ Instead, ask them at what pace they want to lose weight. Give them options like:
       goalTask += ` Keep it brief and encouraging.`;
       prompt += goalTask;
     } else if (intent === 'weight_log') {
-      let weightTask = `Acknowledge the weight entry.`;
+      let weightTask = '';
       if (input.isProfileIncomplete) {
         weightTask = `The user logged their weight: ${lastWeightLog?.weight || 'unknown'} kg. This appears to be a new user without a configured profile.
 DO NOT mention any specific deficit or weekly loss targets. Instead:
@@ -326,10 +327,42 @@ DO NOT mention any specific deficit or weekly loss targets. Instead:
 Keep it brief and encouraging.`;
       } else if (lastWeightLog && dailySummary?.goalWeight != null) {
         const remaining = (lastWeightLog.weight - dailySummary.goalWeight).toFixed(1);
-        weightTask += ` The user logged ${lastWeightLog.weight} kg. Goal is ${dailySummary.goalWeight} kg. They have ${remaining} kg remaining.`;
-        weightTask += ` Show trend if available. Keep it brief.`;
+        const hasChange = previousWeight != null && previousWeight !== lastWeightLog.weight;
+        const change = hasChange ? (lastWeightLog.weight - previousWeight!).toFixed(1) : null;
+        const lost = hasChange && Number(change) < 0;
+        const gained = hasChange && Number(change) > 0;
+
+        weightTask = `You are a supportive nutrition coach. The user just logged ${lastWeightLog.weight} kg. Goal: ${dailySummary.goalWeight} kg. Remaining: ${remaining} kg.`;
+
+        if (lost) {
+          weightTask += `
+Previous weight was ${previousWeight} kg → change: ${change} kg (LOST weight).
+This is GREAT progress! Your response MUST:
+1. Start by genuinely celebrating the weight loss — be warm, enthusiastic, and personal (e.g. "¡Bajaste ${Math.abs(Number(change))} kg! Eso es tu esfuerzo dando frutos 💪")
+2. Briefly connect the loss to their recent deficit/discipline (e.g. "el déficit que vienes haciendo está funcionando")
+3. Mention remaining to goal briefly (e.g. "te quedan ${remaining} kg para tu meta")
+Do NOT just list data robotically. Sound like a real coach who is proud of their client.`;
+        } else if (gained) {
+          weightTask += `
+Previous weight was ${previousWeight} kg → change: +${Math.abs(Number(change!))} kg (gained weight).
+Your response MUST:
+1. Acknowledge the weight calmly — do NOT be negative or judgmental
+2. Normalize fluctuations (water retention, meals, etc.) — reassure them
+3. Encourage them to keep going with their plan
+Be empathetic and supportive, not robotic.`;
+        } else if (hasChange) {
+          weightTask += `
+Previous weight was ${previousWeight} kg → same weight (maintained).
+Acknowledge they maintained, encourage consistency. Brief and warm.`;
+        } else {
+          weightTask += `
+This is their first weight log. Welcome them and encourage the habit of tracking. Brief and warm.`;
+        }
+
+        weightTask += `
+Keep it to 3-4 lines max. Show today's deficit summary at the end in one line.`;
       } else {
-        weightTask += ` Show trend if available. Keep it brief.`;
+        weightTask += `Acknowledge the weight entry. Show trend if available. Keep it brief and warm.`;
       }
       prompt += weightTask;
     } else if (intent === 'profile_setup') {

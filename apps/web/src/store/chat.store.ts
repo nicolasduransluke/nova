@@ -77,9 +77,42 @@ export const useChatStore = create<ChatStore>()(
 
       loadHistory: async () => {
         set({ isLoading: true, error: null });
+        const authState = useAuthStore.getState();
+        const accessToken = authState.accessToken;
 
         try {
-          await new Promise((resolve) => setTimeout(resolve, 300));
+          if (accessToken) {
+            const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+            const response = await fetch(`${API_URL}/api/messages/history?limit=50`, {
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${accessToken}`,
+              },
+            });
+
+            if (response.status === 401) {
+              const refreshed = await useAuthStore.getState().refreshTokens();
+              if (refreshed) {
+                const newToken = useAuthStore.getState().accessToken;
+                const retryResponse = await fetch(`${API_URL}/api/messages/history?limit=50`, {
+                  headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${newToken}`,
+                  },
+                });
+                const retryData = await retryResponse.json();
+                if (retryData.success && retryData.data) {
+                  set({ messages: retryData.data });
+                }
+              }
+            } else {
+              const data = await response.json();
+              if (data.success && data.data) {
+                set({ messages: data.data });
+              }
+            }
+          }
+
           set({ isLoading: false });
         } catch (error) {
           set({

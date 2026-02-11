@@ -35,6 +35,7 @@ model User {
   dailyEntries   DailyEntry[]
   calorieEntries CalorieEntry[]
   weightLogs     WeightLog[]
+  chatMessages   ChatMessage[]
 
   // Indexes
   @@index([provider, providerId])
@@ -131,4 +132,26 @@ model WeightLog {
   // Indexes
   @@index([userId, date])
   @@map("weight_logs")
+}
+
+// ============================================
+// Chat Message Domain
+// ============================================
+
+model ChatMessage {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  type      String   // text, image, weight, sleep, meal, workout, energy
+  content   String
+  imageUrl  String?  @map("image_url")
+  sender    String   // user, agent
+  metadata  Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Indexes
+  @@index([userId, createdAt])
+  @@map("chat_messages")
 }

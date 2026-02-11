@@ -180,10 +180,6 @@ export class AuthService {
       return { message: 'If your email is registered, you will receive a password reset link' };
     }
 
-    if (user.provider !== 'local') {
-      return { message: 'This account uses social login. Please sign in with ' + user.provider };
-    }
-
     const resetToken = crypto.randomBytes(32).toString('hex');
     const hashedToken = await bcrypt.hash(resetToken, this.saltRounds);
     const resetTokenExp = new Date(Date.now() + 3600000); // 1 hour

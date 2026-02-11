@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,27 +8,36 @@ import {
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useIsFocused, useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '@/navigation/types';
 import { useChatStore } from '@/store/chat.store';
 import { MessageList } from '@/components/chat/MessageList';
 import { MessageInput } from '@/components/chat/MessageInput';
-import { DailySummarySheet } from '@/components/chat/DailySummarySheet';
 import { colors } from '@/theme';
 
 export default function ChatScreen() {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const {
     messages,
     isAgentTyping,
-    dailySummary,
     sendUserMessage,
     loadHistory,
+    refreshDailySummary,
   } = useChatStore();
 
-  const [showSummary, setShowSummary] = useState(false);
+  const isFocused = useIsFocused();
 
   useEffect(() => {
     loadHistory();
   }, [loadHistory]);
+
+  useEffect(() => {
+    if (isFocused) {
+      refreshDailySummary();
+    }
+  }, [isFocused, refreshDailySummary]);
 
   const handleSend = (content: string, imageUrl?: string) => {
     sendUserMessage(content, imageUrl);
@@ -45,14 +54,12 @@ export default function ChatScreen() {
           <Text style={styles.headerTitle}>NOVA</Text>
         </View>
 
-        {dailySummary && (
-          <Pressable
-            onPress={() => setShowSummary(true)}
-            style={styles.summaryButton}
-          >
-            <Text style={styles.summaryButtonText}>{'📊'}</Text>
-          </Pressable>
-        )}
+        <Pressable
+          onPress={() => navigation.navigate('Profile')}
+          style={styles.profileButton}
+        >
+          <Text style={styles.profileButtonText}>{'👤'}</Text>
+        </Pressable>
       </View>
 
       {/* Messages */}
@@ -64,15 +71,6 @@ export default function ChatScreen() {
         <MessageList messages={messages} isAgentTyping={isAgentTyping} />
         <MessageInput onSend={handleSend} disabled={isAgentTyping} />
       </KeyboardAvoidingView>
-
-      {/* Daily Summary Sheet */}
-      {dailySummary && (
-        <DailySummarySheet
-          summary={dailySummary}
-          visible={showSummary}
-          onClose={() => setShowSummary(false)}
-        />
-      )}
     </View>
   );
 }
@@ -117,7 +115,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.text.primary,
   },
-  summaryButton: {
+  profileButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -125,7 +123,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  summaryButtonText: {
+  profileButtonText: {
     fontSize: 20,
   },
 });

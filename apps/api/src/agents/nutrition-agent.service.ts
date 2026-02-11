@@ -65,14 +65,15 @@ export class NutritionAgentService extends BaseAgent {
   }
 
   protected getSystemPrompt(): string {
-    return `You are a calorie estimation specialist. Your job is to estimate calories for meals described by users.
+    return `You are a calorie estimation specialist. Your job is to accurately estimate calories for meals described by users.
 
 Guidelines:
-- Estimate calories conservatively (slightly overestimate rather than underestimate)
+- Be accurate. Do NOT inflate or overestimate calories.
 - Use Latin American portion sizes as default
 - Break down meals into individual items with calorie estimates
-- Always respond with valid JSON
-- Keep estimates realistic and practical`;
+- Pay attention to serving size words: cucharadita=teaspoon(5ml), cucharada=tablespoon(15ml), taza=cup(240ml)
+- Black coffee ~5 kcal, 1 tsp oil ~40 kcal, 1 tbsp oil ~120 kcal
+- Always respond with valid JSON`;
   }
 
   protected validateInput(input: AgentInput): boolean {
@@ -115,9 +116,11 @@ Response format:
 
 Rules:
 - Use Latin American portion sizes
-- Be conservative (slightly overestimate)
-- Include all items mentioned
-- If unsure, estimate based on typical serving`;
+- Be accurate. Do NOT inflate calories.
+- Split combined items: "café con aceite de coco" = "café" (~5 kcal) + "aceite de coco" (~40 kcal for 1 tsp)
+- Pay attention to serving sizes: "cucharadita" = teaspoon (~5ml), "cucharada" = tablespoon (~15ml)
+- Black coffee is ~2-5 kcal. 1 tsp coconut oil is ~40 kcal. 1 tbsp oil is ~120 kcal.
+- Include all items mentioned`;
 
     try {
       const response = await this.claudeClient.generateResponse(prompt, {
@@ -158,6 +161,9 @@ Rules:
       'hamburguesa con queso': 500, 'hamburguesa doble': 700,
       'hamburguesa sencilla': 400, 'hamburguesa simple': 400,
       'hot dog': 300, 'perro caliente': 300,
+      'aceite de coco': 40, 'aceite de oliva': 40,
+      'mantequilla de maní': 95, 'mantequilla de mani': 95,
+      'crema de cacahuate': 95,
     };
 
     const baseFoods: Record<string, number> = {
@@ -197,6 +203,9 @@ Rules:
       camote: 120, yuca: 150,
       lentejas: 180, garbanzos: 180,
       nueces: 200, almendras: 170,
+      mantequilla: 100, butter: 100,
+      miel: 60, honey: 60,
+      aceite: 120, oil: 120,
     };
 
     // Merge and sort by key length DESC (longest match first)

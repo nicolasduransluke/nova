@@ -179,14 +179,18 @@ export class ProfileController {
 
     // If weight changed, also create a weight log entry to keep history in sync
     if (dto.weight !== undefined && dto.weight !== existing.weight) {
-      await this.prisma.weightLog.create({
-        data: {
-          id: generateId(),
-          userId,
-          weight: dto.weight,
-          date: new Date(),
-        },
-      }).catch(() => {});
+      try {
+        await this.prisma.weightLog.create({
+          data: {
+            id: generateId(),
+            userId,
+            weight: dto.weight,
+            date: new Date(),
+          },
+        });
+      } catch (err) {
+        console.error('Failed to create weight log on profile update:', err);
+      }
     }
 
     return {

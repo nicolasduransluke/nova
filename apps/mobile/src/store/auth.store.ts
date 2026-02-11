@@ -35,7 +35,13 @@ export interface AuthActions {
 export type AuthStore = AuthState & AuthActions;
 
 const clearUserData = async () => {
-  // Clear in-memory stores first, then AsyncStorage
+  // Clear profile only (messages will be loaded from server after login)
+  useProfileStore.getState().clearProfile();
+  await AsyncStorage.multiRemove(['nova-profile-storage']).catch(() => {});
+};
+
+const clearAllUserData = async () => {
+  // Clear everything including messages (for logout)
   useChatStore.getState().clearMessages();
   useProfileStore.getState().clearProfile();
   await AsyncStorage.multiRemove(['nova-chat-storage', 'nova-profile-storage']).catch(() => {});
@@ -136,7 +142,7 @@ export const useAuthStore = create<AuthStore>()(
           }).catch(() => {});
         }
 
-        await clearUserData();
+        await clearAllUserData();
         set({
           user: null,
           accessToken: null,

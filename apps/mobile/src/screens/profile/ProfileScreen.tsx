@@ -8,7 +8,6 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Profile, ActivityLevel } from '@nova/types';
 import { useAuthStore } from '@/store/auth.store';
 import { useProfileStore } from '@/store/profile.store';
@@ -47,7 +46,6 @@ function calculateTDEE(profile: Profile): number {
 }
 
 export default function ProfileScreen() {
-  const insets = useSafeAreaInsets();
   const { user, logout } = useAuthStore();
   const { profile, isLoading, loadProfile, updateProfile } = useProfileStore();
 
@@ -132,8 +130,7 @@ export default function ProfileScreen() {
     : null;
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <Text style={styles.screenTitle}>Perfil</Text>
+    <View style={styles.container}>
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
@@ -269,13 +266,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.gradient.from,
-  },
-  screenTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: colors.text.primary,
-    textAlign: 'center',
-    paddingVertical: 12,
   },
   scrollContent: {
     padding: 16,

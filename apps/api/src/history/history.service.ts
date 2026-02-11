@@ -20,6 +20,16 @@ export class HistoryService {
     return `${year}-${month}-${day}`;
   }
 
+  // Convert UTC date to local date string using explicit timezone offset (minutes)
+  // Works correctly regardless of server timezone
+  private toDateKeyWithOffset(date: Date, offsetMinutes: number): string {
+    const adjusted = new Date(date.getTime() + offsetMinutes * 60000);
+    const year = adjusted.getUTCFullYear();
+    const month = String(adjusted.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(adjusted.getUTCDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
   async getDailyHistory(userId: string, days: number): Promise<HistoryDay[]> {
     const since = new Date();
     since.setHours(0, 0, 0, 0);
@@ -33,6 +43,7 @@ export class HistoryService {
 
     // Check if user has Whoop connected and fetch historical data
     let whoopCaloriesByDate = new Map<string, number>();
+    let whoopTzOffset = 0; // User's timezone offset in minutes from Whoop
     try {
       const user = await this.prisma.user.findUnique({
         where: { id: userId },
@@ -68,8 +79,10 @@ export class HistoryService {
             }
           }
 
-          whoopCaloriesByDate = await this.whoopService.getCyclesForRange(accessToken, since, now);
-          this.logger.debug(`Got Whoop data for ${whoopCaloriesByDate.size} days`);
+          const whoopResult = await this.whoopService.getCyclesForRange(accessToken, since, now);
+          whoopCaloriesByDate = whoopResult.caloriesByDate;
+          whoopTzOffset = whoopResult.timezoneOffsetMinutes;
+          this.logger.debug(`Got Whoop data for ${whoopCaloriesByDate.size} days, tz offset: ${whoopTzOffset}min`);
         }
       }
     } catch (error) {
@@ -85,9 +98,12 @@ export class HistoryService {
     });
 
     // Group entries by date string (YYYY-MM-DD)
+    // When Whoop is connected, use its timezone offset to align food dates with Whoop dates
     const grouped = new Map<string, typeof entries>();
     for (const entry of entries) {
-      const dateKey = this.toLocalDateKey(entry.date);
+      const dateKey = whoopTzOffset !== 0
+        ? this.toDateKeyWithOffset(entry.date, whoopTzOffset)
+        : this.toLocalDateKey(entry.date);
       if (!grouped.has(dateKey)) {
         grouped.set(dateKey, []);
       }

@@ -8,6 +8,7 @@ import { colors } from '@/theme';
 import AuthStack from './AuthStack';
 import MainTabs from './MainTabs';
 import OnboardingScreen from '@/screens/onboarding/OnboardingScreen';
+import ProfileScreen from '@/screens/profile/ProfileScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -43,7 +44,20 @@ export default function RootNavigator() {
       ) : !isOnboarded ? (
         <Stack.Screen name="OnboardingFlow" component={OnboardingScreen} />
       ) : (
-        <Stack.Screen name="Main" component={MainTabs} />
+        <>
+          <Stack.Screen name="Main" component={MainTabs} />
+          <Stack.Screen
+            name="Profile"
+            component={ProfileScreen}
+            options={{
+              headerShown: true,
+              headerTitle: 'Perfil',
+              headerStyle: { backgroundColor: colors.gradient.from },
+              headerTintColor: colors.text.primary,
+              headerShadowVisible: false,
+            }}
+          />
+        </>
       )}
     </Stack.Navigator>
   );

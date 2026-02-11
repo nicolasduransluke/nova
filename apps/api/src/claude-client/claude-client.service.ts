@@ -184,14 +184,13 @@ Respond with ONLY the category name, nothing else.`;
 
     const extractionPrompts: Record<string, string> = {
       weight_log: `Extract weight data from this message. Return JSON with: { "weight": number (in kg), "unit": "kg" or "lb" }`,
-      meal_log: `Extract meal data from this message. Return JSON with: { "items": [{"name": "food item with ALL modifiers", "quantity": number or null, "unit": "g" or "oz" or "portion" or null}], "totalCalories": null }.
+      meal_log: `Extract meal data from this message. Return JSON with: { "items": [{"name": "food item", "quantity": number or null, "unit": "g" or "oz" or "tsp" or "tbsp" or "cup" or "portion" or null}], "totalCalories": null }.
 
-CRITICAL: NEVER split a food phrase with modifiers into separate items.
-- "café sin azúcar" = ONE item "café sin azúcar", NOT two items "café" + "azúcar"
-- "pollo a la plancha" = ONE item, NOT "pollo" + "plancha"
-- "leche descremada" = ONE item, NOT "leche" + "descremada"
-- Modifiers like "sin", "con", "a la", "al", "descremado/a", "integral" are PART of the food name.
-Just identify the food items, we will look up calories separately.`,
+RULES for splitting items:
+- Keep cooking modifiers as ONE item: "café sin azúcar" = ONE item, "pollo a la plancha" = ONE item, "leche descremada" = ONE item.
+- SPLIT when "con" adds a SEPARATE food/ingredient: "café con aceite de coco" = TWO items: "café" + "aceite de coco". "arroz con pollo" = TWO items: "arroz" + "pollo". "pan con mantequilla" = TWO items: "pan" + "mantequilla".
+- Preserve quantity words: "cucharadita" = tsp, "cucharada" = tbsp, "taza" = cup.
+- Example: "café con una cucharadita de aceite de coco" → [{"name": "café", "quantity": 1, "unit": "portion"}, {"name": "aceite de coco", "quantity": 1, "unit": "tsp"}]`,
       activity_log: `Extract activity data from this message. Return JSON with: { "activity": "activity name", "durationMinutes": number, "caloriesBurned": estimated_calories_burned }`,
       goal_set: `Extract weight goal data from this message. Return JSON with: { "goalWeight": number or null (target weight in kg), "weeklyGoal": number or null (kg per week to lose), "targetWeeks": number or null (weeks to reach goal) }. If the user mentions pounds, convert to kg.`,
       profile_setup: `Extract profile data from this message. Return JSON with: { "weight": number or null (kg), "height": number or null (cm), "age": number or null, "sex": "male" or "female" or null, "goalWeight": number or null (kg) }. Convert meters to cm for height. Convert pounds to kg for weight.`,
@@ -304,12 +303,16 @@ Respond with ONLY valid JSON, nothing else.`;
       return mealData;
     }
 
-    const prompt = `Estimate calories for these food items using Latin American portion sizes. Be conservative (slightly overestimate).
+    const prompt = `Estimate calories for these food items using Latin American portion sizes. Be accurate, not inflated.
 
 Items: ${itemsNeedingEstimate.map(i => i.name).join(', ')}
 Original message for context: "${originalMessage}"
 
-IMPORTANT: Pay close attention to modifiers in the original message like "sin azúcar" (no sugar), "negro" (black), "con leche" (with milk), "descremado" (skim), etc. These significantly affect calorie counts. For example, "café sin azúcar" is ~5 kcal, while "café con azúcar" is ~30-50 kcal.
+IMPORTANT:
+- Pay close attention to modifiers like "sin azúcar" (no sugar), "negro" (black), "con leche" (with milk), "descremado" (skim), etc.
+- Pay close attention to serving size words: "cucharadita" = teaspoon (~5ml), "cucharada" = tablespoon (~15ml), "taza" = cup (~240ml).
+- Examples: "café sin azúcar" ~5 kcal, "cucharadita de aceite de coco" ~40 kcal, "cucharada de aceite" ~120 kcal.
+- Black coffee has almost zero calories (~2-5 kcal). Do NOT inflate it.
 
 Return ONLY valid JSON:
 {
@@ -328,18 +331,22 @@ Return ONLY valid JSON:
       const estimated = JSON.parse(cleaned);
 
       // Merge estimated calories with existing items
-      const finalItems = mealData.items.map(item => {
+      const finalItems = mealData.items.map((item, index) => {
         if (item.calories && item.calories > 0) {
           return item;
         }
+        // Try name matching first
         const estimated_item = estimated.items?.find(
           (e: { name: string; calories: number }) =>
             e.name.toLowerCase().includes(item.name.toLowerCase()) ||
             item.name.toLowerCase().includes(e.name.toLowerCase())
         );
+        // If no name match, try by index (Gemini often returns items in same order)
+        const byIndex = !estimated_item && estimated.items?.[index];
+        const cal = estimated_item?.calories || byIndex?.calories || 100;
         return {
           name: item.name,
-          calories: estimated_item?.calories || 200, // Default fallback
+          calories: cal,
         };
       });
 
@@ -943,6 +950,9 @@ Determine the user's intention. Return ONLY valid JSON:
       'hamburguesa con queso': 500, 'hamburguesa doble': 700,
       'hamburguesa sencilla': 400, 'hamburguesa simple': 400,
       'hot dog': 300, 'perro caliente': 300,
+      'aceite de coco': 40, 'aceite de oliva': 40,
+      'mantequilla de maní': 95, 'mantequilla de mani': 95,
+      'crema de cacahuate': 95,
     };
 
     // Base food items
@@ -989,6 +999,7 @@ Determine the user's intention. Return ONLY valid JSON:
       nueces: 200, almendras: 170,
       mantequilla: 100, butter: 100,
       miel: 60, honey: 60,
+      aceite: 120, oil: 120,
     };
 
     // Merge all foods, sort by key length DESC (longest match first)

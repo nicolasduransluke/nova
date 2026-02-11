@@ -302,10 +302,11 @@ export class WhoopService {
     accessToken: string,
     startDate: Date,
     endDate: Date,
-  ): Promise<Map<string, number>> {
+  ): Promise<{ caloriesByDate: Map<string, number>; timezoneOffsetMinutes: number }> {
     const start = startDate.toISOString();
     const end = endDate.toISOString();
     const caloriesByDate = new Map<string, number>();
+    let timezoneOffsetMinutes = 0;
 
     // Whoop API paginates with default limit=10, so we must follow next_token
     let nextToken: string | null = null;
@@ -327,7 +328,7 @@ export class WhoopService {
       if (!response.ok) {
         const body = await response.text().catch(() => '');
         this.logger.error(`Failed to get cycles: ${response.status} ${response.statusText} - ${body}`);
-        return caloriesByDate;
+        return { caloriesByDate, timezoneOffsetMinutes };
       }
 
       const data = await response.json();
@@ -335,22 +336,30 @@ export class WhoopService {
       totalRecords += records.length;
 
       for (const cycle of records) {
+        // Extract timezone offset from first cycle (e.g. "-05:00" → -300)
+        if (timezoneOffsetMinutes === 0 && cycle.timezone_offset) {
+          const match = cycle.timezone_offset.match(/^([+-])(\d{2}):(\d{2})$/);
+          if (match) {
+            const sign = match[1] === '+' ? 1 : -1;
+            timezoneOffsetMinutes = sign * (parseInt(match[2]) * 60 + parseInt(match[3]));
+          }
+        }
+
         if (cycle.score?.kilojoule) {
-          const dateKey = cycle.start.split('T')[0];
+          // Apply timezone offset to get LOCAL date key (cycle.start is UTC)
+          const cycleStart = new Date(new Date(cycle.start).getTime() + timezoneOffsetMinutes * 60000);
+          const dateKey = cycleStart.toISOString().split('T')[0];
           const calories = Math.round(cycle.score.kilojoule * 0.239);
           caloriesByDate.set(dateKey, calories);
-          this.logger.debug(`Whoop cycle: start=${cycle.start}, dateKey=${dateKey}, kJ=${cycle.score.kilojoule}, cal=${calories}`);
-        } else {
-          this.logger.debug(`Whoop cycle skipped: start=${cycle.start}, score_state=${cycle.score_state}, score=${JSON.stringify(cycle.score)}`);
         }
       }
 
       nextToken = data.next_token || null;
     } while (nextToken);
 
-    this.logger.debug(`Whoop getCyclesForRange: ${totalRecords} total records, ${caloriesByDate.size} with calories, from ${start} to ${end}`);
+    this.logger.debug(`Whoop getCyclesForRange: ${totalRecords} records, ${caloriesByDate.size} with calories, tz=${timezoneOffsetMinutes}min`);
     this.logger.debug(`Whoop calories by date: ${JSON.stringify(Object.fromEntries(caloriesByDate))}`);
-    return caloriesByDate;
+    return { caloriesByDate, timezoneOffsetMinutes };
   }
 
   /**

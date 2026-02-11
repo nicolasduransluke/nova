@@ -137,8 +137,13 @@ export class OrchestratorService {
       }
 
       // Step 8a: Handle weight_log (before summary so new weight is reflected)
+      let previousWeight: number | undefined;
       if (intent === 'weight_log' && extractedData.weight) {
         const newWeight = extractedData.weight as number;
+        // Save previous weight before overwriting, so the integrator can calculate the change
+        if (lastWeightLog) {
+          previousWeight = lastWeightLog.weight;
+        }
         // Validate weight is in realistic range (20-500 kg)
         if (newWeight >= 20 && newWeight <= 500) {
           await deps.createWeightLog({
@@ -150,14 +155,9 @@ export class OrchestratorService {
           lastWeightLog = { weight: newWeight, date: new Date(), daysSince: 0 };
           needsWeightPrompt = false;
 
-          // For new users or first weight log, also update profile.weight as their starting weight
-          // This prevents incorrect "change from start" calculations using default values
-          const isFirstWeightLog = allWeightLogs.length === 0;
-          const profileHasDefaultWeight = !context.profile || context.profile.weight === 70;
-          if (isFirstWeightLog || profileHasDefaultWeight) {
-            const updatedProfile = await deps.updateProfile(request.userId, { weight: newWeight });
-            context.profile = updatedProfile;
-          }
+          // Always update profile.weight so TDEE recalculates with the latest weight
+          const updatedProfile = await deps.updateProfile(request.userId, { weight: newWeight });
+          context.profile = updatedProfile;
         } else {
           this.logger.warn(`Invalid weight value ignored: ${newWeight} kg`);
         }
@@ -396,6 +396,7 @@ export class OrchestratorService {
         agentOutputs,
         dailySummary,
         lastWeightLog,
+        previousWeight,
         needsWeightPrompt,
         isProfileIncomplete,
         isNewUser,

@@ -97,7 +97,26 @@ export class MessageProcessorService {
         userId: string,
         limit: number,
       ): Promise<Message[]> => {
-        return [];
+        try {
+          const messages = await this.prisma.chatMessage.findMany({
+            where: { userId },
+            orderBy: { createdAt: 'desc' },
+            take: limit,
+          });
+
+          return messages.reverse().map((msg) => ({
+            id: msg.id,
+            type: msg.type as Message['type'],
+            content: msg.content,
+            imageUrl: msg.imageUrl ?? undefined,
+            sender: msg.sender as Message['sender'],
+            timestamp: msg.createdAt,
+            metadata: (msg.metadata ?? {}) as Record<string, unknown>,
+          }));
+        } catch (error) {
+          this.logger.error(`Error loading conversation history: ${error}`);
+          return [];
+        }
       },
 
       saveEntry: async (entry: Partial<DailyEntry>): Promise<DailyEntry> => {
@@ -326,16 +345,108 @@ export class MessageProcessorService {
     };
   }
 
+  private async saveMessage(
+    userId: string,
+    type: string,
+    content: string,
+    sender: 'user' | 'agent',
+    imageUrl?: string,
+    metadata?: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      await this.prisma.chatMessage.create({
+        data: {
+          id: generateId(),
+          userId,
+          type,
+          content,
+          sender,
+          imageUrl: imageUrl ?? null,
+          metadata: (metadata ?? {}) as Prisma.InputJsonValue,
+        },
+      });
+    } catch (error) {
+      this.logger.error(`Error saving chat message: ${error}`);
+    }
+  }
+
   async processMessage(
     request: ProcessMessageRequest,
   ): Promise<ProcessMessageResponse> {
     this.logger.debug(`Processing message from user ${request.userId}`);
-    return this.orchestrator.processMessage(request, this.dependencies);
+
+    await this.saveMessage(
+      request.userId,
+      request.messageType || 'text',
+      request.content,
+      'user',
+      request.imageUrl,
+    );
+
+    const result = await this.orchestrator.processMessage(request, this.dependencies);
+
+    if (result.success && result.response?.message) {
+      await this.saveMessage(
+        request.userId,
+        result.intent === 'meal_log' ? 'meal' : 'text',
+        result.response.message,
+        'agent',
+        undefined,
+        {
+          ...(result.intent ? { intent: result.intent } : {}),
+          ...(result.response.foodItems ? { foodItems: result.response.foodItems } : {}),
+        },
+      );
+    }
+
+    return result;
   }
 
   async processMessageSync(
     request: ProcessMessageRequest,
   ): Promise<ProcessMessageResponse> {
-    return this.orchestrator.processMessage(request, this.dependencies);
+    await this.saveMessage(
+      request.userId,
+      request.messageType || 'text',
+      request.content,
+      'user',
+      request.imageUrl,
+    );
+
+    const result = await this.orchestrator.processMessage(request, this.dependencies);
+
+    if (result.success && result.response?.message) {
+      await this.saveMessage(
+        request.userId,
+        result.intent === 'meal_log' ? 'meal' : 'text',
+        result.response.message,
+        'agent',
+        undefined,
+        {
+          ...(result.intent ? { intent: result.intent } : {}),
+          ...(result.response.foodItems ? { foodItems: result.response.foodItems } : {}),
+        },
+      );
+    }
+
+    return result;
+  }
+
+  async getMessageHistory(userId: string, limit: number): Promise<Message[]> {
+    const messages = await this.prisma.chatMessage.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'asc' },
+      take: limit,
+    });
+
+    return messages.map((msg) => ({
+      id: msg.id,
+      type: msg.type as Message['type'],
+      content: msg.content,
+      imageUrl: msg.imageUrl ?? undefined,
+      sender: msg.sender as Message['sender'],
+      timestamp: msg.createdAt,
+      metadata: (msg.metadata ?? {}) as Record<string, unknown>,
+    }));
   }
 }

@@ -6,8 +6,8 @@ export type AuthStackParamList = {
 
 export type MainTabsParamList = {
   Chat: undefined;
+  Panel: undefined;
   History: undefined;
-  Profile: undefined;
 };
 
 export type OnboardingStackParamList = {
@@ -18,4 +18,5 @@ export type RootStackParamList = {
   Auth: undefined;
   OnboardingFlow: undefined;
   Main: undefined;
+  Profile: undefined;
 };

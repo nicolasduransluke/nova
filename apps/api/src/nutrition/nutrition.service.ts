@@ -136,6 +136,8 @@ const SPANISH_TO_ENGLISH: Record<string, string> = {
   'cafe con leche': 'coffee with milk',
   'café con azúcar': 'coffee with sugar',
   'cafe con azucar': 'coffee with sugar',
+  'café con aceite de coco': 'coffee with coconut oil',
+  'cafe con aceite de coco': 'coffee with coconut oil',
   'café': 'coffee',
   'cafe': 'coffee',
   'té sin azúcar': 'tea unsweetened',
@@ -171,6 +173,14 @@ const SPANISH_TO_ENGLISH: Record<string, string> = {
   'leche deslactosada': 'lactose free milk',
   'yogurt natural': 'plain yogurt',
   'yogurt griego': 'greek yogurt',
+
+  // Oils & fats
+  'aceite de coco': 'coconut oil',
+  'aceite de oliva': 'olive oil',
+  'aceite': 'cooking oil',
+  'mantequilla de maní': 'peanut butter',
+  'mantequilla de mani': 'peanut butter',
+  'crema de cacahuate': 'peanut butter',
 
   // Cooking methods & modifiers
   'sin azúcar': 'unsweetened',
