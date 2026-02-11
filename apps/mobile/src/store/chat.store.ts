@@ -269,7 +269,6 @@ export const useChatStore = create<ChatStore>()(
       name: 'nova-chat-storage',
       storage: createJSONStorage(() => asyncStorage),
       partialize: (state) => ({
-        messages: state.messages,
         dailySummary: state.dailySummary,
       }),
     },

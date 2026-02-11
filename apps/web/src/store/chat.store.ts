@@ -260,7 +260,6 @@ export const useChatStore = create<ChatStore>()(
     {
       name: 'nova-chat-storage',
       partialize: (state) => ({
-        messages: state.messages,
         dailySummary: state.dailySummary,
       }),
     }
