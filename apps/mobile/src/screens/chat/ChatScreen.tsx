@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   Pressable,
   KeyboardAvoidingView,
   Platform,
+  AppState,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useIsFocused, useNavigation } from '@react-navigation/native';
@@ -29,8 +30,21 @@ export default function ChatScreen() {
 
   const isFocused = useIsFocused();
 
+  const appState = useRef(AppState.currentState);
+
   useEffect(() => {
     loadHistory();
+  }, [loadHistory]);
+
+  // Reload history when app comes back to foreground (e.g. after using web)
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (appState.current.match(/inactive|background/) && nextState === 'active') {
+        loadHistory();
+      }
+      appState.current = nextState;
+    });
+    return () => sub.remove();
   }, [loadHistory]);
 
   useEffect(() => {
