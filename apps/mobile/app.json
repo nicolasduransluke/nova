@@ -17,11 +17,12 @@
     ],
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.nova.mobile",
-      "buildNumber": "1",
+      "bundleIdentifier": "com.cotalker.nova-mobile",
+      "buildNumber": "2",
       "infoPlist": {
         "NSCameraUsageDescription": "NOVA necesita acceso a tu cámara para tomar fotos de tus comidas.",
-        "NSPhotoLibraryUsageDescription": "NOVA necesita acceso a tus fotos para seleccionar imágenes de tus comidas."
+        "NSPhotoLibraryUsageDescription": "NOVA necesita acceso a tus fotos para seleccionar imágenes de tus comidas.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "plugins": [
@@ -34,6 +35,12 @@
           "cameraPermission": "NOVA necesita acceso a tu cámara para tomar fotos de tus comidas."
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "662ca1ff-c27e-410a-93f6-29f0eb944ac2"
+      }
+    },
+    "owner": "nicolasdurans"
   }
 }

@@ -93,8 +93,8 @@ export default function PrivacyPolicy() {
           </h2>
           <p className="text-gray-600 dark:text-gray-300">
             Para preguntas sobre privacidad o para ejercer tus derechos, contacta a:
-            <a href="mailto:privacy@nova.app" className="text-indigo-600 dark:text-indigo-400 ml-1 hover:underline">
-              privacy@nova.app
+            <a href="mailto:nicolasdurans@me.com" className="text-indigo-600 dark:text-indigo-400 ml-1 hover:underline">
+              nicolasdurans@me.com
             </a>
           </p>
         </section>
