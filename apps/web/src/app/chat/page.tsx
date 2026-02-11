@@ -64,6 +64,15 @@ export default function ChatPage() {
 
   useEffect(() => {
     loadHistory();
+
+    // Reload history when user returns to the tab (e.g. after using mobile app)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        loadHistory();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, [loadHistory]);
 
   const handleSend = useCallback(
