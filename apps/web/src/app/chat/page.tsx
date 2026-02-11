@@ -65,14 +65,19 @@ export default function ChatPage() {
   useEffect(() => {
     loadHistory();
 
-    // Reload history when user returns to the tab (e.g. after using mobile app)
+    // Reload history when user returns to the tab or window (e.g. after using mobile app)
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
         loadHistory();
       }
     };
+    const handleFocus = () => loadHistory();
     document.addEventListener('visibilitychange', handleVisibility);
-    return () => document.removeEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', handleFocus);
+    };
   }, [loadHistory]);
 
   const handleSend = useCallback(
