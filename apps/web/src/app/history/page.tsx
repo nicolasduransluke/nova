@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import type { HistoryDay, WeightEntry, HistoryDayEntry } from '@nova/types';
+import type { HistoryDay, WeightEntry, HistoryDayEntry, CalorieEntryItem } from '@nova/types';
 import { useAuthStore } from '@/store/auth.store';
 import { api } from '@/lib/api';
 
@@ -69,9 +69,116 @@ function WeightChart({ data }: { data: WeightEntry[] }) {
   );
 }
 
-function EntryRow({ entry, onDelete }: { entry: HistoryDayEntry; onDelete?: (id: string) => void }) {
+function EditEntryModal({
+  entry,
+  onClose,
+  onSaved,
+}: {
+  entry: HistoryDayEntry;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [items, setItems] = useState<(CalorieEntryItem & { quantity: number })[]>(
+    entry.items.map((item) => ({ ...item, quantity: item.quantity ?? 1 })),
+  );
+  const [saving, setSaving] = useState(false);
+
+  const totalCalories = items.reduce((sum, item) => sum + item.calories * item.quantity, 0);
+
+  const updateQuantity = (index: number, delta: number) => {
+    setItems((prev) =>
+      prev.map((item, i) =>
+        i === index ? { ...item, quantity: Math.max(1, item.quantity + delta) } : item,
+      ),
+    );
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const res = await api.patch(`/api/history/entries/${entry.id}`, {
+        items: items.map((item) => ({
+          name: item.name,
+          calories: item.calories,
+          quantity: item.quantity,
+        })),
+      });
+      if (res.success) {
+        onSaved();
+        onClose();
+      }
+    } catch (err) {
+      console.error('Error updating entry:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+      <div
+        className="bg-indigo-950 border border-white/20 rounded-2xl p-6 w-full max-w-md mx-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="text-white text-lg font-semibold mb-1">Editar porciones</h3>
+        <p className="text-indigo-300 text-sm mb-4">{entry.description}</p>
+
+        <div className="space-y-3 max-h-60 overflow-y-auto">
+          {items.map((item, index) => (
+            <div key={index} className="flex items-center justify-between py-2 border-b border-white/10 last:border-0">
+              <div className="flex-1 min-w-0 mr-3">
+                <p className="text-white text-sm">{item.name}</p>
+                <p className="text-green-300 text-xs font-mono">{item.calories * item.quantity} kcal</p>
+              </div>
+              <div className="flex items-center gap-0">
+                <button
+                  onClick={() => updateQuantity(index, -1)}
+                  disabled={item.quantity <= 1}
+                  className="w-8 h-8 rounded-l-lg bg-white/10 text-white text-lg font-semibold hover:bg-white/20 disabled:opacity-30 transition-colors"
+                >
+                  -
+                </button>
+                <span className="w-8 h-8 flex items-center justify-center bg-white/5 text-white text-sm font-semibold">
+                  {item.quantity}
+                </span>
+                <button
+                  onClick={() => updateQuantity(index, 1)}
+                  className="w-8 h-8 rounded-r-lg bg-white/10 text-white text-lg font-semibold hover:bg-white/20 transition-colors"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 pt-4 border-t border-white/10">
+          <p className="text-white font-semibold mb-3">Total: {totalCalories} kcal</p>
+          <div className="flex gap-3">
+            <button
+              onClick={onClose}
+              className="flex-1 py-2.5 rounded-xl bg-white/10 text-indigo-300 text-sm font-medium hover:bg-white/20 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-sm font-semibold hover:from-purple-500 hover:to-indigo-500 transition-colors disabled:opacity-50"
+            >
+              {saving ? 'Guardando...' : 'Guardar'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EntryRow({ entry, onDelete, onEdit }: { entry: HistoryDayEntry; onDelete?: (id: string) => void; onEdit?: (entry: HistoryDayEntry) => void }) {
   const isIntake = entry.type === 'intake';
   const isWhoop = entry.id.startsWith('whoop-');
+  const canEdit = isIntake && !isWhoop && entry.items.length > 0;
   const [confirming, setConfirming] = useState(false);
 
   const handleDelete = async () => {
@@ -89,7 +196,10 @@ function EntryRow({ entry, onDelete }: { entry: HistoryDayEntry; onDelete?: (id:
   };
 
   return (
-    <div className="flex items-center justify-between py-2 px-3 border-b border-white/5 last:border-0 group">
+    <div
+      className={`flex items-center justify-between py-2 px-3 border-b border-white/5 last:border-0 group ${canEdit ? 'cursor-pointer hover:bg-white/5' : ''}`}
+      onClick={canEdit && onEdit ? () => onEdit(entry) : undefined}
+    >
       <div className="flex items-center gap-2 min-w-0 flex-1">
         <span className={`text-xs px-2 py-0.5 rounded shrink-0 ${isIntake ? 'bg-green-500/20 text-green-300' : 'bg-orange-500/20 text-orange-300'}`}>
           {isIntake ? 'ingesta' : 'quema'}
@@ -102,7 +212,7 @@ function EntryRow({ entry, onDelete }: { entry: HistoryDayEntry; onDelete?: (id:
         </span>
         {!isWhoop && onDelete && (
           <button
-            onClick={handleDelete}
+            onClick={(e) => { e.stopPropagation(); handleDelete(); }}
             className={`text-xs px-2 py-1 rounded transition-all ${
               confirming
                 ? 'bg-red-500/30 text-red-300 border border-red-500/50'
@@ -119,6 +229,7 @@ function EntryRow({ entry, onDelete }: { entry: HistoryDayEntry; onDelete?: (id:
 
 function DayCard({ day, onEntryDeleted }: { day: HistoryDay; onEntryDeleted: () => void }) {
   const [open, setOpen] = useState(false);
+  const [editEntry, setEditEntry] = useState<HistoryDayEntry | null>(null);
   const { summary } = day;
 
   const formatDate = (dateStr: string) => {
@@ -155,7 +266,7 @@ function DayCard({ day, onEntryDeleted }: { day: HistoryDay; onEntryDeleted: () 
       {open && day.entries.length > 0 && (
         <div className="border-t border-white/10 bg-white/5">
           {day.entries.map((e) => (
-            <EntryRow key={e.id} entry={e} onDelete={onEntryDeleted} />
+            <EntryRow key={e.id} entry={e} onDelete={onEntryDeleted} onEdit={setEditEntry} />
           ))}
         </div>
       )}
@@ -163,6 +274,13 @@ function DayCard({ day, onEntryDeleted }: { day: HistoryDay; onEntryDeleted: () 
         <div className="border-t border-white/10 bg-white/5 p-4 text-center text-indigo-300 text-sm">
           Sin registros
         </div>
+      )}
+      {editEntry && (
+        <EditEntryModal
+          entry={editEntry}
+          onClose={() => setEditEntry(null)}
+          onSaved={onEntryDeleted}
+        />
       )}
     </div>
   );

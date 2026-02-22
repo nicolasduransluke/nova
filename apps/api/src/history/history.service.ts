@@ -200,6 +200,40 @@ export class HistoryService {
     return result;
   }
 
+  async updateEntryItems(
+    entryId: string,
+    newItems: { name: string; calories: number; quantity?: number }[],
+    existingItems: { name: string; calories: number; quantity?: number; imageUrl?: string }[],
+  ) {
+    // Build a map of existing imageUrls by item name so we preserve them
+    const imageMap = new Map<string, string>();
+    for (const item of existingItems) {
+      if (item.imageUrl) {
+        imageMap.set(item.name, item.imageUrl);
+      }
+    }
+
+    const mergedItems = newItems.map((item) => ({
+      name: item.name,
+      calories: item.calories,
+      quantity: item.quantity ?? 1,
+      ...(imageMap.has(item.name) ? { imageUrl: imageMap.get(item.name) } : {}),
+    }));
+
+    const totalCalories = mergedItems.reduce(
+      (sum, item) => sum + item.calories * (item.quantity ?? 1),
+      0,
+    );
+
+    return this.prisma.calorieEntry.update({
+      where: { id: entryId },
+      data: {
+        items: mergedItems as any,
+        calories: totalCalories,
+      },
+    });
+  }
+
   async getWeightHistory(userId: string, days: number): Promise<WeightEntry[]> {
     const since = new Date();
     since.setHours(0, 0, 0, 0);

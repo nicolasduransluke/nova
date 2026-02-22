@@ -1,7 +1,7 @@
-import { Controller, Get, Delete, Param, Query, UsePipes, ValidationPipe, UseGuards, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Controller, Get, Delete, Patch, Param, Query, Body, UsePipes, ValidationPipe, UseGuards, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { HistoryService } from './history.service';
 import { HistoryQueryDto } from './dto/history-query.dto';
-import type { ApiResponse, HistoryDay, WeightEntry } from '@nova/types';
+import type { ApiResponse, HistoryDay, WeightEntry, CalorieEntry } from '@nova/types';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '../auth/decorators/current-user.decorator';
 import { PrismaService } from '../infrastructure/database/prisma.service';
@@ -69,5 +69,27 @@ export class HistoryController {
     });
 
     return { success: true, data: null };
+  }
+
+  @Patch('entries/:id')
+  async updateEntryItems(
+    @Param('id') entryId: string,
+    @Body() body: { items: { name: string; calories: number; quantity?: number }[] },
+    @CurrentUser() user: JwtPayload,
+  ): Promise<ApiResponse<CalorieEntry>> {
+    const entry = await this.prisma.calorieEntry.findUnique({
+      where: { id: entryId },
+    });
+
+    if (!entry) {
+      throw new NotFoundException('Entry not found');
+    }
+
+    if (entry.userId !== user.sub) {
+      throw new ForbiddenException('You can only edit your own entries');
+    }
+
+    const updated = await this.historyService.updateEntryItems(entryId, body.items, entry.items as any[]);
+    return { success: true, data: updated as unknown as CalorieEntry };
   }
 }

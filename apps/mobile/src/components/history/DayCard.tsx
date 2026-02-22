@@ -3,16 +3,20 @@ import { View, Text, Pressable, StyleSheet, Alert, Platform } from 'react-native
 import type { HistoryDay, HistoryDayEntry } from '@nova/types';
 import { api } from '@/lib/api';
 import { colors } from '@/theme';
+import { EditEntryModal } from './EditEntryModal';
 
 function EntryRow({
   entry,
   onDelete,
+  onEdit,
 }: {
   entry: HistoryDayEntry;
   onDelete?: (id: string) => void;
+  onEdit?: (entry: HistoryDayEntry) => void;
 }) {
   const isIntake = entry.type === 'intake';
   const isWhoop = entry.id.startsWith('whoop-');
+  const canEdit = isIntake && !isWhoop && entry.items.length > 0;
 
   const handleDelete = () => {
     Alert.alert('Eliminar entrada', '¿Estás seguro?', [
@@ -32,7 +36,7 @@ function EntryRow({
     ]);
   };
 
-  return (
+  const row = (
     <View style={styles.entryRow}>
       <View style={styles.entryLeft}>
         <View style={[styles.badge, isIntake ? styles.badgeIntake : styles.badgeBurn]}>
@@ -54,6 +58,16 @@ function EntryRow({
       </View>
     </View>
   );
+
+  if (canEdit && onEdit) {
+    return (
+      <Pressable onPress={() => onEdit(entry)}>
+        {row}
+      </Pressable>
+    );
+  }
+
+  return row;
 }
 
 interface Props {
@@ -63,6 +77,7 @@ interface Props {
 
 export function DayCard({ day, onEntryDeleted }: Props) {
   const [open, setOpen] = useState(false);
+  const [editEntry, setEditEntry] = useState<HistoryDayEntry | null>(null);
   const { summary } = day;
 
   const formatDate = (dateStr: string) => {
@@ -92,13 +107,20 @@ export function DayCard({ day, onEntryDeleted }: Props) {
         <View style={styles.entriesContainer}>
           {day.entries.length > 0 ? (
             day.entries.map((e) => (
-              <EntryRow key={e.id} entry={e} onDelete={onEntryDeleted} />
+              <EntryRow key={e.id} entry={e} onDelete={onEntryDeleted} onEdit={setEditEntry} />
             ))
           ) : (
             <Text style={styles.emptyText}>Sin registros</Text>
           )}
         </View>
       )}
+
+      <EditEntryModal
+        entry={editEntry}
+        visible={editEntry !== null}
+        onClose={() => setEditEntry(null)}
+        onSaved={onEntryDeleted}
+      />
     </View>
   );
 }

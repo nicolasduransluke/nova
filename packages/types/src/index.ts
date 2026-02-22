@@ -115,6 +115,7 @@ export type CalorieEntryType = 'intake' | 'burn';
 export interface CalorieEntryItem {
   name: string;
   calories: number;
+  quantity?: number;
   imageUrl?: string;
 }
 
