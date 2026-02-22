@@ -57,6 +57,9 @@ export function EditEntryModal({ entry, visible, onClose, onSaved }: Props) {
           name: item.name,
           calories: item.calories,
           quantity: item.quantity,
+          protein: item.protein,
+          carbs: item.carbs,
+          fat: item.fat,
         })),
       });
       if (res.success) {

@@ -101,6 +101,9 @@ function EditEntryModal({
           name: item.name,
           calories: item.calories,
           quantity: item.quantity,
+          protein: item.protein,
+          carbs: item.carbs,
+          fat: item.fat,
         })),
       });
       if (res.success) {
