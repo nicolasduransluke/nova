@@ -88,6 +88,13 @@ export function EditEntryModal({ entry, visible, onClose, onSaved }: Props) {
                   <Text style={styles.itemCal}>
                     {item.calories * item.quantity} kcal
                   </Text>
+                  {(item.protein || item.carbs || item.fat) && (
+                    <Text style={styles.itemMacros}>
+                      {item.protein ? `P:${Math.round(item.protein * item.quantity)}g ` : ''}
+                      {item.carbs ? `C:${Math.round(item.carbs * item.quantity)}g ` : ''}
+                      {item.fat ? `F:${Math.round(item.fat * item.quantity)}g` : ''}
+                    </Text>
+                  )}
                 </View>
                 <View style={styles.stepper}>
                   <Pressable
@@ -186,6 +193,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     marginTop: 2,
+  },
+  itemMacros: {
+    color: '#818cf8',
+    fontSize: 11,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    marginTop: 1,
   },
   stepper: {
     flexDirection: 'row',

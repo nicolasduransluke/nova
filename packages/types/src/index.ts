@@ -116,6 +116,9 @@ export interface CalorieEntryItem {
   name: string;
   calories: number;
   quantity?: number;
+  protein?: number;  // grams
+  carbs?: number;    // grams
+  fat?: number;      // grams
   imageUrl?: string;
 }
 

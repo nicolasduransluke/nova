@@ -18,6 +18,20 @@ function EntryRow({
   const isWhoop = entry.id.startsWith('whoop-');
   const canEdit = isIntake && !isWhoop && entry.items.length > 0;
 
+  // Sum macros for this entry
+  const entryMacros = entry.items.reduce(
+    (acc, item) => {
+      const qty = item.quantity ?? 1;
+      return {
+        protein: acc.protein + (item.protein ?? 0) * qty,
+        carbs: acc.carbs + (item.carbs ?? 0) * qty,
+        fat: acc.fat + (item.fat ?? 0) * qty,
+      };
+    },
+    { protein: 0, carbs: 0, fat: 0 },
+  );
+  const hasMacros = entryMacros.protein > 0 || entryMacros.carbs > 0 || entryMacros.fat > 0;
+
   const handleDelete = () => {
     Alert.alert('Eliminar entrada', '¿Estás seguro?', [
       { text: 'Cancelar', style: 'cancel' },
@@ -44,7 +58,16 @@ function EntryRow({
             {isIntake ? 'ingesta' : 'quema'}
           </Text>
         </View>
-        <Text style={styles.entryDesc} numberOfLines={1}>{entry.description}</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.entryDesc} numberOfLines={1}>{entry.description}</Text>
+          {isIntake && hasMacros && (
+            <Text style={styles.entryMacros}>
+              {entryMacros.protein > 0 ? `P:${Math.round(entryMacros.protein)}g ` : ''}
+              {entryMacros.carbs > 0 ? `C:${Math.round(entryMacros.carbs)}g ` : ''}
+              {entryMacros.fat > 0 ? `F:${Math.round(entryMacros.fat)}g` : ''}
+            </Text>
+          )}
+        </View>
       </View>
       <View style={styles.entryRight}>
         <Text style={[styles.entryCal, isIntake ? styles.calIntake : styles.calBurn]}>
@@ -80,6 +103,23 @@ export function DayCard({ day, onEntryDeleted }: Props) {
   const [editEntry, setEditEntry] = useState<HistoryDayEntry | null>(null);
   const { summary } = day;
 
+  // Sum macros across all intake entries for the day
+  const dayMacros = day.entries
+    .filter((e) => e.type === 'intake')
+    .reduce(
+      (acc, entry) => {
+        for (const item of entry.items) {
+          const qty = item.quantity ?? 1;
+          acc.protein += (item.protein ?? 0) * qty;
+          acc.carbs += (item.carbs ?? 0) * qty;
+          acc.fat += (item.fat ?? 0) * qty;
+        }
+        return acc;
+      },
+      { protein: 0, carbs: 0, fat: 0 },
+    );
+  const hasDayMacros = dayMacros.protein > 0 || dayMacros.carbs > 0 || dayMacros.fat > 0;
+
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr + 'T12:00:00');
     return d.toLocaleDateString('es-MX', {
@@ -92,7 +132,14 @@ export function DayCard({ day, onEntryDeleted }: Props) {
   return (
     <View style={styles.card}>
       <Pressable onPress={() => setOpen(!open)} style={styles.cardHeader}>
-        <Text style={styles.dateText}>{formatDate(day.date)}</Text>
+        <View>
+          <Text style={styles.dateText}>{formatDate(day.date)}</Text>
+          {hasDayMacros && (
+            <Text style={styles.dayMacros}>
+              P:{Math.round(dayMacros.protein)}g  C:{Math.round(dayMacros.carbs)}g  F:{Math.round(dayMacros.fat)}g
+            </Text>
+          )}
+        </View>
         <View style={styles.statsRow}>
           <Text style={styles.intakeText}>{summary.intake}</Text>
           <Text style={styles.burnText}>{summary.burn}</Text>
@@ -224,6 +271,18 @@ const styles = StyleSheet.create({
     color: '#c7d2fe',
     fontSize: 13,
     flex: 1,
+  },
+  entryMacros: {
+    color: '#818cf8',
+    fontSize: 11,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    marginTop: 1,
+  },
+  dayMacros: {
+    color: '#818cf8',
+    fontSize: 11,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    marginTop: 2,
   },
   entryRight: {
     flexDirection: 'row',

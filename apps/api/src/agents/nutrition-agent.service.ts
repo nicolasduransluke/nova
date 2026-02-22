@@ -104,19 +104,20 @@ Guidelines:
   }
 
   async estimateCalories(description: string): Promise<CalorieIntakeResult> {
-    const prompt = `Estimate calories for this meal description. Return ONLY valid JSON.
+    const prompt = `Estimate calories and macronutrients for this meal description. Return ONLY valid JSON.
 
 Meal description: "${description}"
 
 Response format:
 {
-  "items": [{"name": "item name", "calories": 123}],
+  "items": [{"name": "item name", "calories": 123, "protein": 10, "carbs": 20, "fat": 5}],
   "totalCalories": 456
 }
 
 Rules:
 - Use Latin American portion sizes
 - Be accurate. Do NOT inflate calories.
+- protein, carbs, fat are in grams
 - Split combined items: "café con aceite de coco" = "café" (~5 kcal) + "aceite de coco" (~40 kcal for 1 tsp)
 - Pay attention to serving sizes: "cucharadita" = teaspoon (~5ml), "cucharada" = tablespoon (~15ml)
 - Black coffee is ~2-5 kcal. 1 tsp coconut oil is ~40 kcal. 1 tbsp oil is ~120 kcal.
@@ -133,7 +134,13 @@ Rules:
       const parsed = JSON.parse(cleaned);
 
       return {
-        items: parsed.items || [],
+        items: (parsed.items || []).map((item: { name: string; calories: number; protein?: number; carbs?: number; fat?: number }) => ({
+          name: item.name,
+          calories: item.calories,
+          protein: item.protein,
+          carbs: item.carbs,
+          fat: item.fat,
+        })),
         totalCalories: parsed.totalCalories || 0,
       };
     } catch (error) {

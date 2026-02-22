@@ -263,6 +263,9 @@ Respond with ONLY valid JSON, nothing else.`;
         enrichedItems.push({
           name: `${item.name} (USDA: ${usdaResult.match?.description})`,
           calories,
+          protein: usdaResult.match?.nutrients.protein,
+          carbs: usdaResult.match?.nutrients.carbs,
+          fat: usdaResult.match?.nutrients.fat,
         });
         totalCalories += calories;
         this.logger.debug(`USDA match for "${item.name}": ${calories} kcal`);
@@ -303,7 +306,7 @@ Respond with ONLY valid JSON, nothing else.`;
       return mealData;
     }
 
-    const prompt = `Estimate calories for these food items using Latin American portion sizes. Be accurate, not inflated.
+    const prompt = `Estimate calories and macronutrients for these food items using Latin American portion sizes. Be accurate, not inflated.
 
 Items: ${itemsNeedingEstimate.map(i => i.name).join(', ')}
 Original message for context: "${originalMessage}"
@@ -316,7 +319,7 @@ IMPORTANT:
 
 Return ONLY valid JSON:
 {
-  "items": [{"name": "item name", "calories": estimated_calories}],
+  "items": [{"name": "item name", "calories": estimated_calories, "protein": grams, "carbs": grams, "fat": grams}],
   "totalCalories": sum_of_all_calories
 }`;
 
@@ -337,16 +340,20 @@ Return ONLY valid JSON:
         }
         // Try name matching first
         const estimated_item = estimated.items?.find(
-          (e: { name: string; calories: number }) =>
+          (e: { name: string; calories: number; protein?: number; carbs?: number; fat?: number }) =>
             e.name.toLowerCase().includes(item.name.toLowerCase()) ||
             item.name.toLowerCase().includes(e.name.toLowerCase())
         );
         // If no name match, try by index (Gemini often returns items in same order)
         const byIndex = !estimated_item && estimated.items?.[index];
-        const cal = estimated_item?.calories || byIndex?.calories || 100;
+        const match = estimated_item || byIndex;
+        const cal = match?.calories || 100;
         return {
           name: item.name,
           calories: cal,
+          protein: match?.protein,
+          carbs: match?.carbs,
+          fat: match?.fat,
         };
       });
 

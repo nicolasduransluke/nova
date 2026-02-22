@@ -129,6 +129,13 @@ function EditEntryModal({
               <div className="flex-1 min-w-0 mr-3">
                 <p className="text-white text-sm">{item.name}</p>
                 <p className="text-green-300 text-xs font-mono">{item.calories * item.quantity} kcal</p>
+                {(item.protein || item.carbs || item.fat) && (
+                  <p className="text-indigo-400 text-xs font-mono">
+                    {item.protein ? `P:${Math.round(item.protein * item.quantity)}g ` : ''}
+                    {item.carbs ? `C:${Math.round(item.carbs * item.quantity)}g ` : ''}
+                    {item.fat ? `F:${Math.round(item.fat * item.quantity)}g` : ''}
+                  </p>
+                )}
               </div>
               <div className="flex items-center gap-0">
                 <button
@@ -175,11 +182,35 @@ function EditEntryModal({
   );
 }
 
+function MacroLabel({ protein, carbs, fat }: { protein: number; carbs: number; fat: number }) {
+  if (protein === 0 && carbs === 0 && fat === 0) return null;
+  return (
+    <span className="text-indigo-400 text-xs font-mono">
+      {protein > 0 && <span>P:{Math.round(protein)}g </span>}
+      {carbs > 0 && <span>C:{Math.round(carbs)}g </span>}
+      {fat > 0 && <span>F:{Math.round(fat)}g</span>}
+    </span>
+  );
+}
+
 function EntryRow({ entry, onDelete, onEdit }: { entry: HistoryDayEntry; onDelete?: (id: string) => void; onEdit?: (entry: HistoryDayEntry) => void }) {
   const isIntake = entry.type === 'intake';
   const isWhoop = entry.id.startsWith('whoop-');
   const canEdit = isIntake && !isWhoop && entry.items.length > 0;
   const [confirming, setConfirming] = useState(false);
+
+  // Sum macros for this entry
+  const entryMacros = entry.items.reduce(
+    (acc, item) => {
+      const qty = item.quantity ?? 1;
+      return {
+        protein: acc.protein + (item.protein ?? 0) * qty,
+        carbs: acc.carbs + (item.carbs ?? 0) * qty,
+        fat: acc.fat + (item.fat ?? 0) * qty,
+      };
+    },
+    { protein: 0, carbs: 0, fat: 0 },
+  );
 
   const handleDelete = async () => {
     if (!confirming) {
@@ -205,6 +236,7 @@ function EntryRow({ entry, onDelete, onEdit }: { entry: HistoryDayEntry; onDelet
           {isIntake ? 'ingesta' : 'quema'}
         </span>
         <span className="text-indigo-100 text-sm truncate">{entry.description}</span>
+        {isIntake && <MacroLabel {...entryMacros} />}
       </div>
       <div className="flex items-center gap-2 shrink-0">
         <span className={`font-mono text-sm ${isIntake ? 'text-green-300' : 'text-orange-300'}`}>
@@ -232,6 +264,23 @@ function DayCard({ day, onEntryDeleted }: { day: HistoryDay; onEntryDeleted: () 
   const [editEntry, setEditEntry] = useState<HistoryDayEntry | null>(null);
   const { summary } = day;
 
+  // Sum macros across all intake entries for the day
+  const dayMacros = day.entries
+    .filter((e) => e.type === 'intake')
+    .reduce(
+      (acc, entry) => {
+        for (const item of entry.items) {
+          const qty = item.quantity ?? 1;
+          acc.protein += (item.protein ?? 0) * qty;
+          acc.carbs += (item.carbs ?? 0) * qty;
+          acc.fat += (item.fat ?? 0) * qty;
+        }
+        return acc;
+      },
+      { protein: 0, carbs: 0, fat: 0 },
+    );
+  const hasMacros = dayMacros.protein > 0 || dayMacros.carbs > 0 || dayMacros.fat > 0;
+
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr + 'T12:00:00');
     return d.toLocaleDateString('es-MX', { weekday: 'short', month: 'short', day: 'numeric' });
@@ -243,7 +292,14 @@ function DayCard({ day, onEntryDeleted }: { day: HistoryDay; onEntryDeleted: () 
         onClick={() => setOpen(!open)}
         className="w-full flex items-center justify-between p-4 text-left hover:bg-white/5 transition-colors"
       >
-        <span className="text-white font-medium">{formatDate(day.date)}</span>
+        <div>
+          <span className="text-white font-medium">{formatDate(day.date)}</span>
+          {hasMacros && (
+            <div className="text-indigo-400 text-xs font-mono mt-0.5">
+              P:{Math.round(dayMacros.protein)}g  C:{Math.round(dayMacros.carbs)}g  F:{Math.round(dayMacros.fat)}g
+            </div>
+          )}
+        </div>
         <div className="flex items-center gap-4 text-sm">
           <span className="text-green-300">{summary.intake} kcal</span>
           <span className="text-orange-300 flex items-center gap-1">
