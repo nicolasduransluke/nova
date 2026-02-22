@@ -202,8 +202,8 @@ export class HistoryService {
 
   async updateEntryItems(
     entryId: string,
-    newItems: { name: string; calories: number; quantity?: number }[],
-    existingItems: { name: string; calories: number; quantity?: number; imageUrl?: string }[],
+    newItems: { name: string; calories: number; quantity?: number; protein?: number; carbs?: number; fat?: number }[],
+    existingItems: { name: string; calories: number; quantity?: number; protein?: number; carbs?: number; fat?: number; imageUrl?: string }[],
   ) {
     // Build a map of existing imageUrls by item name so we preserve them
     const imageMap = new Map<string, string>();
@@ -217,6 +217,9 @@ export class HistoryService {
       name: item.name,
       calories: item.calories,
       quantity: item.quantity ?? 1,
+      ...(item.protein != null ? { protein: item.protein } : {}),
+      ...(item.carbs != null ? { carbs: item.carbs } : {}),
+      ...(item.fat != null ? { fat: item.fat } : {}),
       ...(imageMap.has(item.name) ? { imageUrl: imageMap.get(item.name) } : {}),
     }));
 

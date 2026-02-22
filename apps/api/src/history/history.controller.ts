@@ -74,7 +74,7 @@ export class HistoryController {
   @Patch('entries/:id')
   async updateEntryItems(
     @Param('id') entryId: string,
-    @Body() body: { items: { name: string; calories: number; quantity?: number }[] },
+    @Body() body: { items: { name: string; calories: number; quantity?: number; protein?: number; carbs?: number; fat?: number }[] },
     @CurrentUser() user: JwtPayload,
   ): Promise<ApiResponse<CalorieEntry>> {
     const entry = await this.prisma.calorieEntry.findUnique({
