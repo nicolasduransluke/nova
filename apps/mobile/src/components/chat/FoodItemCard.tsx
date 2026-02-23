@@ -7,9 +7,17 @@ interface Props {
   item: CalorieEntryItem;
 }
 
+const sourceLabel: Record<string, { text: string; color: string }> = {
+  usda: { text: 'USDA', color: '#4ade80' },
+  gemini: { text: 'IA', color: '#a78bfa' },
+  vision: { text: 'IA', color: '#a78bfa' },
+  fallback: { text: 'est.', color: '#f87171' },
+};
+
 export function FoodItemCard({ item }: Props) {
   const [imageError, setImageError] = useState(false);
   const hasImage = !!item.imageUrl && !imageError;
+  const badge = item.source ? sourceLabel[item.source] : undefined;
 
   return (
     <View style={styles.card}>
@@ -27,7 +35,22 @@ export function FoodItemCard({ item }: Props) {
       )}
       <View style={styles.info}>
         <Text style={styles.name} numberOfLines={2}>{item.name}</Text>
-        <Text style={styles.calories}>~{item.calories} kcal</Text>
+        <View style={styles.calRow}>
+          <Text style={styles.calories}>~{item.calories} kcal</Text>
+          {badge && (
+            <Text style={[styles.sourceBadge, { color: badge.color }]}>{badge.text}</Text>
+          )}
+        </View>
+        {item.portionSize != null && item.portionLabel && (
+          <Text style={styles.portion}>
+            {item.portionSize} {item.portionLabel}
+          </Text>
+        )}
+        {(item.protein != null || item.carbs != null || item.fat != null) && (
+          <Text style={styles.macros}>
+            P: {item.protein ?? 0}g{'  '}C: {item.carbs ?? 0}g{'  '}G: {item.fat ?? 0}g
+          </Text>
+        )}
       </View>
     </View>
   );
@@ -70,9 +93,30 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     lineHeight: 18,
   },
+  calRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 2,
+  },
   calories: {
     color: colors.text.muted,
     fontSize: 12,
-    marginTop: 2,
+  },
+  sourceBadge: {
+    fontSize: 9,
+    fontWeight: '600',
+    opacity: 0.7,
+  },
+  portion: {
+    color: colors.text.dimmed,
+    fontSize: 11,
+    fontStyle: 'italic',
+    marginTop: 1,
+  },
+  macros: {
+    color: colors.text.dimmed,
+    fontSize: 11,
+    marginTop: 1,
   },
 });

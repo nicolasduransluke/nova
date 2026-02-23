@@ -120,6 +120,9 @@ export interface CalorieEntryItem {
   carbs?: number;    // grams
   fat?: number;      // grams
   imageUrl?: string;
+  source?: 'usda' | 'gemini' | 'vision' | 'fallback';
+  portionSize?: number;   // assumed piece count (e.g. 10 for nuggets, 2 for eggs)
+  portionLabel?: string;  // unit in Spanish (e.g. "piezas", "rebanadas", "unidad")
 }
 
 export interface CalorieEntry {

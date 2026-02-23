@@ -115,6 +115,87 @@ export class ClaudeClientService implements OnModuleInit {
     );
   }
 
+  /**
+   * Analyze a food photo using Gemini vision and return structured nutrition data.
+   */
+  async analyzeImageFood(
+    base64Image: string,
+    textHint?: string,
+  ): Promise<{ items: CalorieEntryItem[]; totalCalories: number }> {
+    if (!process.env.GOOGLE_API_KEY) {
+      this.logger.warn('No GOOGLE_API_KEY — returning mock vision result');
+      return {
+        items: [{ name: 'comida (foto)', calories: 500, protein: 25, carbs: 50, fat: 15 }],
+        totalCalories: 500,
+      };
+    }
+
+    const raw = base64Image.replace(/^data:image\/\w+;base64,/, '');
+    const mimeMatch = base64Image.match(/^data:(image\/\w+);base64,/);
+    const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+
+    const prompt = `Identify every food item visible in this photo. For each item estimate calories and macros using standard Latin American portion sizes.
+${textHint ? `Context from user: "${textHint}"` : ''}
+
+Return ONLY valid JSON (no markdown fences):
+{
+  "items": [{"name": "item name in Spanish", "calories": number, "protein": number, "carbs": number, "fat": number, "portionSize": number, "portionLabel": "unit in Spanish"}],
+  "totalCalories": number
+}
+
+For portionSize/portionLabel: estimate how many pieces/slices/units you see. Examples: 6 nuggets → portionSize: 6, portionLabel: "piezas". 1 hamburger → portionSize: 1, portionLabel: "unidad". 2 slices of pizza → portionSize: 2, portionLabel: "rebanadas".
+
+If no food is visible return: {"items": [], "totalCalories": 0}`;
+
+    return retry(
+      async () => {
+        try {
+          const model = this.client.getGenerativeModel({
+            model: this.model,
+            systemInstruction: 'You are a nutrition expert. Respond with only valid JSON.',
+          });
+
+          const result = await model.generateContent({
+            contents: [
+              {
+                role: 'user',
+                parts: [
+                  { inlineData: { mimeType, data: raw } },
+                  { text: prompt },
+                ],
+              },
+            ],
+            generationConfig: {
+              maxOutputTokens: 500,
+              temperature: 0.2,
+            },
+          });
+
+          const text = result.response.text();
+          const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+          const parsed = JSON.parse(cleaned);
+          this.logger.debug(`Vision result: ${JSON.stringify(parsed)}`);
+
+          const items = (parsed.items || []).map((i: CalorieEntryItem & { portionSize?: number; portionLabel?: string }) => ({
+            ...i,
+            source: 'vision' as const,
+            ...(i.portionSize != null ? { portionSize: i.portionSize } : {}),
+            ...(i.portionLabel ? { portionLabel: i.portionLabel } : {}),
+          }));
+          return {
+            items,
+            totalCalories: parsed.totalCalories || items.reduce((s: number, i: { calories: number }) => s + i.calories, 0) || 0,
+          };
+        } catch (error) {
+          this.logger.error(`Gemini vision error: ${error}`);
+          throw error;
+        }
+      },
+      this.maxRetries,
+      this.baseDelayMs,
+    );
+  }
+
   async classifyIntent(message: string): Promise<MessageIntent> {
     // Always use keyword-based classifier first — it's reliable for meal/activity/weight
     const keywordIntent = this.getMockIntent(message);
@@ -184,13 +265,18 @@ Respond with ONLY the category name, nothing else.`;
 
     const extractionPrompts: Record<string, string> = {
       weight_log: `Extract weight data from this message. Return JSON with: { "weight": number (in kg), "unit": "kg" or "lb" }`,
-      meal_log: `Extract meal data from this message. Return JSON with: { "items": [{"name": "food item", "quantity": number or null, "unit": "g" or "oz" or "tsp" or "tbsp" or "cup" or "portion" or null}], "totalCalories": null }.
+      meal_log: `Extract meal data from this message AND estimate calories and macros for each item. Use standard Latin American portion sizes. Be accurate.
 
-RULES for splitting items:
-- Keep cooking modifiers as ONE item: "café sin azúcar" = ONE item, "pollo a la plancha" = ONE item, "leche descremada" = ONE item.
-- SPLIT when "con" adds a SEPARATE food/ingredient: "café con aceite de coco" = TWO items: "café" + "aceite de coco". "arroz con pollo" = TWO items: "arroz" + "pollo". "pan con mantequilla" = TWO items: "pan" + "mantequilla".
+Return JSON: { "items": [{"name": "food item in Spanish", "quantity": number or 1, "unit": "g"|"oz"|"tsp"|"tbsp"|"cup"|"portion"|null, "calories": estimated_kcal, "protein": grams, "carbs": grams, "fat": grams, "portionSize": number, "portionLabel": "unit in Spanish"}], "totalCalories": sum_of_all }
+
+RULES:
+- Keep cooking modifiers as ONE item: "café sin azúcar" = ONE item, "pollo a la plancha" = ONE item.
+- SPLIT when "con" adds a SEPARATE ingredient: "café con aceite de coco" = TWO: "café" + "aceite de coco".
 - Preserve quantity words: "cucharadita" = tsp, "cucharada" = tbsp, "taza" = cup.
-- Example: "café con una cucharadita de aceite de coco" → [{"name": "café", "quantity": 1, "unit": "portion"}, {"name": "aceite de coco", "quantity": 1, "unit": "tsp"}]`,
+- For branded/fast food items (e.g. Big Mac, Whopper, Subway), use the REAL calorie values from those restaurants. A Big Mac is ~550 kcal, a Whopper ~660 kcal, etc.
+- Plain water (agua) = 0 kcal. Black coffee (café negro/sin azúcar) = ~5 kcal.
+- Be precise, do NOT default to round numbers like 100 or 200 for everything.
+- PORTION INFO: For each item, return portionSize (the assumed number of pieces/slices/cups in the estimate) and portionLabel (the unit in Spanish). Examples: nuggets → portionSize: 10, portionLabel: "piezas". 2 huevos → portionSize: 2, portionLabel: "piezas". A single hamburger → portionSize: 1, portionLabel: "unidad". A cup of rice → portionSize: 1, portionLabel: "taza". 3 rebanadas de pan → portionSize: 3, portionLabel: "rebanadas".`,
       activity_log: `Extract activity data from this message. Return JSON with: { "activity": "activity name", "durationMinutes": number, "caloriesBurned": estimated_calories_burned }`,
       goal_set: `Extract weight goal data from this message. Return JSON with: { "goalWeight": number or null (target weight in kg), "weeklyGoal": number or null (kg per week to lose), "targetWeeks": number or null (weeks to reach goal) }. If the user mentions pounds, convert to kg.`,
       profile_setup: `Extract profile data from this message. Return JSON with: { "weight": number or null (kg), "height": number or null (cm), "age": number or null, "sex": "male" or "female" or null, "goalWeight": number or null (kg) }. Convert meters to cm for height. Convert pounds to kg for weight.`,
@@ -211,7 +297,7 @@ Respond with ONLY valid JSON, nothing else.`;
     try {
       const response = await this.generateResponse(prompt, {
         systemPrompt: 'You are a data extractor. Respond with only valid JSON.',
-        maxTokens: 300,
+        maxTokens: 800,
         temperature: 0,
       });
 
@@ -234,52 +320,77 @@ Respond with ONLY valid JSON, nothing else.`;
   }
 
   /**
-   * Enrich meal data with USDA nutrition information
+   * Enrich meal data with USDA nutrition information.
+   * Gemini already estimated calories during extraction — USDA only replaces
+   * when it has a high-quality match (Foundation/SR Legacy basic foods).
    */
   private async enrichMealWithUSDA(
-    mealData: { items: Array<{ name: string; quantity?: number; unit?: string; calories?: number }>; totalCalories?: number },
+    mealData: { items: Array<{ name: string; quantity?: number; unit?: string; calories?: number; protein?: number; carbs?: number; fat?: number; portionSize?: number; portionLabel?: string }>; totalCalories?: number },
     originalMessage: string,
   ): Promise<Record<string, unknown>> {
-    if (!this.nutritionService.isAvailable()) {
-      // USDA not configured, fall back to Gemini estimation
-      return this.estimateMealCaloriesWithGemini(mealData, originalMessage);
-    }
-
     const enrichedItems: CalorieEntryItem[] = [];
     let totalCalories = 0;
-    let usedUSDA = false;
 
     for (const item of mealData.items) {
-      const usdaResult = await this.nutritionService.estimateCalories(
-        item.name,
-        item.quantity,
-        item.unit,
-      );
+      // Try USDA for this item (Foundation/SR Legacy only, no Branded)
+      let usedUSDA = false;
+      if (this.nutritionService.isAvailable()) {
+        const usdaResult = await this.nutritionService.estimateCalories(
+          item.name,
+          item.quantity,
+          item.unit,
+        );
 
-      if (usdaResult && usdaResult.source === 'usda') {
-        // USDA found a match
-        usedUSDA = true;
-        const calories = usdaResult.calories;
-        enrichedItems.push({
-          name: `${item.name} (USDA: ${usdaResult.match?.description})`,
-          calories,
-          protein: usdaResult.match?.nutrients.protein,
-          carbs: usdaResult.match?.nutrients.carbs,
-          fat: usdaResult.match?.nutrients.fat,
-        });
-        totalCalories += calories;
-        this.logger.debug(`USDA match for "${item.name}": ${calories} kcal`);
-      } else {
-        // No USDA match, will estimate later
+        if (usdaResult && usdaResult.source === 'usda') {
+          const usdaCal = usdaResult.calories;
+          const geminiCal = item.calories || 0;
+
+          // Sanity check: if Gemini already estimated and USDA differs >30%, trust Gemini.
+          // USDA per-100g without servingSize is often misleading for prepared/fast foods.
+          const tooFarOff = geminiCal > 0 && usdaCal > 0 &&
+            Math.abs(usdaCal - geminiCal) / geminiCal > 0.3;
+
+          if (!tooFarOff) {
+            usedUSDA = true;
+            enrichedItems.push({
+              name: item.name,
+              calories: usdaCal,
+              protein: usdaResult.match?.nutrients.protein,
+              carbs: usdaResult.match?.nutrients.carbs,
+              fat: usdaResult.match?.nutrients.fat,
+              source: 'usda',
+              ...(item.portionSize != null ? { portionSize: item.portionSize } : {}),
+              ...(item.portionLabel ? { portionLabel: item.portionLabel } : {}),
+            });
+            totalCalories += usdaCal;
+            this.logger.debug(`USDA accepted for "${item.name}": ${usdaCal} kcal (gemini=${geminiCal})`);
+          } else {
+            this.logger.debug(`USDA rejected for "${item.name}": USDA=${usdaCal} vs Gemini=${geminiCal} (>50% diff)`);
+          }
+        }
+      }
+
+      if (!usedUSDA) {
+        // Use Gemini's estimate from extraction
+        const geminiCal = item.calories || 0;
         enrichedItems.push({
           name: item.name,
-          calories: item.calories || 0,
+          calories: geminiCal,
+          protein: item.protein,
+          carbs: item.carbs,
+          fat: item.fat,
+          source: geminiCal > 0 ? 'gemini' : undefined,
+          ...(item.portionSize != null ? { portionSize: item.portionSize } : {}),
+          ...(item.portionLabel ? { portionLabel: item.portionLabel } : {}),
         });
+        totalCalories += geminiCal;
+        this.logger.debug(`Gemini estimate for "${item.name}": ${geminiCal} kcal`);
       }
     }
 
-    // If we didn't get USDA data for all items, use Gemini for the remaining
-    if (!usedUSDA || enrichedItems.some(i => i.calories === 0)) {
+    // If any items still have 0 calories and no source, last-resort Gemini call
+    const needsEstimate = enrichedItems.some(i => i.calories === 0 && !i.source);
+    if (needsEstimate) {
       return this.estimateMealCaloriesWithGemini(
         { items: enrichedItems, totalCalories },
         originalMessage,
@@ -289,7 +400,6 @@ Respond with ONLY valid JSON, nothing else.`;
     return {
       items: enrichedItems,
       totalCalories,
-      source: 'usda',
     };
   }
 
@@ -297,10 +407,10 @@ Respond with ONLY valid JSON, nothing else.`;
    * Fall back to Gemini for calorie estimation when USDA doesn't have data
    */
   private async estimateMealCaloriesWithGemini(
-    mealData: { items: Array<{ name: string; calories?: number }>; totalCalories?: number },
+    mealData: { items: Array<{ name: string; calories?: number; portionSize?: number; portionLabel?: string }>; totalCalories?: number },
     originalMessage: string,
   ): Promise<Record<string, unknown>> {
-    const itemsNeedingEstimate = mealData.items.filter(i => !i.calories || i.calories === 0);
+    const itemsNeedingEstimate = mealData.items.filter(i => (!i.calories || i.calories === 0) && !(i as CalorieEntryItem).source);
 
     if (itemsNeedingEstimate.length === 0) {
       return mealData;
@@ -326,16 +436,16 @@ Return ONLY valid JSON:
     try {
       const response = await this.generateResponse(prompt, {
         systemPrompt: 'You are a nutrition expert. Respond with only valid JSON.',
-        maxTokens: 300,
+        maxTokens: 800,
         temperature: 0,
       });
 
       const cleaned = response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
       const estimated = JSON.parse(cleaned);
 
-      // Merge estimated calories with existing items
+      // Merge estimated calories with existing items (preserve USDA-sourced items even if 0 cal)
       const finalItems = mealData.items.map((item, index) => {
-        if (item.calories && item.calories > 0) {
+        if ((item.calories && item.calories > 0) || (item as CalorieEntryItem).source) {
           return item;
         }
         // Try name matching first
@@ -354,6 +464,9 @@ Return ONLY valid JSON:
           protein: match?.protein,
           carbs: match?.carbs,
           fat: match?.fat,
+          source: 'gemini' as const,
+          ...(item.portionSize != null ? { portionSize: item.portionSize } : {}),
+          ...(item.portionLabel ? { portionLabel: item.portionLabel } : {}),
         };
       });
 
@@ -371,6 +484,7 @@ Return ONLY valid JSON:
         items: mealData.items.map(i => ({
           name: i.name,
           calories: i.calories || 200,
+          source: 'fallback' as const,
         })),
         totalCalories: mealData.items.reduce((sum, i) => sum + (i.calories || 200), 0),
         source: 'fallback',
@@ -1007,6 +1121,7 @@ Determine the user's intention. Return ONLY valid JSON:
       mantequilla: 100, butter: 100,
       miel: 60, honey: 60,
       aceite: 120, oil: 120,
+      agua: 0, water: 0,
     };
 
     // Merge all foods, sort by key length DESC (longest match first)

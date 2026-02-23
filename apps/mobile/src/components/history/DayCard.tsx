@@ -18,6 +18,16 @@ function EntryRow({
   const isWhoop = entry.id.startsWith('whoop-');
   const canEdit = isIntake && !isWhoop && entry.items.length > 0;
 
+  // Derive source from first item that has one
+  const itemSource = entry.items.find(i => i.source)?.source;
+  const sourceBadges: Record<string, { text: string; color: string }> = {
+    usda: { text: 'USDA', color: '#4ade80' },
+    gemini: { text: 'IA', color: '#a78bfa' },
+    vision: { text: 'IA', color: '#a78bfa' },
+    fallback: { text: 'est.', color: '#f87171' },
+  };
+  const badge = itemSource ? sourceBadges[itemSource] : undefined;
+
   // Sum macros for this entry
   const entryMacros = entry.items.reduce(
     (acc, item) => {
@@ -60,6 +70,14 @@ function EntryRow({
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.entryDesc} numberOfLines={1}>{entry.description}</Text>
+          {(() => {
+            const portionItem = entry.items.find(i => i.portionSize != null && i.portionLabel);
+            return portionItem ? (
+              <Text style={styles.entryPortion}>
+                {portionItem.portionSize} {portionItem.portionLabel}
+              </Text>
+            ) : null;
+          })()}
           {isIntake && hasMacros && (
             <Text style={styles.entryMacros}>
               {entryMacros.protein > 0 ? `P:${Math.round(entryMacros.protein)}g ` : ''}
@@ -70,6 +88,9 @@ function EntryRow({
         </View>
       </View>
       <View style={styles.entryRight}>
+        {badge && (
+          <Text style={[styles.sourceTag, { color: badge.color }]}>{badge.text}</Text>
+        )}
         <Text style={[styles.entryCal, isIntake ? styles.calIntake : styles.calBurn]}>
           {isIntake ? '+' : '-'}{entry.calories}
         </Text>
@@ -132,17 +153,9 @@ export function DayCard({ day, onEntryDeleted }: Props) {
   return (
     <View style={styles.card}>
       <Pressable onPress={() => setOpen(!open)} style={styles.cardHeader}>
-        <View>
-          <Text style={styles.dateText}>{formatDate(day.date)}</Text>
-          {hasDayMacros && (
-            <Text style={styles.dayMacros}>
-              P:{Math.round(dayMacros.protein)}g  C:{Math.round(dayMacros.carbs)}g  F:{Math.round(dayMacros.fat)}g
-            </Text>
-          )}
-        </View>
+        <Text style={styles.dateText}>{formatDate(day.date)}</Text>
         <View style={styles.statsRow}>
-          <Text style={styles.intakeText}>{summary.intake}</Text>
-          <Text style={styles.burnText}>{summary.burn}</Text>
+          <Text style={styles.intakeText}>{summary.intake} kcal</Text>
           <Text style={[styles.deficitText, summary.deficit < 0 && styles.deficitNeg]}>
             {summary.deficit >= 0 ? '+' : ''}{summary.deficit}
           </Text>
@@ -152,6 +165,16 @@ export function DayCard({ day, onEntryDeleted }: Props) {
 
       {open && (
         <View style={styles.entriesContainer}>
+          {hasDayMacros && (
+            <View style={styles.macrosSummary}>
+              <Text style={styles.macrosLabel}>Macros</Text>
+              <View style={styles.macrosRow}>
+                <Text style={styles.macroItem}>P: {Math.round(dayMacros.protein)}g</Text>
+                <Text style={styles.macroItem}>C: {Math.round(dayMacros.carbs)}g</Text>
+                <Text style={styles.macroItem}>F: {Math.round(dayMacros.fat)}g</Text>
+              </View>
+            </View>
+          )}
           {day.entries.length > 0 ? (
             day.entries.map((e) => (
               <EntryRow key={e.id} entry={e} onDelete={onEntryDeleted} onEdit={setEditEntry} />
@@ -200,10 +223,7 @@ const styles = StyleSheet.create({
   intakeText: {
     color: '#86efac',
     fontSize: 13,
-  },
-  burnText: {
-    color: '#fdba74',
-    fontSize: 13,
+    fontWeight: '600',
   },
   deficitText: {
     color: '#a5b4fc',
@@ -221,6 +241,34 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.1)',
     backgroundColor: 'rgba(255,255,255,0.03)',
+  },
+  macrosSummary: {
+    padding: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.08)',
+  },
+  macrosLabel: {
+    color: colors.text.secondary,
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  macrosRow: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 4,
+  },
+  macroItem: {
+    color: '#818cf8',
+    fontSize: 13,
+    fontWeight: '600',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+  macroDetail: {
+    color: colors.text.muted,
+    fontSize: 12,
   },
   emptyText: {
     color: colors.text.muted,
@@ -272,22 +320,27 @@ const styles = StyleSheet.create({
     fontSize: 13,
     flex: 1,
   },
+  entryPortion: {
+    color: colors.text.dimmed,
+    fontSize: 11,
+    fontStyle: 'italic',
+    marginTop: 1,
+  },
   entryMacros: {
     color: '#818cf8',
     fontSize: 11,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     marginTop: 1,
   },
-  dayMacros: {
-    color: '#818cf8',
-    fontSize: 11,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    marginTop: 2,
-  },
   entryRight: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  sourceTag: {
+    fontSize: 9,
+    fontWeight: '600',
+    opacity: 0.7,
   },
   entryCal: {
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',

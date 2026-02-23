@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -20,31 +20,81 @@ interface Props {
   onSaved: () => void;
 }
 
+interface EditableItem extends CalorieEntryItem {
+  quantity: number;
+  portionSize?: number;
+  portionLabel?: string;
+}
+
+/** Snapshot of original values at mount time, used for proportional recalc */
+interface OriginalSnapshot {
+  calories: number;
+  portionSize: number;
+  protein?: number;
+  carbs?: number;
+  fat?: number;
+}
+
 export function EditEntryModal({ entry, visible, onClose, onSaved }: Props) {
-  const [items, setItems] = useState<(CalorieEntryItem & { quantity: number })[]>([]);
+  const [items, setItems] = useState<EditableItem[]>([]);
   const [saving, setSaving] = useState(false);
+  const originals = useRef<OriginalSnapshot[]>([]);
 
   useEffect(() => {
     if (entry?.items) {
-      setItems(
-        entry.items.map((item) => ({
-          ...item,
-          quantity: item.quantity ?? 1,
-        })),
-      );
+      const mapped = entry.items.map((item) => ({
+        ...item,
+        quantity: item.quantity ?? 1,
+      }));
+      setItems(mapped);
+      // Snapshot originals for proportional recalc
+      originals.current = entry.items.map((item) => ({
+        calories: item.calories,
+        portionSize: item.portionSize ?? 0,
+        protein: item.protein,
+        carbs: item.carbs,
+        fat: item.fat,
+      }));
     }
   }, [entry]);
 
-  const totalCalories = items.reduce(
-    (sum, item) => sum + item.calories * item.quantity,
-    0,
-  );
+  const hasPortion = (item: EditableItem) =>
+    item.portionSize != null && item.portionSize > 0 && !!item.portionLabel;
 
+  const totalCalories = items.reduce((sum, item) => {
+    if (hasPortion(item)) {
+      return sum + item.calories;
+    }
+    return sum + item.calories * item.quantity;
+  }, 0);
+
+  /** Quantity stepper for items WITHOUT portionSize (legacy behavior) */
   const updateQuantity = (index: number, delta: number) => {
     setItems((prev) =>
       prev.map((item, i) =>
         i === index ? { ...item, quantity: Math.max(1, item.quantity + delta) } : item,
       ),
+    );
+  };
+
+  /** Portion stepper for items WITH portionSize — recalculates calories proportionally */
+  const updatePortionSize = (index: number, delta: number) => {
+    setItems((prev) =>
+      prev.map((item, i) => {
+        if (i !== index) return item;
+        const orig = originals.current[index];
+        if (!orig || orig.portionSize === 0) return item;
+        const newSize = Math.max(1, (item.portionSize ?? orig.portionSize) + delta);
+        const ratio = newSize / orig.portionSize;
+        return {
+          ...item,
+          portionSize: newSize,
+          calories: Math.round(orig.calories * ratio),
+          protein: orig.protein != null ? Math.round(orig.protein * ratio) : item.protein,
+          carbs: orig.carbs != null ? Math.round(orig.carbs * ratio) : item.carbs,
+          fat: orig.fat != null ? Math.round(orig.fat * ratio) : item.fat,
+        };
+      }),
     );
   };
 
@@ -60,6 +110,8 @@ export function EditEntryModal({ entry, visible, onClose, onSaved }: Props) {
           protein: item.protein,
           carbs: item.carbs,
           fat: item.fat,
+          ...(item.portionSize != null ? { portionSize: item.portionSize } : {}),
+          ...(item.portionLabel ? { portionLabel: item.portionLabel } : {}),
         })),
       });
       if (res.success) {
@@ -84,39 +136,52 @@ export function EditEntryModal({ entry, visible, onClose, onSaved }: Props) {
           <Text style={styles.subtitle}>{entry.description}</Text>
 
           <ScrollView style={styles.itemList}>
-            {items.map((item, index) => (
-              <View key={index} style={styles.itemRow}>
-                <View style={styles.itemInfo}>
-                  <Text style={styles.itemName}>{item.name}</Text>
-                  <Text style={styles.itemCal}>
-                    {item.calories * item.quantity} kcal
-                  </Text>
-                  {(item.protein || item.carbs || item.fat) && (
-                    <Text style={styles.itemMacros}>
-                      {item.protein ? `P:${Math.round(item.protein * item.quantity)}g ` : ''}
-                      {item.carbs ? `C:${Math.round(item.carbs * item.quantity)}g ` : ''}
-                      {item.fat ? `F:${Math.round(item.fat * item.quantity)}g` : ''}
+            {items.map((item, index) => {
+              const usePortionStepper = hasPortion(item);
+              const stepperValue = usePortionStepper ? (item.portionSize ?? 1) : item.quantity;
+              const minValue = 1;
+              const displayCal = usePortionStepper ? item.calories : item.calories * item.quantity;
+              const displayProtein = usePortionStepper ? item.protein : (item.protein ? item.protein * item.quantity : undefined);
+              const displayCarbs = usePortionStepper ? item.carbs : (item.carbs ? item.carbs * item.quantity : undefined);
+              const displayFat = usePortionStepper ? item.fat : (item.fat ? item.fat * item.quantity : undefined);
+
+              return (
+                <View key={index} style={styles.itemRow}>
+                  <View style={styles.itemInfo}>
+                    <Text style={styles.itemName}>{item.name}</Text>
+                    <Text style={styles.itemCal}>
+                      {displayCal} kcal
                     </Text>
-                  )}
+                    {(displayProtein || displayCarbs || displayFat) && (
+                      <Text style={styles.itemMacros}>
+                        {displayProtein ? `P:${Math.round(displayProtein)}g ` : ''}
+                        {displayCarbs ? `C:${Math.round(displayCarbs)}g ` : ''}
+                        {displayFat ? `F:${Math.round(displayFat)}g` : ''}
+                      </Text>
+                    )}
+                    {usePortionStepper && (
+                      <Text style={styles.portionHint}>{item.portionLabel}</Text>
+                    )}
+                  </View>
+                  <View style={styles.stepper}>
+                    <Pressable
+                      onPress={() => usePortionStepper ? updatePortionSize(index, -1) : updateQuantity(index, -1)}
+                      style={[styles.stepBtn, stepperValue <= minValue && styles.stepBtnDisabled]}
+                      disabled={stepperValue <= minValue}
+                    >
+                      <Text style={styles.stepText}>-</Text>
+                    </Pressable>
+                    <Text style={styles.stepValue}>{stepperValue}</Text>
+                    <Pressable
+                      onPress={() => usePortionStepper ? updatePortionSize(index, 1) : updateQuantity(index, 1)}
+                      style={styles.stepBtn}
+                    >
+                      <Text style={styles.stepText}>+</Text>
+                    </Pressable>
+                  </View>
                 </View>
-                <View style={styles.stepper}>
-                  <Pressable
-                    onPress={() => updateQuantity(index, -1)}
-                    style={[styles.stepBtn, item.quantity <= 1 && styles.stepBtnDisabled]}
-                    disabled={item.quantity <= 1}
-                  >
-                    <Text style={styles.stepText}>-</Text>
-                  </Pressable>
-                  <Text style={styles.stepValue}>{item.quantity}</Text>
-                  <Pressable
-                    onPress={() => updateQuantity(index, 1)}
-                    style={styles.stepBtn}
-                  >
-                    <Text style={styles.stepText}>+</Text>
-                  </Pressable>
-                </View>
-              </View>
-            ))}
+              );
+            })}
           </ScrollView>
 
           <View style={styles.footer}>
@@ -202,6 +267,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     marginTop: 1,
+  },
+  portionHint: {
+    color: colors.text.dimmed,
+    fontSize: 11,
+    fontStyle: 'italic',
+    marginTop: 2,
   },
   stepper: {
     flexDirection: 'row',
