@@ -18,7 +18,8 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.cotalker.nova-mobile",
-      "buildNumber": "2",
+      "buildNumber": "9",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "NSCameraUsageDescription": "NOVA necesita acceso a tu cámara para tomar fotos de tus comidas.",
         "NSPhotoLibraryUsageDescription": "NOVA necesita acceso a tus fotos para seleccionar imágenes de tus comidas.",
@@ -28,11 +29,18 @@
     "plugins": [
       "expo-secure-store",
       "expo-web-browser",
+      "expo-apple-authentication",
       [
         "expo-image-picker",
         {
           "photosPermission": "NOVA necesita acceso a tus fotos para seleccionar imágenes de tus comidas.",
           "cameraPermission": "NOVA necesita acceso a tu cámara para tomar fotos de tus comidas."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "sounds": []
         }
       ]
     ],

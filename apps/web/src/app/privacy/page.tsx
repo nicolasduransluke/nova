@@ -63,18 +63,40 @@ export default function PrivacyPolicy() {
 
         <section className="mb-8">
           <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-100 mb-3">
-            4. Almacenamiento y Seguridad
+            4. Inteligencia Artificial (Google Gemini)
+          </h2>
+          <p className="text-gray-600 dark:text-gray-300 mb-2">
+            NOVA utiliza Google Gemini AI para proporcionar estimaciones de calorías y
+            recomendaciones personalizadas. Al usar el servicio de chat, la siguiente
+            información se envía a Google Gemini:
+          </p>
+          <ul className="list-disc list-inside text-gray-600 dark:text-gray-300 space-y-1 ml-4">
+            <li>Descripciones y fotos de tus comidas</li>
+            <li>Datos de tu perfil (peso, altura, edad, sexo, objetivo de peso)</li>
+            <li>Historial de conversación reciente para proporcionar contexto</li>
+          </ul>
+          <p className="text-gray-600 dark:text-gray-300 mt-2">
+            Estos datos se envían exclusivamente para procesar tus consultas nutricionales.
+            Google Gemini no almacena tus datos de forma permanente para entrenar sus modelos.
+            Antes de usar el chat por primera vez, se te solicitará consentimiento explícito
+            para compartir esta información.
+          </p>
+        </section>
+
+        <section className="mb-8">
+          <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-100 mb-3">
+            5. Almacenamiento y Seguridad
           </h2>
           <p className="text-gray-600 dark:text-gray-300">
             Tus datos se almacenan de forma segura y no se comparten con terceros excepto
-            para las integraciones que tú autorices explícitamente (como Whoop).
+            para las integraciones que tú autorices explícitamente (como Whoop y Google Gemini AI).
             Utilizamos cifrado para proteger tu información en tránsito y en reposo.
           </p>
         </section>
 
         <section className="mb-8">
           <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-100 mb-3">
-            5. Tus Derechos
+            6. Tus Derechos
           </h2>
           <p className="text-gray-600 dark:text-gray-300 mb-2">
             Tienes derecho a:
@@ -89,7 +111,7 @@ export default function PrivacyPolicy() {
 
         <section className="mb-8">
           <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-100 mb-3">
-            6. Contacto
+            7. Contacto
           </h2>
           <p className="text-gray-600 dark:text-gray-300">
             Para preguntas sobre privacidad o para ejercer tus derechos, contacta a:
@@ -106,8 +128,10 @@ export default function PrivacyPolicy() {
           <p className="text-gray-600 dark:text-gray-300">
             NOVA collects health and fitness data (weight, meals, activities) to provide
             calorie deficit coaching. If you connect Whoop, we access your calorie burn,
-            workouts, and recovery data. Your data is stored securely and not shared with
-            third parties without your consent. You can delete your account and data at any time.
+            workouts, and recovery data. NOVA uses Google Gemini AI to analyze meal
+            descriptions, photos, and profile data for calorie estimation and personalized
+            recommendations. Your data is stored securely and not shared with third parties
+            without your consent. You can delete your account and data at any time.
           </p>
         </section>
       </div>

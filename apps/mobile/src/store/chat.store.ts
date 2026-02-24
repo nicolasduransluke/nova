@@ -75,8 +75,10 @@ export const useChatStore = create<ChatStore>()(
       setAgentTyping: (typing) => set({ isAgentTyping: typing }),
 
       loadHistory: async () => {
-        set({ isLoading: true, error: null });
         const authState = useAuthStore.getState();
+        if (authState.isGuest) return;
+
+        set({ isLoading: true, error: null });
         const accessToken = authState.accessToken;
         console.log('[loadHistory] called, hasToken:', !!accessToken);
 
@@ -154,10 +156,11 @@ export const useChatStore = create<ChatStore>()(
       sendUserMessage: async (content, imageUrl, explicitType) => {
         const { addMessage, setAgentTyping } = get();
         const authState = useAuthStore.getState();
+        const isGuest = authState.isGuest;
         const userId = authState.user?.id;
         const accessToken = authState.accessToken;
 
-        if (!userId) {
+        if (!isGuest && !userId) {
           addMessage({
             type: 'text',
             content: 'Error: No hay sesión activa. Por favor inicia sesión.',
@@ -178,7 +181,49 @@ export const useChatStore = create<ChatStore>()(
         setAgentTyping(true);
 
         try {
-          const body: Record<string, unknown> = { userId, content };
+          const effectiveContent = content || (imageUrl ? '[Foto de comida]' : '');
+
+          // Guest mode: use the public guest endpoint
+          if (isGuest) {
+            const guestBody: Record<string, unknown> = { content: effectiveContent };
+            if (imageUrl) guestBody.imageUrl = imageUrl;
+
+            const response = await fetch(`${API_URL}/api/messages/guest`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(guestBody),
+            });
+
+            const data = await response.json();
+            setAgentTyping(false);
+
+            if (data.success && data.data?.response?.message) {
+              const responseData = data.data.response;
+              const intent = data.data.intent;
+              addMessage({
+                type: intent === 'meal_log' ? 'meal' : 'text',
+                content: responseData.message,
+                sender: 'agent',
+                metadata: {
+                  ...(responseData.foodItems ? { foodItems: responseData.foodItems } : {}),
+                  ...(intent ? { intent } : {}),
+                },
+              });
+            } else {
+              addMessage({
+                type: 'text',
+                content: 'No pude procesar tu mensaje. Intenta de nuevo.',
+                sender: 'agent',
+              });
+            }
+            return;
+          }
+
+          // Authenticated user flow
+          const body: Record<string, unknown> = { userId, content: effectiveContent };
+          if (imageUrl) {
+            body.imageUrl = imageUrl;
+          }
 
           const response = await fetch(`${API_URL}/api/messages/process/sync`, {
             method: 'POST',

@@ -17,12 +17,13 @@ import { GlassCard } from '@/components/common/GlassCard';
 import { TextInput } from '@/components/common/TextInput';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
 import { colors } from '@/theme';
+import * as AppleAuthentication from 'expo-apple-authentication';
 
 type Nav = NativeStackNavigationProp<AuthStackParamList, 'Login'>;
 
 export default function LoginScreen() {
   const navigation = useNavigation<Nav>();
-  const { login, loginWithGoogle, isLoading, error, setError } = useAuthStore();
+  const { login, loginWithGoogle, loginWithApple, enterGuestMode, isLoading, error, setError } = useAuthStore();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -115,6 +116,20 @@ export default function LoginScreen() {
             >
               <Text style={styles.googleIcon}>G</Text>
               <Text style={styles.googleText}>Continuar con Google</Text>
+            </Pressable>
+
+            {Platform.OS === 'ios' && (
+              <AppleAuthentication.AppleAuthenticationButton
+                buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                cornerRadius={12}
+                style={styles.appleButton}
+                onPress={loginWithApple}
+              />
+            )}
+
+            <Pressable onPress={enterGuestMode} style={styles.guestLink}>
+              <Text style={styles.guestText}>Probar sin cuenta</Text>
             </Pressable>
 
             <View style={styles.registerContainer}>
@@ -214,6 +229,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#1f1f1f',
+  },
+  appleButton: {
+    width: '100%',
+    height: 50,
+    marginBottom: 16,
+  },
+  guestLink: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  guestText: {
+    color: colors.text.muted,
+    fontSize: 14,
+    textDecorationLine: 'underline',
   },
   registerContainer: {
     flexDirection: 'row',

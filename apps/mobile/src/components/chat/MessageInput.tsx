@@ -7,6 +7,7 @@ import {
   Image,
   StyleSheet,
   Platform,
+  Alert,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
@@ -31,13 +32,7 @@ export function MessageInput({ onSend, disabled = false }: Props) {
     setImagePreview(null);
   };
 
-  const handlePickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      quality: 0.7,
-      base64: true,
-    });
-
+  const processResult = (result: ImagePicker.ImagePickerResult) => {
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
       if (asset.base64) {
@@ -46,6 +41,39 @@ export function MessageInput({ onSend, disabled = false }: Props) {
         setImagePreview(asset.uri);
       }
     }
+  };
+
+  const handlePickImage = () => {
+    Alert.alert('Agregar foto', undefined, [
+      {
+        text: 'Tomar foto',
+        onPress: async () => {
+          const { status } = await ImagePicker.requestCameraPermissionsAsync();
+          if (status !== 'granted') {
+            Alert.alert('Permiso necesario', 'Se necesita acceso a la cámara para tomar fotos.');
+            return;
+          }
+          const result = await ImagePicker.launchCameraAsync({
+            mediaTypes: ['images'],
+            quality: 0.7,
+            base64: true,
+          });
+          processResult(result);
+        },
+      },
+      {
+        text: 'Elegir de galería',
+        onPress: async () => {
+          const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            quality: 0.7,
+            base64: true,
+          });
+          processResult(result);
+        },
+      },
+      { text: 'Cancelar', style: 'cancel' },
+    ]);
   };
 
   return (

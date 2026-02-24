@@ -29,6 +29,7 @@
   },
   "packageManager": "npm@10.2.0",
   "dependencies": {
+    "@nestjs/schedule": "^6.1.1",
     "@prisma/client": "^5.22.0",
     "prisma": "^5.22.0"
   }

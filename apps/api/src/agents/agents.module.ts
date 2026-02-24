@@ -20,6 +20,6 @@ import { AgentRegistryService } from './agent-registry.service';
     AgentRegistryService,
     OrchestratorService,
   ],
-  exports: [OrchestratorService, AgentRegistryService],
+  exports: [OrchestratorService, AgentRegistryService, MetabolicAgentService],
 })
 export class AgentsModule {}

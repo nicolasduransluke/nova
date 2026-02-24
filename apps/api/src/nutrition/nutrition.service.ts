@@ -74,8 +74,8 @@ const SPANISH_TO_ENGLISH: Record<string, string> = {
   'papas fritas': 'french fries',
   'camote': 'sweet potato',
   'yuca': 'cassava',
-  'plátano': 'plantain',
-  'platano': 'plantain',
+  'plátano': 'banana',
+  'platano': 'banana',
 
   // Dairy
   'leche': 'milk',
@@ -148,6 +148,10 @@ const SPANISH_TO_ENGLISH: Record<string, string> = {
   'te': 'tea',
   'jugo natural': 'fresh juice',
   'jugo': 'juice',
+  'agua peregrino': 'mineral water',
+  'agua mineral': 'mineral water',
+  'agua con gas': 'sparkling water',
+  'agua natural': 'water',
   'agua': 'water',
   'refresco': 'soda',
   'cerveza': 'beer',
@@ -230,7 +234,7 @@ export class NutritionService {
         body: JSON.stringify({
           query: englishQuery,
           pageSize: limit,
-          dataType: ['Foundation', 'SR Legacy', 'Branded'],
+          dataType: ['Foundation', 'SR Legacy'],
         }),
       });
 
@@ -242,7 +246,13 @@ export class NutritionService {
       const data = await response.json();
       const foods: USDAFoodItem[] = data.foods || [];
 
-      return foods.map((food, index) => this.mapToFoodMatch(food, index, limit));
+      const matches = foods.map((food, index) => this.mapToFoodMatch(food, index, limit));
+      if (matches.length > 0) {
+        this.logger.debug(`USDA results for "${englishQuery}": ${matches.length} matches, best: "${matches[0].description}" conf=${matches[0].confidence} cal=${matches[0].nutrients.calories}`);
+      } else {
+        this.logger.debug(`USDA no results for "${englishQuery}"`);
+      }
+      return matches;
     } catch (error) {
       this.logger.error(`Error searching USDA: ${error}`);
       return [];
@@ -278,35 +288,80 @@ export class NutritionService {
   /**
    * Estimate calories for a food item, using USDA if available, otherwise returns null
    */
+  // Items that are definitively zero calories — USDA search is unreliable for these
+  // (e.g. returns branded flavored "WATER" with 42 cal/100g instead of plain water)
+  private readonly ZERO_CAL_PATTERNS = [
+    'agua', 'water', 'agua mineral', 'agua peregrino', 'agua con gas',
+    'agua natural', 'sparkling water', 'mineral water', 'agua de la llave',
+    'agua embotellada', 'bottled water', 'té sin azúcar', 'te sin azucar',
+    'black coffee', 'café sin azúcar', 'cafe sin azucar', 'café negro', 'cafe negro',
+  ];
+
   async estimateCalories(
     foodName: string,
     quantity?: number,
     unit?: string,
   ): Promise<{ calories: number; source: 'usda' | 'estimate'; match?: FoodMatch } | null> {
+    // Short-circuit for zero-calorie items — USDA often matches wrong branded products
+    const lowerFood = foodName.toLowerCase().trim();
+    if (this.ZERO_CAL_PATTERNS.some(p => lowerFood === p || lowerFood.includes(p))) {
+      this.logger.debug(`Zero-cal override for "${foodName}"`);
+      return {
+        calories: 0,
+        source: 'usda',
+        match: {
+          fdcId: 0,
+          description: foodName,
+          nutrients: { calories: 0, protein: 0, carbs: 0, fat: 0 },
+          confidence: 1,
+        },
+      };
+    }
+
     const matches = await this.searchFood(foodName, 3);
 
-    if (matches.length > 0 && matches[0].confidence > 0.5) {
-      const bestMatch = matches[0];
-      let calories = bestMatch.nutrients.calories;
+    // Find first USDA result that is actually relevant to the query
+    const englishQuery = this.translateToEnglish(foodName);
+    const bestMatch = matches.find(m => m.confidence >= 0.3 && this.isRelevantMatch(englishQuery, m.description));
 
-      // Adjust for quantity if provided
-      if (quantity && bestMatch.servingSize) {
-        // Assume user quantity is in grams unless specified
-        const servingMultiplier = quantity / bestMatch.servingSize;
-        calories = Math.round(calories * servingMultiplier);
-      } else if (quantity) {
-        // If no serving size info, use quantity as multiplier (assuming per 100g)
-        calories = Math.round((calories / 100) * quantity);
-      }
+    if (bestMatch) {
+      const qty = quantity || 1;
+
+      // USDA nutrients are per 100g. Convert to per-serving using servingSize,
+      // then multiply by quantity (number of servings/portions).
+      const servingFactor = bestMatch.servingSize ? bestMatch.servingSize / 100 : 1;
+      const multiplier = servingFactor * qty;
+
+      const adjustedNutrients: NutrientInfo = {
+        calories: Math.round(bestMatch.nutrients.calories * multiplier),
+        protein: bestMatch.nutrients.protein != null ? Math.round(bestMatch.nutrients.protein * multiplier) : undefined,
+        carbs: bestMatch.nutrients.carbs != null ? Math.round(bestMatch.nutrients.carbs * multiplier) : undefined,
+        fat: bestMatch.nutrients.fat != null ? Math.round(bestMatch.nutrients.fat * multiplier) : undefined,
+        fiber: bestMatch.nutrients.fiber != null ? Math.round(bestMatch.nutrients.fiber * multiplier) : undefined,
+        sugar: bestMatch.nutrients.sugar != null ? Math.round(bestMatch.nutrients.sugar * multiplier) : undefined,
+      };
+
+      this.logger.debug(`USDA calc: per100g=${bestMatch.nutrients.calories} servingSize=${bestMatch.servingSize}g qty=${qty} → ${adjustedNutrients.calories} kcal`);
 
       return {
-        calories,
+        calories: adjustedNutrients.calories,
         source: 'usda',
-        match: bestMatch,
+        match: { ...bestMatch, nutrients: adjustedNutrients },
       };
     }
 
     return null;
+  }
+
+  /**
+   * Check if a USDA result description is relevant to the search query.
+   * Prevents accepting garbage matches (e.g. "MEGA MIX CANDY" for "whopper").
+   */
+  private isRelevantMatch(query: string, description: string): boolean {
+    const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+    const descLower = description.toLowerCase();
+    // At least one significant query word must appear in the USDA description
+    return queryWords.some(w => descLower.includes(w));
   }
 
   /**
@@ -357,14 +412,14 @@ export class NutritionService {
   ): NutrientInfo {
     const nutrientMap: Record<string, number> = {};
 
-    // USDA nutrient IDs
+    // USDA nutrient IDs (nutrientId) and nutrient numbers (nutrientNumber)
     const NUTRIENT_IDS = {
-      ENERGY: ['1008', '2047', '2048'], // Energy (kcal)
-      PROTEIN: ['1003'],
-      CARBS: ['1005', '2039'],
-      FAT: ['1004'],
-      FIBER: ['1079'],
-      SUGAR: ['2000', '1063'],
+      ENERGY: ['1008', '2047', '2048', '208'], // Energy (kcal)
+      PROTEIN: ['1003', '203'],
+      CARBS: ['1005', '2039', '205'],
+      FAT: ['1004', '204'],
+      FIBER: ['1079', '291'],
+      SUGAR: ['2000', '1063', '269'],
     };
 
     for (const nutrient of foodNutrients) {

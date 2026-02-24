@@ -17,6 +17,7 @@ export type OnboardingStackParamList = {
 export type RootStackParamList = {
   Auth: undefined;
   OnboardingFlow: undefined;
+  AIConsent: undefined;
   Main: undefined;
   Profile: undefined;
 };

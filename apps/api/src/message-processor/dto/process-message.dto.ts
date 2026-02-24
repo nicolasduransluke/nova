@@ -2,7 +2,6 @@ import {
   IsString,
   IsNotEmpty,
   IsOptional,
-  IsUrl,
   MaxLength,
   IsEnum,
 } from 'class-validator';
@@ -19,7 +18,7 @@ export class ProcessMessageDto {
   content!: string;
 
   @IsOptional()
-  @IsUrl()
+  @IsString()
   imageUrl?: string;
 
   @IsOptional()

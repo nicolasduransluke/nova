@@ -17,12 +17,13 @@ import { GlassCard } from '@/components/common/GlassCard';
 import { TextInput } from '@/components/common/TextInput';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
 import { colors } from '@/theme';
+import * as AppleAuthentication from 'expo-apple-authentication';
 
 type Nav = NativeStackNavigationProp<AuthStackParamList, 'Register'>;
 
 export default function RegisterScreen() {
   const navigation = useNavigation<Nav>();
-  const { register, loginWithGoogle, isLoading, error, setError } = useAuthStore();
+  const { register, loginWithGoogle, loginWithApple, isLoading, error, setError } = useAuthStore();
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -136,6 +137,16 @@ export default function RegisterScreen() {
               <Text style={styles.googleText}>Continuar con Google</Text>
             </Pressable>
 
+            {Platform.OS === 'ios' && (
+              <AppleAuthentication.AppleAuthenticationButton
+                buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP}
+                buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                cornerRadius={12}
+                style={styles.appleButton}
+                onPress={loginWithApple}
+              />
+            )}
+
             <View style={styles.loginContainer}>
               <Text style={styles.loginText}>¿Ya tienes cuenta? </Text>
               <Pressable onPress={() => navigation.navigate('Login')}>
@@ -219,6 +230,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#1f1f1f',
+  },
+  appleButton: {
+    width: '100%',
+    height: 50,
+    marginBottom: 20,
   },
   loginContainer: {
     flexDirection: 'row',

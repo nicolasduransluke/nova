@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useIsFocused } from '@react-navigation/native';
 import type { HistoryDay, WeightEntry } from '@nova/types';
 import { useAuthStore } from '@/store/auth.store';
 import { api } from '@/lib/api';
@@ -19,9 +20,10 @@ const RANGE_OPTIONS = [7, 14, 30] as const;
 
 export default function HistoryScreen() {
   const insets = useSafeAreaInsets();
-  const { user } = useAuthStore();
+  const { user, isGuest, logout } = useAuthStore();
   const userId = user?.id;
 
+  const isFocused = useIsFocused();
   const [days, setDays] = useState<number>(14);
   const [history, setHistory] = useState<HistoryDay[]>([]);
   const [weight, setWeight] = useState<WeightEntry[]>([]);
@@ -44,8 +46,10 @@ export default function HistoryScreen() {
   }, [days, userId]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (isFocused) {
+      fetchData();
+    }
+  }, [fetchData, isFocused]);
 
   const renderHeader = () => (
     <View>
@@ -76,6 +80,23 @@ export default function HistoryScreen() {
       </Text>
     </View>
   );
+
+  if (isGuest) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <Text style={styles.screenTitle}>Historial</Text>
+        <View style={styles.guestContainer}>
+          <Text style={styles.guestTitle}>Modo Invitado</Text>
+          <Text style={styles.guestMessage}>
+            Crea una cuenta para guardar tu historial de comidas y ver tu progreso.
+          </Text>
+          <Pressable onPress={logout} style={styles.guestButton}>
+            <Text style={styles.guestButtonText}>Crear cuenta</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -153,5 +174,35 @@ const styles = StyleSheet.create({
   emptyText: {
     color: colors.text.muted,
     fontSize: 14,
+  },
+  guestContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  guestTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: colors.text.primary,
+    marginBottom: 12,
+  },
+  guestMessage: {
+    fontSize: 15,
+    color: colors.text.secondary,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  guestButton: {
+    backgroundColor: colors.primary,
+    paddingVertical: 12,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+  },
+  guestButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

@@ -4,11 +4,13 @@ import {
   ConflictException,
   BadRequestException,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { PrismaService } from '../infrastructure/database/prisma.service';
 import { RegisterDto, ForgotPasswordDto, ResetPasswordDto } from './dto';
 
@@ -27,6 +29,10 @@ export interface OAuthUserData {
 @Injectable()
 export class AuthService {
   private readonly saltRounds = 10;
+  private readonly logger = new Logger(AuthService.name);
+  private readonly appleJWKS = createRemoteJWKSet(
+    new URL('https://appleid.apple.com/auth/keys'),
+  );
 
   constructor(
     private prisma: PrismaService,
@@ -236,6 +242,56 @@ export class AuthService {
     });
 
     return { message: 'Password reset successfully' };
+  }
+
+  async validateAppleNativeToken(identityToken: string, fullName?: string) {
+    try {
+      const { payload } = await jwtVerify(identityToken, this.appleJWKS, {
+        issuer: 'https://appleid.apple.com',
+        audience: 'com.cotalker.nova-mobile',
+      });
+
+      const email = payload.email as string;
+      const sub = payload.sub as string;
+
+      if (!email || !sub) {
+        throw new UnauthorizedException('Invalid Apple identity token: missing email or sub');
+      }
+
+      const name = fullName || email.split('@')[0];
+      const user = await this.validateOAuthUser({
+        email,
+        name,
+        provider: 'apple',
+        providerId: sub,
+      });
+
+      return this.login(user);
+    } catch (error) {
+      this.logger.error(`Apple native token validation failed: ${error}`);
+      if (error instanceof UnauthorizedException) throw error;
+      throw new UnauthorizedException('Invalid Apple identity token');
+    }
+  }
+
+  async acceptAIConsent(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const existingMetadata = (user.metadata ?? {}) as Record<string, unknown>;
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        metadata: { ...existingMetadata, aiConsentAccepted: true } as any,
+      },
+    });
+
+    return { message: 'AI consent accepted' };
   }
 
   async getMe(userId: string) {

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { HealthController } from './presentation/controllers/health.controller';
 import { UserController } from './presentation/controllers/user.controller';
 import { ProfileController } from './presentation/controllers/profile.controller';
@@ -16,6 +17,7 @@ import { AuthModule } from './auth/auth.module';
 import { MailModule } from './mail/mail.module';
 import { NutritionModule } from './nutrition/nutrition.module';
 import { WhoopModule } from './whoop/whoop.module';
+import { CoachingModule } from './coaching/coaching.module';
 
 @Module({
   imports: [
@@ -23,6 +25,7 @@ import { WhoopModule } from './whoop/whoop.module';
       isGlobal: true,
       envFilePath: '.env',
     }),
+    ScheduleModule.forRoot(),
     DatabaseModule,
     AuthModule,
     MailModule,
@@ -32,6 +35,7 @@ import { WhoopModule } from './whoop/whoop.module';
     AgentsModule,
     MessageProcessorModule,
     HistoryModule,
+    CoachingModule,
   ],
   controllers: [HealthController, UserController, ProfileController, WeightLogsController],
   providers: [

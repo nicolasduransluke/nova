@@ -84,7 +84,7 @@ export function MessageBubble({ message }: Props) {
         {message.imageUrl && (
           <Image
             source={{ uri: message.imageUrl }}
-            style={styles.image}
+            style={isUser ? styles.userImage : styles.image}
             resizeMode="cover"
           />
         )}
@@ -109,7 +109,7 @@ export function MessageBubble({ message }: Props) {
               </Text>
             ) : null}
           </>
-        ) : message.content ? (
+        ) : (message.content && !(isUser && message.imageUrl && message.content === '[Foto de comida]')) ? (
           <Text style={[styles.content, isUser ? styles.userText : styles.agentText]}>
             {message.content}
           </Text>
@@ -155,6 +155,12 @@ const styles = StyleSheet.create({
   image: {
     width: '100%',
     height: 200,
+    borderRadius: 12,
+    marginBottom: 6,
+  },
+  userImage: {
+    width: 180,
+    height: 180,
     borderRadius: 12,
     marginBottom: 6,
   },

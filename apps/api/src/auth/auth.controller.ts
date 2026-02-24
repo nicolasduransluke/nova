@@ -23,6 +23,7 @@ import {
   ForgotPasswordDto,
   ResetPasswordDto,
   RefreshTokenDto,
+  AppleNativeAuthDto,
 } from './dto';
 
 @Controller('auth')
@@ -132,7 +133,7 @@ export class AuthController {
     res.redirect(`${frontendUrl}/auth/callback?${params.toString()}`);
   }
 
-  // OAuth - Apple
+  // OAuth - Apple (web flow)
   @Public()
   @Get('apple')
   @UseGuards(AuthGuard('apple'))
@@ -154,5 +155,32 @@ export class AuthController {
     });
 
     res.redirect(`${frontendUrl}/auth/callback?${params.toString()}`);
+  }
+
+  // Apple native (mobile)
+  @Public()
+  @Post('apple/native')
+  @HttpCode(HttpStatus.OK)
+  async appleNativeAuth(@Body() dto: AppleNativeAuthDto) {
+    const result = await this.authService.validateAppleNativeToken(
+      dto.identityToken,
+      dto.fullName,
+    );
+    return {
+      success: true,
+      data: result,
+    };
+  }
+
+  // AI consent
+  @UseGuards(JwtAuthGuard)
+  @Post('ai-consent')
+  @HttpCode(HttpStatus.OK)
+  async acceptAIConsent(@CurrentUser() user: JwtPayload) {
+    const result = await this.authService.acceptAIConsent(user.sub);
+    return {
+      success: true,
+      data: result,
+    };
   }
 }

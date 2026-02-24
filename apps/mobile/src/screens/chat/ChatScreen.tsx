@@ -13,6 +13,7 @@ import { useIsFocused, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '@/navigation/types';
 import { useChatStore } from '@/store/chat.store';
+import { useAuthStore } from '@/store/auth.store';
 import { MessageList } from '@/components/chat/MessageList';
 import { MessageInput } from '@/components/chat/MessageInput';
 import { colors } from '@/theme';
@@ -20,6 +21,7 @@ import { colors } from '@/theme';
 export default function ChatScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { isGuest, logout } = useAuthStore();
   const {
     messages,
     isAgentTyping,
@@ -49,9 +51,10 @@ export default function ChatScreen() {
 
   useEffect(() => {
     if (isFocused) {
+      loadHistory();
       refreshDailySummary();
     }
-  }, [isFocused, refreshDailySummary]);
+  }, [isFocused, loadHistory, refreshDailySummary]);
 
   const handleSend = (content: string, imageUrl?: string) => {
     sendUserMessage(content, imageUrl);
@@ -68,13 +71,24 @@ export default function ChatScreen() {
           <Text style={styles.headerTitle}>NOVA</Text>
         </View>
 
-        <Pressable
-          onPress={() => navigation.navigate('Profile')}
-          style={styles.profileButton}
-        >
-          <Text style={styles.profileButtonText}>{'👤'}</Text>
-        </Pressable>
+        {!isGuest && (
+          <Pressable
+            onPress={() => navigation.navigate('Profile')}
+            style={styles.profileButton}
+          >
+            <Text style={styles.profileButtonText}>{'👤'}</Text>
+          </Pressable>
+        )}
       </View>
+
+      {/* Guest banner */}
+      {isGuest && (
+        <Pressable onPress={logout} style={styles.guestBanner}>
+          <Text style={styles.guestBannerText}>
+            Modo invitado — Crea una cuenta para guardar tu progreso
+          </Text>
+        </Pressable>
+      )}
 
       {/* Messages */}
       <KeyboardAvoidingView
@@ -139,5 +153,17 @@ const styles = StyleSheet.create({
   },
   profileButtonText: {
     fontSize: 20,
+  },
+  guestBanner: {
+    backgroundColor: 'rgba(147, 51, 234, 0.3)',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
+  },
+  guestBannerText: {
+    color: colors.text.secondary,
+    fontSize: 13,
+    textAlign: 'center',
   },
 });

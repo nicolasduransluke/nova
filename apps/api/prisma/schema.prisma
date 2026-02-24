@@ -30,12 +30,16 @@ model User {
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
+  pushToken   String?   @map("push_token")
+  timezone    String?   // e.g., "America/Mexico_City"
+
   // Relations
   profile        Profile?
   dailyEntries   DailyEntry[]
   calorieEntries CalorieEntry[]
   weightLogs     WeightLog[]
   chatMessages   ChatMessage[]
+  coachingLogs   CoachingLog[]
 
   // Indexes
   @@index([provider, providerId])
@@ -154,4 +158,27 @@ model ChatMessage {
   // Indexes
   @@index([userId, createdAt])
   @@map("chat_messages")
+}
+
+// ============================================
+// Coaching Log Domain
+// ============================================
+
+model CoachingLog {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  type      String   // "meal_reminder", "daily_summary", "streak", "pattern_insight"
+  subtype   String   @default("")
+  date      DateTime
+  message   String
+  pushSent  Boolean  @default(false) @map("push_sent")
+  sentAt    DateTime @default(now()) @map("sent_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Indexes & Constraints
+  @@unique([userId, type, subtype, date])
+  @@index([userId, date])
+  @@map("coaching_logs")
 }

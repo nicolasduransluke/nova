@@ -402,6 +402,97 @@ export class MessageProcessorService {
     return result;
   }
 
+  async processGuestMessage(
+    content: string,
+    imageUrl?: string,
+  ): Promise<ProcessMessageResponse> {
+    this.logger.debug('Processing guest message');
+
+    const guestUserId = 'guest';
+
+    // Noop dependencies — no DB reads/writes
+    const noopDeps: OrchestratorDependencies = {
+      getUser: async () => ({
+        id: guestUserId,
+        email: 'guest@nova.app',
+        name: 'Invitado',
+        provider: 'local' as const,
+        emailVerified: false,
+        metadata: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }),
+      getProfile: async () => ({
+        id: 'guest-profile',
+        userId: guestUserId,
+        weight: 70,
+        height: 170,
+        age: 30,
+        sex: 'male' as const,
+        objective: 'weight_loss' as const,
+        activityLevel: 'moderate' as const,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }),
+      getRecentEntries: async () => [],
+      getConversationHistory: async () => [],
+      saveEntry: async (entry) => ({
+        id: 'noop',
+        userId: guestUserId,
+        date: entry.date || new Date(),
+        type: entry.type!,
+        data: (entry.data ?? {}) as Record<string, unknown>,
+        novaPoints: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }),
+      createCalorieEntry: async (data) => ({
+        id: 'noop',
+        userId: guestUserId,
+        date: data.date,
+        type: data.type as any,
+        description: data.description,
+        calories: data.calories,
+        items: data.items as any,
+        confirmed: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }),
+      getTodayCalorieEntries: async () => [],
+      createWeightLog: async (data) => ({
+        id: 'noop',
+        userId: guestUserId,
+        weight: data.weight,
+        date: data.date,
+        createdAt: new Date(),
+      }),
+      getRecentWeightLogs: async () => [],
+      updateProfile: async (_, data) => ({
+        id: 'guest-profile',
+        userId: guestUserId,
+        weight: data.weight ?? 70,
+        height: data.height ?? 170,
+        age: data.age ?? 30,
+        sex: (data.sex ?? 'male') as any,
+        objective: 'weight_loss' as const,
+        activityLevel: 'moderate' as const,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }),
+      getUserMetadata: async () => null,
+      updateUserMetadata: async () => {},
+      deleteCalorieEntry: async () => {},
+      getLastCalorieEntry: async () => null,
+    };
+
+    const result = await this.orchestrator.processMessage(
+      { userId: guestUserId, content, imageUrl },
+      noopDeps,
+    );
+
+    return result;
+  }
+
   async processMessageSync(
     request: ProcessMessageRequest,
   ): Promise<ProcessMessageResponse> {
@@ -433,11 +524,13 @@ export class MessageProcessorService {
   }
 
   async getMessageHistory(userId: string, limit: number): Promise<Message[]> {
+    // Fetch the most recent messages (desc), then reverse for chronological display order
     const messages = await this.prisma.chatMessage.findMany({
       where: { userId },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: 'desc' },
       take: limit,
     });
+    messages.reverse();
 
     return messages.map((msg) => ({
       id: msg.id,

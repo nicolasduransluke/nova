@@ -98,15 +98,55 @@ export class OrchestratorService {
         needsWeightPrompt = true;
       }
 
-      // Step 2: Classify intent
-      const intent = await this.classifyMessage(request.content);
-      this.logger.log(`Classified intent: ${intent} for message: "${request.content}"`);
+      // Step 2: Classify intent (image = auto meal_log)
+      const hasImage = !!request.imageUrl;
+      const intent: MessageIntent = hasImage
+        ? 'meal_log'
+        : await this.classifyMessage(request.content);
+      this.logger.log(`Classified intent: ${intent} for message: "${request.content}"${hasImage ? ' [with image]' : ''}`);
 
-      // Step 5: Extract data from message
-      const extractedData = await this.claudeClient.extractDataFromMessage(
-        request.content,
-        intent,
-      );
+      // Step 5: Extract data from message (vision path for images)
+      let extractedData: Record<string, unknown>;
+      if (hasImage) {
+        try {
+          const visionResult = await this.claudeClient.analyzeImageFood(
+            request.imageUrl!,
+            request.content !== '[Foto de comida]' ? request.content : undefined,
+          );
+          if (visionResult.items.length === 0) {
+            return {
+              success: true,
+              response: {
+                message: 'No pude identificar comida en la foto. Intenta con otra imagen o describe lo que comiste.',
+                tone: 'calm',
+              },
+              intent: 'general',
+              processedAt: new Date(),
+            };
+          }
+          extractedData = {
+            items: visionResult.items,
+            totalCalories: visionResult.totalCalories,
+            source: 'vision',
+          };
+        } catch (error) {
+          this.logger.error(`Vision analysis failed: ${error}`);
+          return {
+            success: true,
+            response: {
+              message: 'No pude analizar la foto. Intenta de nuevo o escribe lo que comiste.',
+              tone: 'calm',
+            },
+            intent: 'general',
+            processedAt: new Date(),
+          };
+        }
+      } else {
+        extractedData = await this.claudeClient.extractDataFromMessage(
+          request.content,
+          intent,
+        );
+      }
 
       // Step 6: Route to appropriate agents
       const agentOutputs = await this.routeToAgents(
@@ -125,11 +165,15 @@ export class OrchestratorService {
 
         const entryType = intent === 'meal_log' ? 'intake' : 'burn';
 
+        const description = hasImage
+          ? items.map(i => i.name).join(', ')
+          : request.content;
+
         await deps.createCalorieEntry({
           userId: request.userId,
           date: new Date(),
           type: entryType,
-          description: request.content,
+          description,
           calories: Math.round(totalCalories),
           items,
           confirmed: true,

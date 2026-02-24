@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import { Platform } from 'react-native';
 import type { User, AuthTokens, LoginResponse } from '@nova/types';
 import { secureStorage } from '@/lib/storage';
 import { API_URL } from '@/config/env';
@@ -7,6 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useProfileStore } from '@/store/profile.store';
 import { useChatStore } from '@/store/chat.store';
 import * as WebBrowser from 'expo-web-browser';
+import * as AppleAuthentication from 'expo-apple-authentication';
 
 export interface AuthState {
   user: User | null;
@@ -15,6 +17,8 @@ export interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  isGuest: boolean;
+  hasAIConsent: boolean;
 }
 
 export interface AuthActions {
@@ -30,6 +34,9 @@ export interface AuthActions {
   clearAuth: () => void;
   handleOAuthCallback: (accessToken: string, refreshToken: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
+  loginWithApple: () => Promise<void>;
+  enterGuestMode: () => void;
+  acceptAIConsent: () => Promise<void>;
 }
 
 export type AuthStore = AuthState & AuthActions;
@@ -56,6 +63,8 @@ export const useAuthStore = create<AuthStore>()(
       isAuthenticated: false,
       isLoading: false,
       error: null,
+      isGuest: false,
+      hasAIConsent: false,
 
       login: async (email: string, password: string) => {
         set({ isLoading: true, error: null });
@@ -75,6 +84,7 @@ export const useAuthStore = create<AuthStore>()(
           }
 
           const { user, tokens } = data.data as LoginResponse;
+          const metadata = (user as any).metadata as Record<string, unknown> | undefined;
 
           set({
             user,
@@ -83,6 +93,8 @@ export const useAuthStore = create<AuthStore>()(
             isAuthenticated: true,
             isLoading: false,
             error: null,
+            isGuest: false,
+            hasAIConsent: !!metadata?.aiConsentAccepted,
           });
         } catch (error) {
           set({
@@ -119,6 +131,8 @@ export const useAuthStore = create<AuthStore>()(
             isAuthenticated: true,
             isLoading: false,
             error: null,
+            isGuest: false,
+            hasAIConsent: false,
           });
         } catch (error) {
           set({
@@ -149,6 +163,8 @@ export const useAuthStore = create<AuthStore>()(
           refreshToken: null,
           isAuthenticated: false,
           error: null,
+          isGuest: false,
+          hasAIConsent: false,
         });
       },
 
@@ -258,6 +274,8 @@ export const useAuthStore = create<AuthStore>()(
           refreshToken: null,
           isAuthenticated: false,
           error: null,
+          isGuest: false,
+          hasAIConsent: false,
         });
       },
 
@@ -268,6 +286,7 @@ export const useAuthStore = create<AuthStore>()(
           refreshToken,
           isAuthenticated: true,
           isLoading: true,
+          isGuest: false,
         });
 
         try {
@@ -277,7 +296,13 @@ export const useAuthStore = create<AuthStore>()(
 
           if (response.ok) {
             const data = await response.json();
-            set({ user: data.data, isLoading: false });
+            const userData = data.data;
+            const metadata = (userData as any).metadata as Record<string, unknown> | undefined;
+            set({
+              user: userData,
+              isLoading: false,
+              hasAIConsent: !!metadata?.aiConsentAccepted,
+            });
           } else {
             set({ isLoading: false });
           }
@@ -319,6 +344,101 @@ export const useAuthStore = create<AuthStore>()(
           });
         }
       },
+
+      loginWithApple: async () => {
+        if (Platform.OS !== 'ios') return;
+
+        set({ isLoading: true, error: null });
+        await clearUserData();
+
+        try {
+          const credential = await AppleAuthentication.signInAsync({
+            requestedScopes: [
+              AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+              AppleAuthentication.AppleAuthenticationScope.EMAIL,
+            ],
+          });
+
+          if (!credential.identityToken) {
+            set({ isLoading: false, error: 'No se recibió token de Apple' });
+            return;
+          }
+
+          const fullName = [credential.fullName?.givenName, credential.fullName?.familyName]
+            .filter(Boolean)
+            .join(' ') || undefined;
+
+          const response = await fetch(`${API_URL}/api/auth/apple/native`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              identityToken: credential.identityToken,
+              fullName,
+            }),
+          });
+
+          const data = await response.json();
+
+          if (!response.ok) {
+            throw new Error(data.message || 'Error al iniciar sesión con Apple');
+          }
+
+          const { user, tokens } = data.data as LoginResponse;
+          const metadata = (user as any).metadata as Record<string, unknown> | undefined;
+
+          set({
+            user,
+            accessToken: tokens.accessToken,
+            refreshToken: tokens.refreshToken,
+            isAuthenticated: true,
+            isLoading: false,
+            error: null,
+            isGuest: false,
+            hasAIConsent: !!metadata?.aiConsentAccepted,
+          });
+        } catch (error: any) {
+          if (error?.code === 'ERR_REQUEST_CANCELED') {
+            set({ isLoading: false });
+            return;
+          }
+          set({
+            isLoading: false,
+            error: error instanceof Error ? error.message : 'Error al iniciar sesión con Apple',
+          });
+        }
+      },
+
+      enterGuestMode: () => {
+        clearUserData();
+        set({
+          user: null,
+          accessToken: null,
+          refreshToken: null,
+          isAuthenticated: true,
+          isGuest: true,
+          hasAIConsent: true,
+          isLoading: false,
+          error: null,
+        });
+      },
+
+      acceptAIConsent: async () => {
+        const { accessToken } = get();
+        if (!accessToken) return;
+
+        try {
+          await fetch(`${API_URL}/api/auth/ai-consent`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${accessToken}`,
+            },
+          });
+          set({ hasAIConsent: true });
+        } catch {
+          // Silently fail — consent flag will be retried
+        }
+      },
     }),
     {
       name: 'nova-auth-storage',
@@ -328,6 +448,8 @@ export const useAuthStore = create<AuthStore>()(
         accessToken: state.accessToken,
         refreshToken: state.refreshToken,
         isAuthenticated: state.isAuthenticated,
+        isGuest: state.isGuest,
+        hasAIConsent: state.hasAIConsent,
       }),
     },
   ),
