@@ -53,6 +53,7 @@ export interface OrchestratorDependencies {
   updateUserMetadata: (userId: string, metadata: Record<string, any>) => Promise<void>;
   deleteCalorieEntry: (entryId: string) => Promise<void>;
   getLastCalorieEntry: (userId: string) => Promise<CalorieEntry | null>;
+  getWhoopToken: (userId: string) => Promise<{ accessToken: string } | null>;
 }
 
 @Injectable()
@@ -376,39 +377,13 @@ export class OrchestratorService {
 
       // Try to get Whoop data if connected
       try {
-        const userMetadata = await deps.getUserMetadata(request.userId);
-        if (userMetadata) {
-          const metadata = JSON.parse(userMetadata);
-          if (metadata.whoop?.accessToken) {
-            let accessToken = metadata.whoop.accessToken;
-
-            // Refresh token if expired
-            if (metadata.whoop.expiresAt && Date.now() > metadata.whoop.expiresAt) {
-              try {
-                const newTokens = await this.whoopService.refreshTokens(metadata.whoop.refreshToken);
-                accessToken = newTokens.access_token;
-
-                // Persist new tokens so refresh token stays valid
-                metadata.whoop = {
-                  ...metadata.whoop,
-                  accessToken: newTokens.access_token,
-                  refreshToken: newTokens.refresh_token,
-                  expiresAt: Date.now() + newTokens.expires_in * 1000,
-                };
-                await deps.updateUserMetadata(request.userId, metadata);
-                this.logger.debug('Whoop token refreshed and persisted');
-              } catch {
-                this.logger.warn('Failed to refresh Whoop token');
-              }
-            }
-
-            // Get Whoop daily summary
-            const whoopSummary = await this.whoopService.getDailySummary(accessToken);
-            if (whoopSummary.caloriesBurned > 0) {
-              todayBurn = whoopSummary.caloriesBurned;
-              burnSource = 'whoop';
-              this.logger.debug(`Using Whoop calories: ${todayBurn}`);
-            }
+        const whoopToken = await deps.getWhoopToken(request.userId);
+        if (whoopToken) {
+          const whoopSummary = await this.whoopService.getDailySummary(whoopToken.accessToken);
+          if (whoopSummary.caloriesBurned > 0) {
+            todayBurn = whoopSummary.caloriesBurned;
+            burnSource = 'whoop';
+            this.logger.debug(`Using Whoop calories: ${todayBurn}`);
           }
         }
       } catch (error) {

@@ -12,6 +12,7 @@ import type {
 import { Prisma } from '@prisma/client';
 import { OrchestratorService, OrchestratorDependencies } from '../agents/orchestrator.service';
 import { PrismaService } from '../infrastructure/database/prisma.service';
+import { WhoopService } from '../whoop/whoop.service';
 import { generateId } from '@nova/utils';
 import { getUserTodayRange, DEFAULT_TIMEZONE } from '../utils/timezone';
 
@@ -22,6 +23,7 @@ export class MessageProcessorService {
   constructor(
     private readonly orchestrator: OrchestratorService,
     private readonly prisma: PrismaService,
+    private readonly whoopService: WhoopService,
   ) {}
 
   private createDependencies(timezone: string): OrchestratorDependencies {
@@ -334,6 +336,12 @@ export class MessageProcessorService {
           updatedAt: entry.updatedAt,
         };
       },
+
+      getWhoopToken: async (userId: string) => {
+        const result = await this.whoopService.getValidToken(userId);
+        if (!result) return null;
+        return { accessToken: result.accessToken };
+      },
     };
   }
 
@@ -485,6 +493,7 @@ export class MessageProcessorService {
       updateUserMetadata: async () => {},
       deleteCalorieEntry: async () => {},
       getLastCalorieEntry: async () => null,
+      getWhoopToken: async () => null,
     };
 
     const result = await this.orchestrator.processMessage(

@@ -51,39 +51,11 @@ export class HistoryService {
     // Check if user has Whoop connected and fetch historical data
     let whoopCaloriesByDate = new Map<string, number>();
     try {
-      if (user?.metadata) {
-        const metadata = (user.metadata ?? {}) as Record<string, any>;
-        if (metadata.whoop?.accessToken) {
-          this.logger.debug(`Whoop found in metadata, expiresAt: ${metadata.whoop.expiresAt}, now: ${Date.now()}, expired: ${metadata.whoop.expiresAt && Date.now() > metadata.whoop.expiresAt}`);
-          let accessToken = metadata.whoop.accessToken;
-
-          // Refresh token if expired
-          if (metadata.whoop.expiresAt && Date.now() > metadata.whoop.expiresAt) {
-            try {
-              const newTokens = await this.whoopService.refreshTokens(metadata.whoop.refreshToken);
-              accessToken = newTokens.access_token;
-
-              // Persist new tokens so refresh token stays valid
-              metadata.whoop = {
-                ...metadata.whoop,
-                accessToken: newTokens.access_token,
-                refreshToken: newTokens.refresh_token,
-                expiresAt: Date.now() + newTokens.expires_in * 1000,
-              };
-              await this.prisma.user.update({
-                where: { id: userId },
-                data: { metadata: metadata as any },
-              });
-              this.logger.debug('Whoop token refreshed and persisted (history)');
-            } catch {
-              this.logger.warn('Failed to refresh Whoop token for history');
-            }
-          }
-
-          const whoopResult = await this.whoopService.getCyclesForRange(accessToken, since, now);
-          whoopCaloriesByDate = whoopResult.caloriesByDate;
-          this.logger.debug(`Got Whoop data for ${whoopCaloriesByDate.size} days`);
-        }
+      const whoopToken = await this.whoopService.getValidToken(userId);
+      if (whoopToken) {
+        const whoopResult = await this.whoopService.getCyclesForRange(whoopToken.accessToken, since, now);
+        whoopCaloriesByDate = whoopResult.caloriesByDate;
+        this.logger.debug(`Got Whoop data for ${whoopCaloriesByDate.size} days`);
       }
     } catch (error) {
       this.logger.debug(`Whoop history not available: ${error}`);

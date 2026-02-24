@@ -132,69 +132,28 @@ export class WhoopController {
   async getStatus(@Req() req: AuthenticatedRequest) {
     const userId = req.user.sub;
 
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { metadata: true },
-    });
-
-    const metadata = (user?.metadata ?? {}) as Record<string, any>;
-    const whoopData = metadata.whoop as {
-      accessToken?: string;
-      refreshToken?: string;
-      expiresAt?: number;
-      connectedAt?: string;
-    } | undefined;
-
-    if (!whoopData?.accessToken) {
+    const result = await this.whoopService.getValidToken(userId);
+    if (!result) {
       return {
         connected: false,
         message: 'Whoop not connected',
       };
     }
 
-    // Check if token is expired and refresh if needed
-    let accessToken = whoopData.accessToken;
-    if (whoopData.expiresAt && Date.now() > whoopData.expiresAt) {
-      try {
-        const newTokens = await this.whoopService.refreshTokens(whoopData.refreshToken!);
-        accessToken = newTokens.access_token;
-
-        // Update stored tokens
-        const updatedMetadata = {
-          ...metadata,
-          whoop: {
-            ...whoopData,
-            accessToken: newTokens.access_token,
-            refreshToken: newTokens.refresh_token,
-            expiresAt: Date.now() + newTokens.expires_in * 1000,
-          },
-        };
-        await this.prisma.user.update({
-          where: { id: userId },
-          data: {
-            metadata: updatedMetadata,
-          },
-        });
-      } catch (error) {
-        return {
-          connected: false,
-          message: 'Whoop token expired, please reconnect',
-        };
-      }
-    }
+    const connectedAt = result.metadata.whoop?.connectedAt;
 
     // Get today's summary
     try {
-      const summary = await this.whoopService.getDailySummary(accessToken);
+      const summary = await this.whoopService.getDailySummary(result.accessToken);
       return {
         connected: true,
-        connectedAt: whoopData.connectedAt,
+        connectedAt,
         todaySummary: summary,
       };
     } catch (error) {
       return {
         connected: true,
-        connectedAt: whoopData.connectedAt,
+        connectedAt,
         error: 'Failed to fetch today\'s data',
       };
     }
@@ -210,52 +169,17 @@ export class WhoopController {
     const debug: Record<string, any> = { userId, steps: [] };
 
     try {
-      const user = await this.prisma.user.findUnique({
-        where: { id: userId },
-        select: { metadata: true },
-      });
-
-      const metadata = (user?.metadata ?? {}) as Record<string, any>;
-      debug.hasMetadata = !!user?.metadata;
-      debug.hasWhoop = !!metadata.whoop;
-      debug.hasAccessToken = !!metadata.whoop?.accessToken;
-      debug.expiresAt = metadata.whoop?.expiresAt;
+      const result = await this.whoopService.getValidToken(userId);
       debug.now = Date.now();
-      debug.isExpired = metadata.whoop?.expiresAt ? Date.now() > metadata.whoop.expiresAt : 'no expiresAt';
 
-      if (!metadata.whoop?.accessToken) {
-        debug.steps.push('No Whoop access token found');
+      if (!result) {
+        debug.steps.push('No valid Whoop token (not connected or refresh failed)');
         return debug;
       }
 
-      let accessToken = metadata.whoop.accessToken;
-
-      // Refresh if expired
-      if (metadata.whoop.expiresAt && Date.now() > metadata.whoop.expiresAt) {
-        debug.steps.push('Token expired, attempting refresh...');
-        try {
-          const newTokens = await this.whoopService.refreshTokens(metadata.whoop.refreshToken);
-          accessToken = newTokens.access_token;
-          debug.steps.push('Token refreshed successfully');
-
-          metadata.whoop = {
-            ...metadata.whoop,
-            accessToken: newTokens.access_token,
-            refreshToken: newTokens.refresh_token,
-            expiresAt: Date.now() + newTokens.expires_in * 1000,
-          };
-          await this.prisma.user.update({
-            where: { id: userId },
-            data: { metadata: metadata as any },
-          });
-          debug.steps.push('New tokens persisted');
-        } catch (err) {
-          debug.steps.push(`Refresh failed: ${err}`);
-          return debug;
-        }
-      } else {
-        debug.steps.push('Token not expired, using existing');
-      }
+      const accessToken = result.accessToken;
+      debug.hasAccessToken = true;
+      debug.steps.push('Got valid token via getValidToken()');
 
       // Try getCyclesForRange
       const since = new Date();

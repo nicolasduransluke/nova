@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { PrismaService } from '../infrastructure/database/prisma.service';
 
 export interface WhoopTokens {
   access_token: string;
@@ -87,8 +88,12 @@ export class WhoopService {
   private readonly redirectUri: string;
   private readonly baseUrl = 'https://api.prod.whoop.com/developer/v1';
   private readonly authUrl = 'https://api.prod.whoop.com/oauth/oauth2';
+  private readonly refreshLocks = new Map<string, Promise<{ accessToken: string; metadata: Record<string, any> } | null>>();
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly prisma: PrismaService,
+  ) {
     this.clientId = this.configService.get<string>('WHOOP_CLIENT_ID') || '';
     this.clientSecret = this.configService.get<string>('WHOOP_CLIENT_SECRET') || '';
 
@@ -360,6 +365,73 @@ export class WhoopService {
     this.logger.debug(`Whoop getCyclesForRange: ${totalRecords} records, ${caloriesByDate.size} with calories, tz=${timezoneOffsetMinutes}min`);
     this.logger.debug(`Whoop calories by date: ${JSON.stringify(Object.fromEntries(caloriesByDate))}`);
     return { caloriesByDate, timezoneOffsetMinutes };
+  }
+
+  /**
+   * Get a valid access token for a user, refreshing if expired.
+   * Uses a per-user lock to prevent concurrent refresh race conditions.
+   */
+  async getValidToken(userId: string): Promise<{ accessToken: string; metadata: Record<string, any> } | null> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { metadata: true },
+    });
+
+    const metadata = (user?.metadata ?? {}) as Record<string, any>;
+    const whoopData = metadata.whoop;
+
+    if (!whoopData?.accessToken) {
+      return null;
+    }
+
+    // 5-minute buffer before expiry
+    const bufferMs = 5 * 60 * 1000;
+    const isExpired = whoopData.expiresAt && Date.now() > (whoopData.expiresAt - bufferMs);
+
+    if (!isExpired) {
+      return { accessToken: whoopData.accessToken, metadata };
+    }
+
+    // If a refresh is already in flight for this user, await it
+    const existing = this.refreshLocks.get(userId);
+    if (existing) {
+      return existing;
+    }
+
+    const refreshPromise = this.doRefresh(userId, metadata, whoopData)
+      .finally(() => this.refreshLocks.delete(userId));
+
+    this.refreshLocks.set(userId, refreshPromise);
+    return refreshPromise;
+  }
+
+  private async doRefresh(
+    userId: string,
+    metadata: Record<string, any>,
+    whoopData: Record<string, any>,
+  ): Promise<{ accessToken: string; metadata: Record<string, any> } | null> {
+    try {
+      const newTokens = await this.refreshTokens(whoopData.refreshToken);
+
+      const updatedWhoop = {
+        ...whoopData,
+        accessToken: newTokens.access_token,
+        refreshToken: newTokens.refresh_token,
+        expiresAt: Date.now() + newTokens.expires_in * 1000,
+      };
+      const updatedMetadata = { ...metadata, whoop: updatedWhoop };
+
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { metadata: updatedMetadata as any },
+      });
+
+      this.logger.debug(`Whoop token refreshed for user ${userId}`);
+      return { accessToken: newTokens.access_token, metadata: updatedMetadata };
+    } catch (error) {
+      this.logger.error(`Failed to refresh Whoop token for user ${userId}: ${error}`);
+      return null;
+    }
   }
 
   /**
