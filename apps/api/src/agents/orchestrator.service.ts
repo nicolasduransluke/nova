@@ -75,9 +75,6 @@ export class OrchestratorService {
     this.logger.debug(`Processing message for user ${request.userId}`);
 
     try {
-      // Compute date in user's local timezone for entries
-      const userDate = getUserLocalMidnight(request.timezone || DEFAULT_TIMEZONE);
-
       // Step 1: Build context
       const context = await this.buildContext(request.userId, deps, request.timezone);
 
@@ -175,7 +172,7 @@ export class OrchestratorService {
 
         await deps.createCalorieEntry({
           userId: request.userId,
-          date: userDate,
+          date: new Date(),
           type: entryType,
           description,
           calories: Math.round(totalCalories),
@@ -197,10 +194,10 @@ export class OrchestratorService {
           await deps.createWeightLog({
             userId: request.userId,
             weight: newWeight,
-            date: userDate,
+            date: new Date(),
           });
           // Update lastWeightLog so daily summary and integrator use the new weight
-          lastWeightLog = { weight: newWeight, date: userDate, daysSince: 0 };
+          lastWeightLog = { weight: newWeight, date: new Date(), daysSince: 0 };
           needsWeightPrompt = false;
 
           // Always update profile.weight so TDEE recalculates with the latest weight
@@ -289,9 +286,9 @@ export class OrchestratorService {
           await deps.createWeightLog({
             userId: request.userId,
             weight,
-            date: userDate,
+            date: new Date(),
           });
-          lastWeightLog = { weight, date: userDate, daysSince: 0 };
+          lastWeightLog = { weight, date: new Date(), daysSince: 0 };
           needsWeightPrompt = false;
         }
         if (height != null && height >= 100 && height <= 250) {
