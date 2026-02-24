@@ -166,6 +166,7 @@ export const useChatStore = create<ChatStore>()(
           const body: Record<string, unknown> = {
             userId,
             content,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           };
 
           const response = await fetch(`${API_URL}/api/messages/process/sync`, {

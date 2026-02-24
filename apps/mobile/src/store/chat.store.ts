@@ -220,7 +220,11 @@ export const useChatStore = create<ChatStore>()(
           }
 
           // Authenticated user flow
-          const body: Record<string, unknown> = { userId, content: effectiveContent };
+          const body: Record<string, unknown> = {
+            userId,
+            content: effectiveContent,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          };
           if (imageUrl) {
             body.imageUrl = imageUrl;
           }

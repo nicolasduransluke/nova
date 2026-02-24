@@ -20,6 +20,7 @@ import { AgentRegistryService } from './agent-registry.service';
 import { MetabolicAgentService } from './metabolic-agent.service';
 import { WhoopService } from '../whoop/whoop.service';
 import { AgentInput } from './base-agent.abstract';
+import { getUserLocalMidnight, DEFAULT_TIMEZONE } from '../utils/timezone';
 
 export interface OrchestratorDependencies {
   getUser: (userId: string) => Promise<User | null>;
@@ -74,8 +75,11 @@ export class OrchestratorService {
     this.logger.debug(`Processing message for user ${request.userId}`);
 
     try {
+      // Compute date in user's local timezone for entries
+      const userDate = getUserLocalMidnight(request.timezone || DEFAULT_TIMEZONE);
+
       // Step 1: Build context
-      const context = await this.buildContext(request.userId, deps);
+      const context = await this.buildContext(request.userId, deps, request.timezone);
 
       // Step 1b: Fetch weight logs for weight prompting and progress tracking
       const allWeightLogs = await deps.getRecentWeightLogs(request.userId, 100);
@@ -171,7 +175,7 @@ export class OrchestratorService {
 
         await deps.createCalorieEntry({
           userId: request.userId,
-          date: new Date(),
+          date: userDate,
           type: entryType,
           description,
           calories: Math.round(totalCalories),
@@ -193,10 +197,10 @@ export class OrchestratorService {
           await deps.createWeightLog({
             userId: request.userId,
             weight: newWeight,
-            date: new Date(),
+            date: userDate,
           });
           // Update lastWeightLog so daily summary and integrator use the new weight
-          lastWeightLog = { weight: newWeight, date: new Date(), daysSince: 0 };
+          lastWeightLog = { weight: newWeight, date: userDate, daysSince: 0 };
           needsWeightPrompt = false;
 
           // Always update profile.weight so TDEE recalculates with the latest weight
@@ -285,9 +289,9 @@ export class OrchestratorService {
           await deps.createWeightLog({
             userId: request.userId,
             weight,
-            date: new Date(),
+            date: userDate,
           });
-          lastWeightLog = { weight, date: new Date(), daysSince: 0 };
+          lastWeightLog = { weight, date: userDate, daysSince: 0 };
           needsWeightPrompt = false;
         }
         if (height != null && height >= 100 && height <= 250) {
@@ -476,6 +480,7 @@ export class OrchestratorService {
   private async buildContext(
     userId: string,
     deps: OrchestratorDependencies,
+    timezone?: string,
   ): Promise<AgentContext> {
     const [user, profile, recentEntries, conversationHistory] = await Promise.all([
       deps.getUser(userId),
@@ -493,7 +498,7 @@ export class OrchestratorService {
       profile: profile || undefined,
       recentEntries,
       conversationHistory,
-      currentDate: new Date(),
+      currentDate: getUserLocalMidnight(timezone || DEFAULT_TIMEZONE),
     };
   }
 

@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../infrastructure/database/prisma.service';
 import { WhoopService } from '../whoop/whoop.service';
 import type { HistoryDay, WeightEntry, HistoryDayEntry, DailySummary } from '@nova/types';
+import { toDateKeyInTimezone, getUserTodayRange, DEFAULT_TIMEZONE } from '../utils/timezone';
 
 @Injectable()
 export class HistoryService {
@@ -31,9 +32,15 @@ export class HistoryService {
   }
 
   async getDailyHistory(userId: string, days: number): Promise<HistoryDay[]> {
-    const since = new Date();
-    since.setHours(0, 0, 0, 0);
-    since.setDate(since.getDate() - days);
+    // Fetch user to get timezone
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { metadata: true, timezone: true },
+    });
+    const userTimezone = user?.timezone || DEFAULT_TIMEZONE;
+
+    const { start: todayStart } = getUserTodayRange(userTimezone);
+    const since = new Date(todayStart.getTime() - days * 24 * 60 * 60 * 1000);
     const now = new Date();
 
     // Fetch user profile for dynamic targetDeficit
@@ -43,13 +50,7 @@ export class HistoryService {
 
     // Check if user has Whoop connected and fetch historical data
     let whoopCaloriesByDate = new Map<string, number>();
-    let whoopTzOffset = 0; // User's timezone offset in minutes from Whoop
     try {
-      const user = await this.prisma.user.findUnique({
-        where: { id: userId },
-        select: { metadata: true },
-      });
-
       if (user?.metadata) {
         const metadata = (user.metadata ?? {}) as Record<string, any>;
         if (metadata.whoop?.accessToken) {
@@ -81,8 +82,7 @@ export class HistoryService {
 
           const whoopResult = await this.whoopService.getCyclesForRange(accessToken, since, now);
           whoopCaloriesByDate = whoopResult.caloriesByDate;
-          whoopTzOffset = whoopResult.timezoneOffsetMinutes;
-          this.logger.debug(`Got Whoop data for ${whoopCaloriesByDate.size} days, tz offset: ${whoopTzOffset}min`);
+          this.logger.debug(`Got Whoop data for ${whoopCaloriesByDate.size} days`);
         }
       }
     } catch (error) {
@@ -97,13 +97,10 @@ export class HistoryService {
       orderBy: { date: 'desc' },
     });
 
-    // Group entries by date string (YYYY-MM-DD)
-    // When Whoop is connected, use its timezone offset to align food dates with Whoop dates
+    // Group entries by date string (YYYY-MM-DD) in user's timezone
     const grouped = new Map<string, typeof entries>();
     for (const entry of entries) {
-      const dateKey = whoopTzOffset !== 0
-        ? this.toDateKeyWithOffset(entry.date, whoopTzOffset)
-        : this.toLocalDateKey(entry.date);
+      const dateKey = toDateKeyInTimezone(entry.date, userTimezone);
       if (!grouped.has(dateKey)) {
         grouped.set(dateKey, []);
       }
@@ -115,7 +112,7 @@ export class HistoryService {
     const whoopDateKeys = Array.from(whoopCaloriesByDate.keys());
     this.logger.debug(`Food entry date keys: ${JSON.stringify(foodDateKeys)}`);
     this.logger.debug(`Whoop date keys: ${JSON.stringify(whoopDateKeys)}`);
-    this.logger.debug(`Sample food entry raw dates: ${entries.slice(0, 3).map(e => `${e.date.toISOString()} -> ${this.toLocalDateKey(e.date)}`).join(', ')}`);
+    this.logger.debug(`Sample food entry raw dates: ${entries.slice(0, 3).map(e => `${e.date.toISOString()} -> ${toDateKeyInTimezone(e.date, userTimezone)}`).join(', ')}`);
 
     // NOTE: Do NOT add days that only have Whoop data but no manual entries.
     // Showing Whoop burn with 0 intake creates misleading huge deficits.
@@ -240,9 +237,14 @@ export class HistoryService {
   }
 
   async getWeightHistory(userId: string, days: number): Promise<WeightEntry[]> {
-    const since = new Date();
-    since.setHours(0, 0, 0, 0);
-    since.setDate(since.getDate() - days);
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { timezone: true },
+    });
+    const userTimezone = user?.timezone || DEFAULT_TIMEZONE;
+
+    const { start: todayStart } = getUserTodayRange(userTimezone);
+    const since = new Date(todayStart.getTime() - days * 24 * 60 * 60 * 1000);
 
     const logs = await this.prisma.weightLog.findMany({
       where: {
@@ -255,7 +257,7 @@ export class HistoryService {
     // Group by day, keep only the last entry per day
     const byDay = new Map<string, number>();
     for (const log of logs) {
-      const dateKey = this.toLocalDateKey(log.date);
+      const dateKey = toDateKeyInTimezone(log.date, userTimezone);
       byDay.set(dateKey, log.weight);
     }
 

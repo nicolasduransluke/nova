@@ -25,4 +25,7 @@ export class ProcessMessageDto {
   @IsEnum(['text', 'image', 'weight', 'meal', 'workout'])
   messageType?: MessageType;
 
+  @IsOptional()
+  @IsString()
+  timezone?: string;
 }

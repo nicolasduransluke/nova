@@ -13,20 +13,18 @@ import { Prisma } from '@prisma/client';
 import { OrchestratorService, OrchestratorDependencies } from '../agents/orchestrator.service';
 import { PrismaService } from '../infrastructure/database/prisma.service';
 import { generateId } from '@nova/utils';
+import { getUserTodayRange, DEFAULT_TIMEZONE } from '../utils/timezone';
 
 @Injectable()
 export class MessageProcessorService {
   private readonly logger = new Logger(MessageProcessorService.name);
-  private readonly dependencies: OrchestratorDependencies;
 
   constructor(
     private readonly orchestrator: OrchestratorService,
     private readonly prisma: PrismaService,
-  ) {
-    this.dependencies = this.createDependencies();
-  }
+  ) {}
 
-  private createDependencies(): OrchestratorDependencies {
+  private createDependencies(timezone: string): OrchestratorDependencies {
     return {
       getUser: async (userId: string): Promise<User | null> => {
         const user = await this.prisma.user.findUnique({
@@ -180,10 +178,7 @@ export class MessageProcessorService {
       },
 
       getTodayCalorieEntries: async (userId: string): Promise<CalorieEntry[]> => {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
+        const { start: today, end: tomorrow } = getUserTodayRange(timezone);
 
         const entries = await this.prisma.calorieEntry.findMany({
           where: {
@@ -314,10 +309,7 @@ export class MessageProcessorService {
       },
 
       getLastCalorieEntry: async (userId: string): Promise<CalorieEntry | null> => {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
+        const { start: today, end: tomorrow } = getUserTodayRange(timezone);
 
         const entry = await this.prisma.calorieEntry.findFirst({
           where: {
@@ -374,6 +366,15 @@ export class MessageProcessorService {
     request: ProcessMessageRequest,
   ): Promise<ProcessMessageResponse> {
     this.logger.debug(`Processing message from user ${request.userId}`);
+    const timezone = request.timezone || DEFAULT_TIMEZONE;
+
+    // Persist timezone to user record
+    if (request.timezone) {
+      this.prisma.user.update({
+        where: { id: request.userId },
+        data: { timezone: request.timezone },
+      }).catch((err) => this.logger.warn(`Failed to persist timezone: ${err}`));
+    }
 
     await this.saveMessage(
       request.userId,
@@ -383,7 +384,8 @@ export class MessageProcessorService {
       request.imageUrl,
     );
 
-    const result = await this.orchestrator.processMessage(request, this.dependencies);
+    const deps = this.createDependencies(timezone);
+    const result = await this.orchestrator.processMessage(request, deps);
 
     if (result.success && result.response?.message) {
       await this.saveMessage(
@@ -496,6 +498,15 @@ export class MessageProcessorService {
   async processMessageSync(
     request: ProcessMessageRequest,
   ): Promise<ProcessMessageResponse> {
+    const timezone = request.timezone || DEFAULT_TIMEZONE;
+
+    if (request.timezone) {
+      this.prisma.user.update({
+        where: { id: request.userId },
+        data: { timezone: request.timezone },
+      }).catch((err) => this.logger.warn(`Failed to persist timezone: ${err}`));
+    }
+
     await this.saveMessage(
       request.userId,
       request.messageType || 'text',
@@ -504,7 +515,8 @@ export class MessageProcessorService {
       request.imageUrl,
     );
 
-    const result = await this.orchestrator.processMessage(request, this.dependencies);
+    const deps = this.createDependencies(timezone);
+    const result = await this.orchestrator.processMessage(request, deps);
 
     if (result.success && result.response?.message) {
       await this.saveMessage(
