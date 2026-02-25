@@ -25,6 +25,7 @@ export interface AuthActions {
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
   refreshTokens: () => Promise<boolean>;
   forgotPassword: (email: string) => Promise<{ message: string }>;
   resetPassword: (token: string, password: string) => Promise<void>;
@@ -154,6 +155,36 @@ export const useAuthStore = create<AuthStore>()(
               Authorization: `Bearer ${accessToken}`,
             },
           }).catch(() => {});
+        }
+
+        await clearAllUserData();
+        set({
+          user: null,
+          accessToken: null,
+          refreshToken: null,
+          isAuthenticated: false,
+          error: null,
+          isGuest: false,
+          hasAIConsent: false,
+        });
+      },
+
+      deleteAccount: async () => {
+        const { accessToken } = get();
+
+        if (!accessToken) return;
+
+        const response = await fetch(`${API_URL}/api/auth/account`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.message || 'Error al eliminar la cuenta');
         }
 
         await clearAllUserData();

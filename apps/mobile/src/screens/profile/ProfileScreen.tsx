@@ -7,6 +7,7 @@ import {
   Pressable,
   Alert,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
 import type { Profile, ActivityLevel } from '@nova/types';
 import { useAuthStore } from '@/store/auth.store';
@@ -46,7 +47,7 @@ function calculateTDEE(profile: Profile): number {
 }
 
 export default function ProfileScreen() {
-  const { user, logout } = useAuthStore();
+  const { user, logout, deleteAccount } = useAuthStore();
   const { profile, isLoading, loadProfile, updateProfile } = useProfileStore();
 
   const [editing, setEditing] = useState(false);
@@ -121,6 +122,40 @@ export default function ProfileScreen() {
     ]);
   };
 
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Eliminar cuenta',
+      'Esta acción es permanente. Se eliminarán todos tus datos, incluyendo tu perfil, registros de comidas, historial de peso y mensajes. ¿Estás seguro?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar cuenta',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Confirmar eliminación',
+              '¿Realmente deseas eliminar tu cuenta? No podrás recuperar tus datos.',
+              [
+                { text: 'Cancelar', style: 'cancel' },
+                {
+                  text: 'Sí, eliminar',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      await deleteAccount();
+                    } catch {
+                      Alert.alert('Error', 'No se pudo eliminar la cuenta. Inténtalo de nuevo.');
+                    }
+                  },
+                },
+              ],
+            );
+          },
+        },
+      ],
+    );
+  };
+
   const tdee = profile ? calculateTDEE(profile) : null;
   const remaining = profile?.goalWeight
     ? (profile.weight - profile.goalWeight).toFixed(1)
@@ -152,6 +187,12 @@ export default function ProfileScreen() {
               <StatCard label="Peso actual" value={profile.weight} unit="kg" />
               <StatCard label="TDEE" value={tdee ?? '—'} unit="kcal" />
             </View>
+            <Text
+              style={styles.citationText}
+              onPress={() => Linking.openURL('https://pubmed.ncbi.nlm.nih.gov/15883556/')}
+            >
+              TDEE calculado con la ecuación Mifflin-St Jeor (Mifflin et al., 1990). Toca para ver fuente.
+            </Text>
 
             {/* Goal progress */}
             {profile.goalWeight && (
@@ -250,6 +291,11 @@ export default function ProfileScreen() {
             {/* Logout */}
             <Pressable onPress={handleLogout} style={styles.logoutButton}>
               <Text style={styles.logoutText}>Cerrar sesión</Text>
+            </Pressable>
+
+            {/* Delete account */}
+            <Pressable onPress={handleDeleteAccount} style={styles.deleteButton}>
+              <Text style={styles.deleteText}>Eliminar cuenta</Text>
             </Pressable>
           </>
         ) : (
@@ -364,6 +410,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
+  citationText: {
+    fontSize: 11,
+    color: colors.text.muted,
+    marginBottom: 16,
+    marginTop: -8,
+    paddingHorizontal: 4,
+    textDecorationLine: 'underline',
+  },
   logoutButton: {
     marginTop: 24,
     paddingVertical: 14,
@@ -376,6 +430,20 @@ const styles = StyleSheet.create({
   logoutText: {
     color: '#fca5a5',
     fontSize: 16,
+    fontWeight: '500',
+  },
+  deleteButton: {
+    marginTop: 12,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(239,68,68,0.5)',
+    backgroundColor: 'rgba(239,68,68,0.15)',
+    alignItems: 'center',
+  },
+  deleteText: {
+    color: '#ef4444',
+    fontSize: 14,
     fontWeight: '500',
   },
   emptyContainer: {

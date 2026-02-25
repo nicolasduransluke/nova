@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Get,
+  Delete,
   Body,
   UseGuards,
   Req,
@@ -166,6 +167,18 @@ export class AuthController {
       dto.identityToken,
       dto.fullName,
     );
+    return {
+      success: true,
+      data: result,
+    };
+  }
+
+  // Delete account
+  @UseGuards(JwtAuthGuard)
+  @Delete('account')
+  @HttpCode(HttpStatus.OK)
+  async deleteAccount(@CurrentUser() user: JwtPayload) {
+    const result = await this.authService.deleteAccount(user.sub);
     return {
       success: true,
       data: result,
