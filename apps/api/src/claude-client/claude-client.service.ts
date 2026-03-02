@@ -696,8 +696,14 @@ Determine the user's intention. Return ONLY valid JSON:
     const lower = message.toLowerCase();
 
     // Confirmation detection (check first as it's context-sensitive)
-    const confirmWords = ['sí', 'si', 'ok', 'dale', 'perfecto', 'está bien', 'esta bien', 'yes', 'confirm', 'ponle', 'cámbialo', 'cambialo', 'no', 'bórralo', 'borralo', 'quítalo', 'quitalo', 'cancel'];
-    if (confirmWords.some((w) => lower === w || lower.startsWith(w + ' ') || lower.startsWith(w + ','))) {
+    // For short ambiguous words like "si"/"sí", only classify as confirmation if the message is short.
+    // Long messages starting with "si" (e.g., "Si una palta, 2 huevos...") are likely meal corrections, not confirmations.
+    const strictConfirmWords = ['ok', 'dale', 'perfecto', 'está bien', 'esta bien', 'yes', 'confirm', 'ponle', 'cámbialo', 'cambialo', 'no', 'bórralo', 'borralo', 'quítalo', 'quitalo', 'cancel'];
+    const ambiguousConfirmWords = ['sí', 'si'];
+    if (strictConfirmWords.some((w) => lower === w || lower.startsWith(w + ' ') || lower.startsWith(w + ','))) {
+      return 'confirmation';
+    }
+    if (ambiguousConfirmWords.some((w) => lower === w || lower.startsWith(w + ' ') || lower.startsWith(w + ',')) && lower.length < 30) {
       return 'confirmation';
     }
 
@@ -757,8 +763,9 @@ Determine the user's intention. Return ONLY valid JSON:
       return 'weight_log';
 
     // Activity logging (check BEFORE meal_log to avoid "camine despues de almuerzo" being classified as meal)
-    if (lower.includes('workout') || lower.includes('exercise') || lower.includes('gym') ||
-        lower.includes('run') || lower.includes('running') ||
+    // Use word-boundary regex for short words like 'run' and 'gym' to avoid matching substrings (e.g., "brunch" contains "run")
+    if (lower.includes('workout') || lower.includes('exercise') || /\bgym\b/.test(lower) ||
+        /\brun\b/.test(lower) || lower.includes('running') ||
         lower.includes('entrené') || lower.includes('entrene') || lower.includes('ejercicio') ||
         lower.includes('correr') || lower.includes('corrí') || lower.includes('gimnasio') ||
         lower.includes('pesas') || lower.includes('cardio') || lower.includes('nadar') ||

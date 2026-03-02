@@ -128,7 +128,11 @@ export const useChatStore = create<ChatStore>()(
       refreshDailySummary: async () => {
         const authState = useAuthStore.getState();
         const userId = authState.user?.id;
-        if (!userId) return;
+        if (!userId) {
+          // No user — show empty panel instead of infinite spinner
+          set({ dailySummary: { intake: 0, burn: 0, tdee: 0, deficit: 0, targetDeficit: 0, projectedWeeklyLoss: 0, date: new Date() } });
+          return;
+        }
 
         try {
           const res = await fetch(`${API_URL}/api/history/daily?userId=${userId}&days=1`, {
@@ -142,10 +146,15 @@ export const useChatStore = create<ChatStore>()(
             const todayEntry = data.data[0];
             if (todayEntry?.summary) {
               set({ dailySummary: todayEntry.summary });
+              return;
             }
           }
+          // API returned no entries for today — show empty summary instead of spinner
+          set({ dailySummary: { intake: 0, burn: 0, tdee: 0, deficit: 0, targetDeficit: 0, projectedWeeklyLoss: 0, date: new Date() } });
         } catch (error) {
           console.error('Error refreshing daily summary:', error);
+          // On error, show empty panel instead of infinite spinner
+          set({ dailySummary: { intake: 0, burn: 0, tdee: 0, deficit: 0, targetDeficit: 0, projectedWeeklyLoss: 0, date: new Date() } });
         }
       },
 

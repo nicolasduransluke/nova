@@ -491,8 +491,12 @@ Be a helpful coach - give concrete, actionable suggestions, not just numbers.`;
       let generalTask = `Respond naturally.`;
 
       // New user onboarding - ask for basic profile info
-      if (input.isNewUser) {
-        generalTask = `This is a NEW USER who doesn't have a profile yet. You need to collect their basic information to personalize their experience.
+      // Trigger onboarding for: no profile, profile with default values, or profile without a goal
+      const needsOnboarding = input.isNewUser || (input.hasDefaultProfileData && input.isProfileIncomplete);
+      if (needsOnboarding) {
+        generalTask = `This is a NEW USER who hasn't configured their profile yet. You need to collect their basic information to personalize their experience.
+
+DO NOT mention any deficit, calorie totals, or daily progress — you don't have real data yet.
 
 Your response MUST:
 1. Greet them warmly and introduce yourself as NOVA, their calorie deficit coach
@@ -517,13 +521,24 @@ Por favor, compárteme en un solo mensaje:
 Ejemplo: 'Peso 85 kg, mido 175 cm, tengo 32 años, soy hombre y quiero llegar a 75 kg'"
 
 Keep it friendly and encouraging. Use Spanish.`;
+      } else if (input.isProfileIncomplete) {
+        // User has real profile data but hasn't set a weight goal yet
+        generalTask = `The user has a profile but hasn't set a weight goal yet. DO NOT mention any deficit or target — without a goal those numbers are meaningless.
+
+Your response MUST:
+1. Greet them warmly
+2. Ask them to set their weight goal (e.g. "¿Cuál es tu meta de peso? Por ejemplo: 'quiero llegar a 75 kg'")
+Keep it conversational and brief (max 4 lines). Use Spanish.`;
       } else if (needsWeightPrompt && !lastWeightLog) {
-        generalTask += ` The user has never logged their weight. Ask them to share their current weight so you can track their progress.`;
+        generalTask += ` The user has never logged their weight. Ask them to share their current weight so you can track their progress.
+If appropriate, mention they can log meals or activities. Keep it conversational and brief (max 6 lines).`;
       } else if (needsWeightPrompt && lastWeightLog) {
-        generalTask += ` The user hasn't logged their weight in ${lastWeightLog.daysSince} days. Suggest they weigh in today.`;
-      }
-      generalTask += ` If appropriate, mention they can log meals or activities.
+        generalTask += ` The user hasn't logged their weight in ${lastWeightLog.daysSince} days. Suggest they weigh in today.
+If appropriate, mention they can log meals or activities. Keep it conversational and brief (max 6 lines).`;
+      } else {
+        generalTask += ` If appropriate, mention they can log meals or activities.
 Keep it conversational and brief (max 6 lines).`;
+      }
       prompt += generalTask;
     }
 

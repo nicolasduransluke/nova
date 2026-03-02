@@ -22,13 +22,28 @@ export default function PanelScreen() {
     }
   }, [isFocused, refreshDailySummary]);
 
-  if (!dailySummary) {
+  const isLoading = dailySummary === null;
+  const isEmpty = dailySummary && dailySummary.intake === 0 && dailySummary.burn === 0 && dailySummary.tdee === 0;
+
+  if (isLoading) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <Text style={styles.headerTitle}>Panel</Text>
         <View style={styles.emptyContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.emptyText}>Cargando resumen...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (isEmpty) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <Text style={styles.headerTitle}>Panel</Text>
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyEmoji}>{'🍽️'}</Text>
+          <Text style={styles.emptyTitle}>Sin registros hoy</Text>
+          <Text style={styles.emptyText}>Registra tu primera comida o actividad en el chat para ver tu resumen del dia.</Text>
         </View>
       </View>
     );
@@ -124,11 +139,23 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 16,
+    gap: 12,
+    paddingHorizontal: 40,
+  },
+  emptyEmoji: {
+    fontSize: 48,
+    marginBottom: 4,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text.primary,
   },
   emptyText: {
     color: colors.text.muted,
     fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
   },
   progressSection: {
     marginBottom: 24,
