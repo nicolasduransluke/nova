@@ -300,7 +300,7 @@ export default function LandingPage() {
       <footer className="border-t border-white/10 px-6 py-8">
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-sm text-indigo-300/50">
-            &copy; {new Date().getFullYear()} Nova. All rights reserved.
+            @ {new Date().getFullYear()} @nicolasdurans. All rights reserved.
           </p>
           <div className="flex gap-6">
             <Link
