@@ -84,7 +84,7 @@ export function EditEntryModal({ entry, visible, onClose, onSaved }: Props) {
         if (i !== index) return item;
         const orig = originals.current[index];
         if (!orig || orig.portionSize === 0) return item;
-        const newSize = Math.max(1, (item.portionSize ?? orig.portionSize) + delta);
+        const newSize = Math.max(0.25, Math.round(((item.portionSize ?? orig.portionSize) + delta) * 100) / 100);
         const ratio = newSize / orig.portionSize;
         return {
           ...item,
@@ -139,7 +139,8 @@ export function EditEntryModal({ entry, visible, onClose, onSaved }: Props) {
             {items.map((item, index) => {
               const usePortionStepper = hasPortion(item);
               const stepperValue = usePortionStepper ? (item.portionSize ?? 1) : item.quantity;
-              const minValue = 1;
+              const minValue = usePortionStepper ? 0.25 : 1;
+              const stepDelta = usePortionStepper ? 0.5 : 1;
               const displayCal = usePortionStepper ? item.calories : item.calories * item.quantity;
               const displayProtein = usePortionStepper ? item.protein : (item.protein ? item.protein * item.quantity : undefined);
               const displayCarbs = usePortionStepper ? item.carbs : (item.carbs ? item.carbs * item.quantity : undefined);
@@ -165,15 +166,15 @@ export function EditEntryModal({ entry, visible, onClose, onSaved }: Props) {
                   </View>
                   <View style={styles.stepper}>
                     <Pressable
-                      onPress={() => usePortionStepper ? updatePortionSize(index, -1) : updateQuantity(index, -1)}
+                      onPress={() => usePortionStepper ? updatePortionSize(index, -stepDelta) : updateQuantity(index, -1)}
                       style={[styles.stepBtn, stepperValue <= minValue && styles.stepBtnDisabled]}
                       disabled={stepperValue <= minValue}
                     >
                       <Text style={styles.stepText}>-</Text>
                     </Pressable>
-                    <Text style={styles.stepValue}>{stepperValue}</Text>
+                    <Text style={styles.stepValue}>{Number.isInteger(stepperValue) ? stepperValue : stepperValue.toFixed(1)}</Text>
                     <Pressable
-                      onPress={() => usePortionStepper ? updatePortionSize(index, 1) : updateQuantity(index, 1)}
+                      onPress={() => usePortionStepper ? updatePortionSize(index, stepDelta) : updateQuantity(index, 1)}
                       style={styles.stepBtn}
                     >
                       <Text style={styles.stepText}>+</Text>
