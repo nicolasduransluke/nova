@@ -6,9 +6,25 @@ import { ThemeProvider } from '@/components/ThemeProvider';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'NOVA - Human Energy Intelligence',
-  description: 'AI-first platform for holistic health coaching',
+  title: 'Nova - Lose Weight with AI Calorie Coaching',
+  description:
+    'Track calories, maintain your deficit, and lose weight with AI coaching. Log meals by chat or photo. Download Nova on the App Store.',
   manifest: '/manifest.json',
+  metadataBase: new URL('https://novahealthcoach.com'),
+  openGraph: {
+    title: 'Nova - Lose Weight with AI Calorie Coaching',
+    description:
+      'Track calories, maintain your deficit, and lose weight with AI coaching. Log meals by chat or photo.',
+    url: 'https://novahealthcoach.com',
+    siteName: 'Nova',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Nova - Lose Weight with AI Calorie Coaching',
+    description:
+      'Track calories, maintain your deficit, and lose weight with AI coaching. Log meals by chat or photo.',
+  },
 };
 
 export const viewport: Viewport = {
