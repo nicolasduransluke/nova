@@ -55,6 +55,20 @@ export class HistoryService {
       if (whoopToken) {
         const whoopResult = await this.whoopService.getCyclesForRange(whoopToken.accessToken, since, now);
         whoopCaloriesByDate = whoopResult.caloriesByDate;
+
+        // Whoop range queries don't include today's in-progress cycle — fetch it separately
+        const todayKey = toDateKeyInTimezone(new Date(), userTimezone);
+        if (!whoopCaloriesByDate.has(todayKey)) {
+          try {
+            const todaySummary = await this.whoopService.getDailySummary(whoopToken.accessToken);
+            if (todaySummary.caloriesBurned > 0) {
+              whoopCaloriesByDate.set(todayKey, todaySummary.caloriesBurned);
+            }
+          } catch (e) {
+            this.logger.debug(`Could not fetch today's Whoop cycle: ${e}`);
+          }
+        }
+
         this.logger.debug(`Got Whoop data for ${whoopCaloriesByDate.size} days`);
       }
     } catch (error) {
