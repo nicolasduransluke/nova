@@ -168,6 +168,7 @@ export class WhoopService {
    * Refresh access token
    */
   async refreshTokens(refreshToken: string): Promise<WhoopTokens> {
+    this.logger.debug('Attempting Whoop token refresh...');
     const response = await fetch(`${this.authUrl}/token`, {
       method: 'POST',
       headers: {
@@ -178,15 +179,17 @@ export class WhoopService {
         refresh_token: refreshToken,
         client_id: this.clientId,
         client_secret: this.clientSecret,
+        scope: 'read:profile read:cycles read:recovery read:workout read:sleep read:body_measurement',
       }),
     });
 
     if (!response.ok) {
       const error = await response.text();
-      this.logger.error(`Failed to refresh token: ${error}`);
-      throw new Error(`Failed to refresh token: ${error}`);
+      this.logger.error(`Failed to refresh token (HTTP ${response.status}): ${error}`);
+      throw new Error(`Failed to refresh token (HTTP ${response.status}): ${error}`);
     }
 
+    this.logger.debug('Whoop token refresh successful');
     return response.json();
   }
 
@@ -430,6 +433,15 @@ export class WhoopService {
       return { accessToken: newTokens.access_token, metadata: updatedMetadata };
     } catch (error) {
       this.logger.error(`Failed to refresh Whoop token for user ${userId}: ${error}`);
+
+      // Clear invalid Whoop tokens so the user can reconnect cleanly
+      const { whoop: _, ...cleanMetadata } = metadata;
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { metadata: cleanMetadata as any },
+      });
+      this.logger.warn(`Cleared invalid Whoop tokens for user ${userId}`);
+
       return null;
     }
   }
