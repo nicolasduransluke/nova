@@ -1,5 +1,5 @@
-import React, { useRef, useEffect } from 'react';
-import { FlatList, View, Text, StyleSheet } from 'react-native';
+import React, { useRef, useEffect, useMemo, useCallback, useState } from 'react';
+import { FlatList, View, Text, StyleSheet, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import type { Message } from '@nova/types';
 import { MessageBubble } from './MessageBubble';
 import { DateSeparator } from './DateSeparator';
@@ -49,18 +49,28 @@ interface Props {
 
 export function MessageList({ messages, isAgentTyping }: Props) {
   const listRef = useRef<FlatList>(null);
+  const isNearBottom = useRef(true);
 
-  const items = buildListItems(messages, isAgentTyping);
+  const items = useMemo(
+    () => buildListItems(messages, isAgentTyping),
+    [messages, isAgentTyping],
+  );
 
   useEffect(() => {
-    if (items.length > 0) {
+    if (items.length > 0 && isNearBottom.current) {
       setTimeout(() => {
         listRef.current?.scrollToEnd({ animated: true });
       }, 100);
     }
   }, [items.length]);
 
-  const renderItem = ({ item }: { item: ListItem }) => {
+  const handleScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+    const distanceFromBottom = contentSize.height - layoutMeasurement.height - contentOffset.y;
+    isNearBottom.current = distanceFromBottom < 100;
+  }, []);
+
+  const renderItem = useCallback(({ item }: { item: ListItem }) => {
     switch (item.type) {
       case 'date':
         return <DateSeparator date={item.date} />;
@@ -69,7 +79,7 @@ export function MessageList({ messages, isAgentTyping }: Props) {
       case 'typing':
         return <TypingIndicator />;
     }
-  };
+  }, []);
 
   if (messages.length === 0 && !isAgentTyping) {
     return (
@@ -93,6 +103,10 @@ export function MessageList({ messages, isAgentTyping }: Props) {
       keyExtractor={(item) => item.key}
       contentContainerStyle={styles.listContent}
       showsVerticalScrollIndicator={false}
+      onScroll={handleScroll}
+      scrollEventThrottle={16}
+      maxToRenderPerBatch={10}
+      windowSize={10}
     />
   );
 }
