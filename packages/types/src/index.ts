@@ -232,6 +232,7 @@ export interface DailySummary {
   projectedWeeklyLoss: number; // kg
   goalWeight?: number; // target weight in kg
   currentWeight?: number; // last recorded weight
+  weeklyWeightTarget?: number; // target weight for end of this week (based on start-of-week weight)
   weightProgress?: WeightProgress;
 }
 

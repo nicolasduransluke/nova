@@ -144,6 +144,7 @@ Keep responses brief, data-focused, and in the user's language.`;
     goalWeight?: number,
     firstWeightLog?: number,
     burnSource?: 'manual' | 'whoop',
+    startOfWeekWeight?: number,
   ): DailySummary {
     const tdee = this.calculateTDEE(profile);
     // If burn comes from Whoop, it already includes TDEE, so don't add it again
@@ -178,6 +179,12 @@ Keep responses brief, data-focused, and in the user's language.`;
       };
     }
 
+    // Weekly weight target: based on start-of-week weight so it doesn't move when user loses weight
+    const baseWeight = startOfWeekWeight ?? lastWeight;
+    const weeklyWeightTarget = baseWeight != null
+      ? Math.round((baseWeight - weeklyGoal) * 10) / 10
+      : undefined;
+
     return {
       date: new Date(),
       intake: todayIntake,
@@ -189,6 +196,7 @@ Keep responses brief, data-focused, and in the user's language.`;
       projectedWeeklyLoss: Number(projectedWeeklyLoss.toFixed(2)),
       goalWeight: effectiveGoalWeight,
       currentWeight: lastWeight,
+      weeklyWeightTarget,
       weightProgress,
     };
   }

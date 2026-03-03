@@ -53,8 +53,27 @@ export default function PanelScreen() {
   const burned = dailySummary.burn ?? 0;
   const tdee = dailySummary.tdee ?? 2000;
   const deficit = dailySummary.deficit ?? 0;
-  const remaining = Math.max(0, tdee - consumed);
-  const progress = tdee > 0 ? Math.min((consumed / tdee) * 100, 100) : 0;
+  const targetDeficit = dailySummary.targetDeficit ?? 550;
+  const currentWeight = dailySummary.currentWeight;
+  const goalWeight = dailySummary.goalWeight;
+
+  // Use actual burn (Whoop) if available, otherwise TDEE as estimated burn
+  const effectiveBurn = burned > 0 ? burned : tdee;
+
+  // How much more can they eat and still hit their deficit target
+  const disponible = Math.max(0, effectiveBurn - targetDeficit - consumed);
+
+  // Deficit progress: how close to hitting the target deficit
+  const deficitProgress = targetDeficit > 0 ? Math.min((deficit / targetDeficit) * 100, 150) : 0;
+  const hitTarget = deficit >= targetDeficit;
+
+  // Projected weight tomorrow: lose deficit/7700 kg per day
+  const projectedWeight = currentWeight && deficit > 0
+    ? Math.round((currentWeight - deficit / 7700) * 100) / 100
+    : null;
+
+  // Weekly weight target from backend (based on start-of-week weight, not current)
+  const weeklyTarget = dailySummary.weeklyWeightTarget ?? null;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -64,21 +83,31 @@ export default function PanelScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Progress bar */}
+        {/* Deficit progress bar */}
         <View style={styles.progressSection}>
           <View style={styles.progressLabels}>
-            <Text style={styles.progressLabel}>Consumidas</Text>
-            <Text style={styles.progressValue}>{consumed} / {tdee} kcal</Text>
+            <Text style={styles.progressLabel}>Meta de deficit</Text>
+            <Text style={[styles.progressValue, hitTarget && styles.progressValueHit]}>
+              {deficit} / {targetDeficit} kcal
+            </Text>
           </View>
           <View style={styles.progressTrack}>
             <View
               style={[
                 styles.progressFill,
-                { width: `${progress}%` },
-                progress > 100 && styles.progressOver,
+                { width: `${Math.min(deficitProgress, 100)}%` },
+                hitTarget && styles.progressHit,
               ]}
             />
           </View>
+          {hitTarget && (
+            <Text style={styles.progressHint}>Meta diaria cumplida!</Text>
+          )}
+          {!hitTarget && deficitProgress > 0 && (
+            <Text style={styles.progressHintNeutral}>
+              Te faltan {targetDeficit - deficit} kcal para llegar a tu meta diaria
+            </Text>
+          )}
         </View>
 
         {/* Stats grid */}
@@ -90,28 +119,52 @@ export default function PanelScreen() {
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statEmoji}>{'🔥'}</Text>
-            <Text style={styles.statValue}>{burned}</Text>
-            <Text style={styles.statLabel}>Quemadas</Text>
+            <Text style={styles.statValue}>{burned > 0 ? burned : tdee}</Text>
+            <Text style={styles.statLabel}>
+              {dailySummary.burnSource === 'whoop' ? 'Quemadas' : 'TDEE est.'}
+            </Text>
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statEmoji}>{'📉'}</Text>
             <Text style={[styles.statValue, deficit > 0 ? styles.positive : styles.negative]}>
               {deficit > 0 ? '+' : ''}{deficit}
             </Text>
-            <Text style={styles.statLabel}>Déficit</Text>
+            <Text style={styles.statLabel}>Deficit</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statEmoji}>{'🎯'}</Text>
-            <Text style={styles.statValue}>{remaining}</Text>
-            <Text style={styles.statLabel}>Restantes</Text>
+            <Text style={styles.statEmoji}>{'🍴'}</Text>
+            <Text style={[styles.statValue, disponible > 0 ? styles.disponible : styles.negative]}>
+              {disponible}
+            </Text>
+            <Text style={styles.statLabel}>Disponible</Text>
+            <Text style={styles.statHint}>para comer</Text>
           </View>
         </View>
 
-        {/* Weight */}
-        {dailySummary.currentWeight && (
+        {/* Weight projection */}
+        {currentWeight && (
           <View style={styles.weightSection}>
-            <Text style={styles.weightLabel}>Peso actual</Text>
-            <Text style={styles.weightValue}>{dailySummary.currentWeight} kg</Text>
+            <Text style={styles.weightSectionTitle}>Peso</Text>
+            <View style={styles.weightRow}>
+              <View style={styles.weightItem}>
+                <Text style={styles.weightLabel}>Actual</Text>
+                <Text style={styles.weightValue}>{currentWeight} kg</Text>
+              </View>
+              {projectedWeight && (
+                <View style={styles.weightItem}>
+                  <Text style={styles.weightLabel}>Mañana</Text>
+                  <Text style={[styles.weightValue, styles.projectedWeight]}>
+                    {projectedWeight.toFixed(2)} kg
+                  </Text>
+                </View>
+              )}
+              {weeklyTarget && (
+                <View style={styles.weightItem}>
+                  <Text style={styles.weightLabel}>Meta semanal</Text>
+                  <Text style={[styles.weightValue, styles.goalWeightText]}>{weeklyTarget} kg</Text>
+                </View>
+              )}
+            </View>
           </View>
         )}
       </ScrollView>
@@ -174,19 +227,33 @@ const styles = StyleSheet.create({
     color: colors.text.primary,
     fontWeight: '600',
   },
+  progressValueHit: {
+    color: '#86efac',
+  },
   progressTrack: {
-    height: 8,
-    borderRadius: 4,
+    height: 10,
+    borderRadius: 5,
     backgroundColor: 'rgba(255,255,255,0.1)',
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
-    borderRadius: 4,
+    borderRadius: 5,
     backgroundColor: colors.primary,
   },
-  progressOver: {
-    backgroundColor: colors.error,
+  progressHit: {
+    backgroundColor: '#22c55e',
+  },
+  progressHint: {
+    color: '#86efac',
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 6,
+  },
+  progressHintNeutral: {
+    color: colors.text.muted,
+    fontSize: 12,
+    marginTop: 6,
   },
   statsGrid: {
     flexDirection: 'row',
@@ -217,11 +284,19 @@ const styles = StyleSheet.create({
     color: colors.text.muted,
     marginTop: 4,
   },
+  statHint: {
+    fontSize: 10,
+    color: colors.text.dimmed,
+    marginTop: 2,
+  },
   positive: {
     color: colors.success,
   },
   negative: {
     color: colors.error,
+  },
+  disponible: {
+    color: '#86efac',
   },
   weightSection: {
     backgroundColor: 'rgba(255,255,255,0.05)',
@@ -229,16 +304,35 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.1)',
     borderRadius: 16,
     padding: 16,
+  },
+  weightSectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text.secondary,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  weightRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  weightItem: {
     alignItems: 'center',
   },
   weightLabel: {
-    fontSize: 14,
-    color: colors.text.secondary,
+    fontSize: 11,
+    color: colors.text.muted,
     marginBottom: 4,
   },
   weightValue: {
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: '700',
     color: colors.text.primary,
+  },
+  projectedWeight: {
+    color: '#818cf8',
+  },
+  goalWeightText: {
+    color: '#86efac',
   },
 });

@@ -13,6 +13,22 @@ export class HistoryService {
     private readonly whoopService: WhoopService,
   ) {}
 
+  /** Mifflin-St Jeor TDEE calculation (same formula as MetabolicAgentService) */
+  private calculateTDEE(profile: { weight: number; height: number; age: number; sex: string; activityLevel: string } | null): number {
+    if (!profile) return 2000;
+    let bmr: number;
+    if (profile.sex === 'male') {
+      bmr = 10 * profile.weight + 6.25 * profile.height - 5 * profile.age + 5;
+    } else {
+      bmr = 10 * profile.weight + 6.25 * profile.height - 5 * profile.age - 161;
+    }
+    const activityMultipliers: Record<string, number> = {
+      sedentary: 1.2, light: 1.375, moderate: 1.55, active: 1.725, very_active: 1.9,
+    };
+    const multiplier = activityMultipliers[profile.activityLevel] || 1.55;
+    return Math.round(bmr * multiplier);
+  }
+
   // Convert date to local date string (YYYY-MM-DD) instead of UTC
   private toLocalDateKey(date: Date): string {
     const year = date.getFullYear();
@@ -43,10 +59,35 @@ export class HistoryService {
     const since = new Date(todayStart.getTime() - days * 24 * 60 * 60 * 1000);
     const now = new Date();
 
-    // Fetch user profile for dynamic targetDeficit
+    // Fetch user profile for dynamic targetDeficit and TDEE
     const profile = await this.prisma.profile.findUnique({ where: { userId } });
     const weeklyGoal = profile?.weeklyGoal ?? 0.5;
     const targetDeficit = Math.round((weeklyGoal * 7700) / 7);
+    const tdee = this.calculateTDEE(profile);
+
+    // Fetch latest weight for currentWeight
+    const latestWeight = await this.prisma.weightLog.findFirst({
+      where: { userId },
+      orderBy: { date: 'desc' },
+    });
+    const currentWeight = latestWeight?.weight ?? profile?.weight;
+
+    // Find weight at start of current week (Monday) for stable weekly target
+    const now2 = new Date();
+    const dayOfWeek = now2.getDay();
+    const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const monday = new Date(now2);
+    monday.setHours(0, 0, 0, 0);
+    monday.setDate(monday.getDate() - mondayOffset);
+
+    const startOfWeekLog = await this.prisma.weightLog.findFirst({
+      where: { userId, date: { lte: monday } },
+      orderBy: { date: 'desc' },
+    });
+    const startOfWeekWeight = startOfWeekLog?.weight ?? currentWeight;
+    const weeklyWeightTarget = startOfWeekWeight != null
+      ? Math.round((startOfWeekWeight - weeklyGoal) * 10) / 10
+      : undefined;
 
     // Check if user has Whoop connected and fetch historical data
     let whoopCaloriesByDate = new Map<string, number>();
@@ -160,11 +201,13 @@ export class HistoryService {
         intake,
         burn,
         burnSource: burnSource as 'manual' | 'whoop',
-        tdee: 0,
+        tdee,
         deficit,
         targetDeficit,
         projectedWeeklyLoss: 0,
         goalWeight: profile?.goalWeight ?? undefined,
+        currentWeight: currentWeight ?? undefined,
+        weeklyWeightTarget,
       };
 
       result.push({

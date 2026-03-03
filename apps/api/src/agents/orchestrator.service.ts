@@ -85,6 +85,8 @@ export class OrchestratorService {
       let firstWeightLog: number | undefined;
       let needsWeightPrompt = false;
 
+      let startOfWeekWeight: number | undefined;
+
       if (allWeightLogs.length > 0) {
         // Most recent log (first in DESC order)
         const log = allWeightLogs[0];
@@ -96,6 +98,20 @@ export class OrchestratorService {
 
         // First/oldest log (last in DESC order) - used as starting weight for progress calculation
         firstWeightLog = allWeightLogs[allWeightLogs.length - 1].weight;
+
+        // Find weight at start of current week (Monday) for weekly target calculation
+        const now = new Date();
+        const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon, ...
+        const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+        const monday = new Date(now);
+        monday.setHours(0, 0, 0, 0);
+        monday.setDate(monday.getDate() - mondayOffset);
+
+        // Find the most recent weight log on or before Monday
+        const logBeforeMonday = allWeightLogs.find(
+          (l) => new Date(l.date) <= monday,
+        );
+        startOfWeekWeight = logBeforeMonday?.weight ?? allWeightLogs[allWeightLogs.length > 1 ? allWeightLogs.length - 1 : 0].weight;
       } else {
         needsWeightPrompt = true;
       }
@@ -398,6 +414,7 @@ export class OrchestratorService {
         context.profile?.goalWeight,
         firstWeightLog,
         burnSource,
+        startOfWeekWeight,
       );
 
       // Step 10: Integrate responses
