@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Alert, Platform } from 'react-native';
 import type { HistoryDay, HistoryDayEntry } from '@nova/types';
+import { useTranslation } from 'react-i18next';
 import { api } from '@/lib/api';
 import { colors } from '@/theme';
 import { EditEntryModal } from './EditEntryModal';
@@ -9,10 +10,12 @@ function EntryRow({
   entry,
   onDelete,
   onEdit,
+  t,
 }: {
   entry: HistoryDayEntry;
   onDelete?: (id: string) => void;
   onEdit?: (entry: HistoryDayEntry) => void;
+  t: (key: string) => string;
 }) {
   const isIntake = entry.type === 'intake';
   const isWhoop = entry.id.startsWith('whoop-');
@@ -43,10 +46,10 @@ function EntryRow({
   const hasMacros = entryMacros.protein > 0 || entryMacros.carbs > 0 || entryMacros.fat > 0;
 
   const handleDelete = () => {
-    Alert.alert('Eliminar entrada', '¿Estás seguro?', [
-      { text: 'Cancelar', style: 'cancel' },
+    Alert.alert(t('history.deleteEntry'), t('history.deleteConfirm'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Eliminar',
+        text: t('common.delete'),
         style: 'destructive',
         onPress: async () => {
           try {
@@ -65,7 +68,7 @@ function EntryRow({
       <View style={styles.entryLeft}>
         <View style={[styles.badge, isIntake ? styles.badgeIntake : styles.badgeBurn]}>
           <Text style={[styles.badgeText, isIntake ? styles.badgeTextIntake : styles.badgeTextBurn]}>
-            {isIntake ? 'ingesta' : 'quema'}
+            {isIntake ? t('history.intake') : t('history.burn')}
           </Text>
         </View>
         <View style={{ flex: 1 }}>
@@ -120,6 +123,7 @@ interface Props {
 }
 
 export function DayCard({ day, onEntryDeleted }: Props) {
+  const { t, i18n } = useTranslation();
   const [open, setOpen] = useState(false);
   const [editEntry, setEditEntry] = useState<HistoryDayEntry | null>(null);
   const { summary } = day;
@@ -143,7 +147,8 @@ export function DayCard({ day, onEntryDeleted }: Props) {
 
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr + 'T12:00:00');
-    return d.toLocaleDateString('es-MX', {
+    const locale = i18n.language === 'en' ? 'en-US' : 'es-MX';
+    return d.toLocaleDateString(locale, {
       weekday: 'short',
       month: 'short',
       day: 'numeric',
@@ -167,7 +172,7 @@ export function DayCard({ day, onEntryDeleted }: Props) {
         <View style={styles.entriesContainer}>
           {hasDayMacros && (
             <View style={styles.macrosSummary}>
-              <Text style={styles.macrosLabel}>Macros</Text>
+              <Text style={styles.macrosLabel}>{t('history.macros')}</Text>
               <View style={styles.macrosRow}>
                 <Text style={styles.macroItem}>P: {Math.round(dayMacros.protein)}g</Text>
                 <Text style={styles.macroItem}>C: {Math.round(dayMacros.carbs)}g</Text>
@@ -177,10 +182,10 @@ export function DayCard({ day, onEntryDeleted }: Props) {
           )}
           {day.entries.length > 0 ? (
             day.entries.map((e) => (
-              <EntryRow key={e.id} entry={e} onDelete={onEntryDeleted} onEdit={setEditEntry} />
+              <EntryRow key={e.id} entry={e} onDelete={onEntryDeleted} onEdit={setEditEntry} t={t} />
             ))
           ) : (
-            <Text style={styles.emptyText}>Sin registros</Text>
+            <Text style={styles.emptyText}>{t('history.noEntries')}</Text>
           )}
         </View>
       )}

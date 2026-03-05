@@ -129,13 +129,16 @@ export class OrchestratorService {
         try {
           const visionResult = await this.claudeClient.analyzeImageFood(
             request.imageUrl!,
-            request.content !== '[Foto de comida]' ? request.content : undefined,
+            (request.content !== '[Foto de comida]' && request.content !== '[Food photo]') ? request.content : undefined,
           );
           if (visionResult.items.length === 0) {
+            const isSpanish = !request.language || request.language === 'es';
             return {
               success: true,
               response: {
-                message: 'No pude identificar comida en la foto. Intenta con otra imagen o describe lo que comiste.',
+                message: isSpanish
+                  ? 'No pude identificar comida en la foto. Intenta con otra imagen o describe lo que comiste.'
+                  : "I couldn't identify food in the photo. Try another image or describe what you ate.",
                 tone: 'calm',
               },
               intent: 'general',
@@ -149,10 +152,13 @@ export class OrchestratorService {
           };
         } catch (error) {
           this.logger.error(`Vision analysis failed: ${error}`);
+          const isSpanish = !request.language || request.language === 'es';
           return {
             success: true,
             response: {
-              message: 'No pude analizar la foto. Intenta de nuevo o escribe lo que comiste.',
+              message: isSpanish
+                ? 'No pude analizar la foto. Intenta de nuevo o escribe lo que comiste.'
+                : "I couldn't analyze the photo. Try again or describe what you ate.",
               tone: 'calm',
             },
             intent: 'general',
@@ -438,6 +444,7 @@ export class OrchestratorService {
         isProfileIncomplete,
         isNewUser,
         hasDefaultProfileData,
+        language: request.language,
       };
 
       const response = await this.integratorAgent.integrate(integratorInput);
@@ -454,10 +461,13 @@ export class OrchestratorService {
     } catch (error) {
       this.logger.error(`Error processing message: ${error}`);
 
+      const isSpanish = !request.language || request.language === 'es';
       return {
         success: false,
         response: {
-          message: 'Tuve un problema procesando tu mensaje. ¿Puedes intentar de nuevo?',
+          message: isSpanish
+            ? 'Tuve un problema procesando tu mensaje. ¿Puedes intentar de nuevo?'
+            : 'I had a problem processing your message. Can you try again?',
           tone: 'calm',
         },
         intent: 'general',

@@ -1,6 +1,7 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { View, Text, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import type { MainTabsParamList } from './types';
 import { colors } from '@/theme';
 import ChatScreen from '@/screens/chat/ChatScreen';
@@ -34,6 +35,8 @@ function HistoryIcon({ color, size }: { color: string; size: number }) {
 }
 
 export default function MainTabs() {
+  const { t } = useTranslation();
+
   return (
     <Tab.Navigator
       screenOptions={{
@@ -52,7 +55,7 @@ export default function MainTabs() {
         name="Chat"
         component={ChatScreen}
         options={{
-          tabBarLabel: 'NOVA',
+          tabBarLabel: t('tabs.nova'),
           tabBarIcon: ChatIcon,
         }}
       />
@@ -60,7 +63,7 @@ export default function MainTabs() {
         name="Panel"
         component={PanelScreen}
         options={{
-          tabBarLabel: 'Panel',
+          tabBarLabel: t('tabs.panel'),
           tabBarIcon: PanelIcon,
         }}
       />
@@ -68,7 +71,7 @@ export default function MainTabs() {
         name="History"
         component={HistoryScreen}
         options={{
-          tabBarLabel: 'Historial',
+          tabBarLabel: t('tabs.history'),
           tabBarIcon: HistoryIcon,
         }}
       />

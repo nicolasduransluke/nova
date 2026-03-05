@@ -310,6 +310,26 @@ export class AuthService {
     return { message: 'AI consent accepted' };
   }
 
+  async setPreferredLanguage(userId: string, language: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const existingMetadata = (user.metadata ?? {}) as Record<string, unknown>;
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        metadata: { ...existingMetadata, preferredLanguage: language } as any,
+      },
+    });
+
+    return { message: 'Language preference updated' };
+  }
+
   async getMe(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },

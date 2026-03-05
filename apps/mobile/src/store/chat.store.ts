@@ -5,6 +5,8 @@ import { generateId } from '@nova/utils';
 import { useAuthStore } from './auth.store';
 import { asyncStorage } from '@/lib/storage';
 import { API_URL } from '@/config/env';
+import i18n from '@/i18n';
+import { capture } from '@/lib/analytics';
 
 export interface ChatState {
   messages: Message[];
@@ -120,7 +122,7 @@ export const useChatStore = create<ChatStore>()(
         } catch (error) {
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : 'Failed to load history',
+            error: error instanceof Error ? error.message : i18n.t('chat.loadHistoryError'),
           });
         }
       },
@@ -172,7 +174,7 @@ export const useChatStore = create<ChatStore>()(
         if (!isGuest && !userId) {
           addMessage({
             type: 'text',
-            content: 'Error: No hay sesión activa. Por favor inicia sesión.',
+            content: i18n.t('chat.noSessionError'),
             sender: 'agent',
           });
           return;
@@ -190,11 +192,11 @@ export const useChatStore = create<ChatStore>()(
         setAgentTyping(true);
 
         try {
-          const effectiveContent = content || (imageUrl ? '[Foto de comida]' : '');
+          const effectiveContent = content || (imageUrl ? i18n.t('chat.foodPhoto') : '');
 
           // Guest mode: use the public guest endpoint
           if (isGuest) {
-            const guestBody: Record<string, unknown> = { content: effectiveContent };
+            const guestBody: Record<string, unknown> = { content: effectiveContent, language: i18n.language };
             if (imageUrl) guestBody.imageUrl = imageUrl;
 
             const response = await fetch(`${API_URL}/api/messages/guest`, {
@@ -221,7 +223,7 @@ export const useChatStore = create<ChatStore>()(
             } else {
               addMessage({
                 type: 'text',
-                content: 'No pude procesar tu mensaje. Intenta de nuevo.',
+                content: i18n.t('chat.processingError'),
                 sender: 'agent',
               });
             }
@@ -233,6 +235,7 @@ export const useChatStore = create<ChatStore>()(
             userId,
             content: effectiveContent,
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            language: i18n.language,
           };
           if (imageUrl) {
             body.imageUrl = imageUrl;
@@ -290,6 +293,8 @@ export const useChatStore = create<ChatStore>()(
           setAgentTyping(false);
 
           if (data.success && data.data?.response?.message) {
+            capture('message_sent', { type, has_image: !!imageUrl });
+
             const responseData = data.data.response;
             const intent = data.data.intent;
             addMessage({
@@ -317,7 +322,7 @@ export const useChatStore = create<ChatStore>()(
           setAgentTyping(false);
           addMessage({
             type: 'text',
-            content: 'Error de conexión. Verifica tu conexión a internet.',
+            content: i18n.t('chat.connectionError'),
             sender: 'agent',
           });
         }

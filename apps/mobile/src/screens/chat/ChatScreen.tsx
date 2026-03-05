@@ -16,9 +16,11 @@ import { useChatStore } from '@/store/chat.store';
 import { useAuthStore } from '@/store/auth.store';
 import { MessageList } from '@/components/chat/MessageList';
 import { MessageInput } from '@/components/chat/MessageInput';
+import { useTranslation } from 'react-i18next';
 import { colors } from '@/theme';
 
 export default function ChatScreen() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { isGuest, logout } = useAuthStore();
@@ -85,7 +87,7 @@ export default function ChatScreen() {
       {isGuest && (
         <Pressable onPress={logout} style={styles.guestBanner}>
           <Text style={styles.guestBannerText}>
-            Modo invitado — Crea una cuenta para guardar tu progreso
+            {t('chat.guestBanner')}
           </Text>
         </Pressable>
       )}

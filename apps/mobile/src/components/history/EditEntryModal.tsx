@@ -10,6 +10,7 @@ import {
   ScrollView,
 } from 'react-native';
 import type { HistoryDayEntry, CalorieEntryItem } from '@nova/types';
+import { useTranslation } from 'react-i18next';
 import { api } from '@/lib/api';
 import { colors } from '@/theme';
 
@@ -36,6 +37,7 @@ interface OriginalSnapshot {
 }
 
 export function EditEntryModal({ entry, visible, onClose, onSaved }: Props) {
+  const { t } = useTranslation();
   const [items, setItems] = useState<EditableItem[]>([]);
   const [saving, setSaving] = useState(false);
   const originals = useRef<OriginalSnapshot[]>([]);
@@ -132,7 +134,7 @@ export function EditEntryModal({ entry, visible, onClose, onSaved }: Props) {
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
           <View style={styles.handle} />
-          <Text style={styles.title}>Editar porciones</Text>
+          <Text style={styles.title}>{t('history.editPortions')}</Text>
           <Text style={styles.subtitle}>{entry.description}</Text>
 
           <ScrollView style={styles.itemList}>
@@ -186,16 +188,16 @@ export function EditEntryModal({ entry, visible, onClose, onSaved }: Props) {
           </ScrollView>
 
           <View style={styles.footer}>
-            <Text style={styles.totalText}>Total: {totalCalories} kcal</Text>
+            <Text style={styles.totalText}>{t('history.total', { calories: totalCalories })}</Text>
             <View style={styles.footerButtons}>
               <Pressable onPress={onClose} style={styles.cancelBtn}>
-                <Text style={styles.cancelText}>Cancelar</Text>
+                <Text style={styles.cancelText}>{t('common.cancel')}</Text>
               </Pressable>
               <Pressable onPress={handleSave} style={styles.saveBtn} disabled={saving}>
                 {saving ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
-                  <Text style={styles.saveText}>Guardar</Text>
+                  <Text style={styles.saveText}>{t('common.save')}</Text>
                 )}
               </Pressable>
             </View>

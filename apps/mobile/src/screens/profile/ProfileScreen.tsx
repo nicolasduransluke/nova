@@ -16,16 +16,10 @@ import { StatCard } from '@/components/profile/StatCard';
 import { EditProfileForm } from '@/components/profile/EditProfileForm';
 import { GlassCard } from '@/components/common/GlassCard';
 import { AccountHeader } from '@/components/profile/AccountHeader';
+import { useTranslation } from 'react-i18next';
 import { colors } from '@/theme';
 import { connectWhoop, getWhoopStatus, disconnectWhoop } from '@/lib/whoop';
-
-const activityLevelLabels: Record<ActivityLevel, string> = {
-  sedentary: 'Sedentario',
-  light: 'Ligero',
-  moderate: 'Moderado',
-  active: 'Activo',
-  very_active: 'Muy activo',
-};
+import { useLanguageStore, type LanguageCode } from '@/store/language.store';
 
 function calculateTDEE(profile: Profile): number {
   let bmr: number;
@@ -47,8 +41,18 @@ function calculateTDEE(profile: Profile): number {
 }
 
 export default function ProfileScreen() {
+  const { t } = useTranslation();
   const { user, logout, deleteAccount } = useAuthStore();
   const { profile, isLoading, loadProfile, updateProfile } = useProfileStore();
+  const { language, setLanguage } = useLanguageStore();
+
+  const activityLevelLabels: Record<ActivityLevel, string> = {
+    sedentary: t('profile.sedentary'),
+    light: t('profile.light'),
+    moderate: t('profile.moderate'),
+    active: t('profile.active'),
+    very_active: t('profile.veryActive'),
+  };
 
   const [editing, setEditing] = useState(false);
   const [whoopConnected, setWhoopConnected] = useState(false);
@@ -84,15 +88,15 @@ export default function ProfileScreen() {
     if (result.success) {
       await checkWhoopStatus();
     } else {
-      Alert.alert('Error', result.error || 'No se pudo conectar con Whoop');
+      Alert.alert(t('common.error'), result.error || t('profile.whoopConnectError'));
     }
   };
 
   const handleDisconnectWhoop = () => {
-    Alert.alert('Desconectar Whoop', '¿Estás seguro?', [
-      { text: 'Cancelar', style: 'cancel' },
+    Alert.alert(t('profile.whoopDisconnectTitle'), t('profile.whoopDisconnectConfirm'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Desconectar',
+        text: t('profile.whoopDisconnect'),
         style: 'destructive',
         onPress: async () => {
           const token = useAuthStore.getState().accessToken;
@@ -110,10 +114,10 @@ export default function ProfileScreen() {
   };
 
   const handleLogout = () => {
-    Alert.alert('Cerrar sesión', '¿Estás seguro?', [
-      { text: 'Cancelar', style: 'cancel' },
+    Alert.alert(t('profile.logoutTitle'), t('profile.logoutConfirm'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Cerrar sesión',
+        text: t('profile.logout'),
         style: 'destructive',
         onPress: () => {
           logout();
@@ -124,27 +128,27 @@ export default function ProfileScreen() {
 
   const handleDeleteAccount = () => {
     Alert.alert(
-      'Eliminar cuenta',
-      'Esta acción es permanente. Se eliminarán todos tus datos, incluyendo tu perfil, registros de comidas, historial de peso y mensajes. ¿Estás seguro?',
+      t('profile.deleteAccountTitle'),
+      t('profile.deleteAccountMessage'),
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Eliminar cuenta',
+          text: t('profile.deleteAccount'),
           style: 'destructive',
           onPress: () => {
             Alert.alert(
-              'Confirmar eliminación',
-              '¿Realmente deseas eliminar tu cuenta? No podrás recuperar tus datos.',
+              t('profile.deleteAccountConfirmTitle'),
+              t('profile.deleteAccountConfirmMessage'),
               [
-                { text: 'Cancelar', style: 'cancel' },
+                { text: t('common.cancel'), style: 'cancel' },
                 {
-                  text: 'Sí, eliminar',
+                  text: t('profile.deleteAccountConfirmButton'),
                   style: 'destructive',
                   onPress: async () => {
                     try {
                       await deleteAccount();
                     } catch {
-                      Alert.alert('Error', 'No se pudo eliminar la cuenta. Inténtalo de nuevo.');
+                      Alert.alert(t('common.error'), t('profile.deleteAccountFailure'));
                     }
                   },
                 },
@@ -184,35 +188,35 @@ export default function ProfileScreen() {
 
             {/* Stats */}
             <View style={styles.statsRow}>
-              <StatCard label="Peso actual" value={profile.weight} unit="kg" />
-              <StatCard label="TDEE" value={tdee ?? '—'} unit="kcal" />
+              <StatCard label={t('profile.currentWeight')} value={profile.weight} unit={t('common.kg')} />
+              <StatCard label={t('profile.tdee')} value={tdee ?? '—'} unit={t('common.kcal')} />
             </View>
             <Text
               style={styles.citationText}
               onPress={() => Linking.openURL('https://pubmed.ncbi.nlm.nih.gov/15883556/')}
             >
-              TDEE calculado con la ecuación Mifflin-St Jeor (Mifflin et al., 1990). Toca para ver fuente.
+              {t('profile.tdeeCitation')}
             </Text>
 
             {/* Goal progress */}
             {profile.goalWeight && (
               <GlassCard>
-                <Text style={styles.sectionTitle}>Meta de peso</Text>
+                <Text style={styles.sectionTitle}>{t('profile.weightGoal')}</Text>
                 <View style={styles.goalRow}>
                   <View style={styles.goalItem}>
                     <Text style={styles.goalValue}>{profile.goalWeight} kg</Text>
-                    <Text style={styles.goalLabel}>Meta</Text>
+                    <Text style={styles.goalLabel}>{t('profile.goal')}</Text>
                   </View>
                   {remaining && (
                     <View style={styles.goalItem}>
                       <Text style={styles.goalValue}>{remaining} kg</Text>
-                      <Text style={styles.goalLabel}>Restante</Text>
+                      <Text style={styles.goalLabel}>{t('profile.remaining')}</Text>
                     </View>
                   )}
                   {estimatedWeeks != null && estimatedWeeks > 0 && (
                     <View style={styles.goalItem}>
                       <Text style={styles.goalValue}>~{estimatedWeeks}</Text>
-                      <Text style={styles.goalLabel}>Semanas</Text>
+                      <Text style={styles.goalLabel}>{t('profile.weeks')}</Text>
                     </View>
                   )}
                 </View>
@@ -231,36 +235,36 @@ export default function ProfileScreen() {
               ) : (
                 <>
                   <View style={styles.editHeader}>
-                    <Text style={styles.sectionTitle}>Configuración</Text>
+                    <Text style={styles.sectionTitle}>{t('profile.settings')}</Text>
                     <Pressable onPress={() => setEditing(true)} style={styles.editButton}>
-                      <Text style={styles.editText}>Editar</Text>
+                      <Text style={styles.editText}>{t('common.edit')}</Text>
                     </Pressable>
                   </View>
 
                   <View style={styles.infoGrid}>
                     <View style={styles.infoItem}>
-                      <Text style={styles.infoLabel}>Altura</Text>
-                      <Text style={styles.infoValue}>{profile.height} cm</Text>
+                      <Text style={styles.infoLabel}>{t('profile.height')}</Text>
+                      <Text style={styles.infoValue}>{profile.height} {t('common.cm')}</Text>
                     </View>
                     <View style={styles.infoItem}>
-                      <Text style={styles.infoLabel}>Edad</Text>
+                      <Text style={styles.infoLabel}>{t('profile.age')}</Text>
                       <Text style={styles.infoValue}>{profile.age}</Text>
                     </View>
                     <View style={styles.infoItem}>
-                      <Text style={styles.infoLabel}>Sexo</Text>
+                      <Text style={styles.infoLabel}>{t('profile.sex')}</Text>
                       <Text style={styles.infoValue}>
-                        {profile.sex === 'male' ? 'Masculino' : 'Femenino'}
+                        {profile.sex === 'male' ? t('profile.male') : t('profile.female')}
                       </Text>
                     </View>
                     <View style={styles.infoItem}>
-                      <Text style={styles.infoLabel}>Actividad</Text>
+                      <Text style={styles.infoLabel}>{t('profile.activity')}</Text>
                       <Text style={styles.infoValue}>
-                        {activityLevelLabels[profile.activityLevel] || 'Moderado'}
+                        {activityLevelLabels[profile.activityLevel] || t('profile.moderate')}
                       </Text>
                     </View>
                     <View style={styles.infoItem}>
-                      <Text style={styles.infoLabel}>Meta semanal</Text>
-                      <Text style={styles.infoValue}>{profile.weeklyGoal ?? 0.5} kg/sem</Text>
+                      <Text style={styles.infoLabel}>{t('profile.weeklyGoal')}</Text>
+                      <Text style={styles.infoValue}>{profile.weeklyGoal ?? 0.5} {t('common.kgPerWeek')}</Text>
                     </View>
                   </View>
                 </>
@@ -269,38 +273,66 @@ export default function ProfileScreen() {
 
             {/* Whoop */}
             <GlassCard style={{ marginTop: 16 }}>
-              <Text style={styles.sectionTitle}>Whoop</Text>
+              <Text style={styles.sectionTitle}>{t('profile.whoop')}</Text>
               {whoopLoading ? (
                 <ActivityIndicator color={colors.primaryLight} />
               ) : whoopConnected ? (
                 <>
                   <Text style={styles.whoopStatus}>
-                    Conectado{whoopConnectedAt ? ` desde ${new Date(whoopConnectedAt).toLocaleDateString()}` : ''}
+                    {whoopConnectedAt
+                      ? t('profile.whoopConnectedSince', { date: new Date(whoopConnectedAt).toLocaleDateString() })
+                      : t('profile.whoopConnected')}
                   </Text>
                   <Pressable onPress={handleDisconnectWhoop} style={styles.whoopDisconnect}>
-                    <Text style={styles.whoopDisconnectText}>Desconectar</Text>
+                    <Text style={styles.whoopDisconnectText}>{t('profile.whoopDisconnect')}</Text>
                   </Pressable>
                 </>
               ) : (
                 <Pressable onPress={handleConnectWhoop} style={styles.whoopConnect}>
-                  <Text style={styles.whoopConnectText}>Conectar Whoop</Text>
+                  <Text style={styles.whoopConnectText}>{t('profile.whoopConnect')}</Text>
                 </Pressable>
               )}
             </GlassCard>
 
+            {/* Language */}
+            <GlassCard style={{ marginTop: 16 }}>
+              <Text style={styles.sectionTitle}>{t('profile.language')}</Text>
+              <View style={styles.languageRow}>
+                {(['es', 'en'] as LanguageCode[]).map((lang) => (
+                  <Pressable
+                    key={lang}
+                    onPress={() => setLanguage(lang)}
+                    style={[
+                      styles.languageChip,
+                      language === lang && styles.languageChipActive,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.languageChipText,
+                        language === lang && styles.languageChipTextActive,
+                      ]}
+                    >
+                      {lang === 'es' ? 'Español' : 'English'}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </GlassCard>
+
             {/* Logout */}
             <Pressable onPress={handleLogout} style={styles.logoutButton}>
-              <Text style={styles.logoutText}>Cerrar sesión</Text>
+              <Text style={styles.logoutText}>{t('profile.logout')}</Text>
             </Pressable>
 
             {/* Delete account */}
             <Pressable onPress={handleDeleteAccount} style={styles.deleteButton}>
-              <Text style={styles.deleteText}>Eliminar cuenta</Text>
+              <Text style={styles.deleteText}>{t('profile.deleteAccount')}</Text>
             </Pressable>
           </>
         ) : (
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>Cargando perfil...</Text>
+            <Text style={styles.emptyText}>{t('profile.loadingProfile')}</Text>
           </View>
         )}
       </ScrollView>
@@ -409,6 +441,31 @@ const styles = StyleSheet.create({
     color: '#fca5a5',
     fontSize: 14,
     fontWeight: '500',
+  },
+  languageRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  languageChip: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.glass.border,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    alignItems: 'center',
+  },
+  languageChipActive: {
+    backgroundColor: 'rgba(147,51,234,0.2)',
+    borderColor: colors.primary,
+  },
+  languageChipText: {
+    fontSize: 14,
+    color: colors.text.secondary,
+  },
+  languageChipTextActive: {
+    color: colors.text.primary,
+    fontWeight: '600',
   },
   citationText: {
     fontSize: 11,

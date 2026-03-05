@@ -4,6 +4,7 @@ import type { Message } from '@nova/types';
 import { MessageBubble } from './MessageBubble';
 import { DateSeparator } from './DateSeparator';
 import { TypingIndicator } from './TypingIndicator';
+import { useTranslation } from 'react-i18next';
 import { colors } from '@/theme';
 
 function isSameDay(date1: Date, date2: Date): boolean {
@@ -48,6 +49,7 @@ interface Props {
 }
 
 export function MessageList({ messages, isAgentTyping }: Props) {
+  const { t } = useTranslation();
   const listRef = useRef<FlatList>(null);
   const isNearBottom = useRef(true);
 
@@ -87,9 +89,9 @@ export function MessageList({ messages, isAgentTyping }: Props) {
         <View style={styles.logoCircle}>
           <Text style={styles.logoText}>N</Text>
         </View>
-        <Text style={styles.welcomeTitle}>Bienvenido a NOVA</Text>
+        <Text style={styles.welcomeTitle}>{t('chat.welcomeTitle')}</Text>
         <Text style={styles.welcomeSubtitle}>
-          Tu coach personal de salud. Comparte tus comidas, ejercicios, sueño o cómo te sientes.
+          {t('chat.welcomeSubtitle')}
         </Text>
       </View>
     );

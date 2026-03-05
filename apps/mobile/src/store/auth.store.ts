@@ -9,6 +9,8 @@ import { useProfileStore } from '@/store/profile.store';
 import { useChatStore } from '@/store/chat.store';
 import * as WebBrowser from 'expo-web-browser';
 import * as AppleAuthentication from 'expo-apple-authentication';
+import i18n from '@/i18n';
+import { identify, reset, capture } from '@/lib/analytics';
 
 export interface AuthState {
   user: User | null;
@@ -81,11 +83,14 @@ export const useAuthStore = create<AuthStore>()(
           const data = await response.json();
 
           if (!response.ok) {
-            throw new Error(data.message || 'Login failed');
+            throw new Error(data.message || i18n.t('auth.loginFailed'));
           }
 
           const { user, tokens } = data.data as LoginResponse;
           const metadata = (user as any).metadata as Record<string, unknown> | undefined;
+
+          identify(user.id, { email: user.email, name: user.name });
+          capture('login', { method: 'email' });
 
           set({
             user,
@@ -100,7 +105,7 @@ export const useAuthStore = create<AuthStore>()(
         } catch (error) {
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : 'Login failed',
+            error: error instanceof Error ? error.message : i18n.t('auth.loginFailed'),
           });
           throw error;
         }
@@ -120,10 +125,13 @@ export const useAuthStore = create<AuthStore>()(
           const data = await response.json();
 
           if (!response.ok) {
-            throw new Error(data.message || 'Registration failed');
+            throw new Error(data.message || i18n.t('auth.registrationFailed'));
           }
 
           const { user, tokens } = data.data as LoginResponse;
+
+          identify(user.id, { email: user.email, name: user.name });
+          capture('register', { method: 'email' });
 
           set({
             user,
@@ -138,7 +146,7 @@ export const useAuthStore = create<AuthStore>()(
         } catch (error) {
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : 'Registration failed',
+            error: error instanceof Error ? error.message : i18n.t('auth.registrationFailed'),
           });
           throw error;
         }
@@ -156,6 +164,9 @@ export const useAuthStore = create<AuthStore>()(
             },
           }).catch(() => {});
         }
+
+        capture('logout');
+        reset();
 
         await clearAllUserData();
         set({
@@ -184,7 +195,7 @@ export const useAuthStore = create<AuthStore>()(
 
         if (!response.ok) {
           const data = await response.json();
-          throw new Error(data.message || 'Error al eliminar la cuenta');
+          throw new Error(data.message || i18n.t('auth.deleteAccountError'));
         }
 
         await clearAllUserData();
@@ -246,7 +257,7 @@ export const useAuthStore = create<AuthStore>()(
           const data = await response.json();
 
           if (!response.ok) {
-            throw new Error(data.message || 'Failed to send reset email');
+            throw new Error(data.message || i18n.t('auth.resetEmailFailed'));
           }
 
           set({ isLoading: false });
@@ -254,7 +265,7 @@ export const useAuthStore = create<AuthStore>()(
         } catch (error) {
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : 'Failed to send reset email',
+            error: error instanceof Error ? error.message : i18n.t('auth.resetEmailFailed'),
           });
           throw error;
         }
@@ -273,14 +284,14 @@ export const useAuthStore = create<AuthStore>()(
           const data = await response.json();
 
           if (!response.ok) {
-            throw new Error(data.message || 'Failed to reset password');
+            throw new Error(data.message || i18n.t('auth.resetPasswordFailed'));
           }
 
           set({ isLoading: false });
         } catch (error) {
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : 'Failed to reset password',
+            error: error instanceof Error ? error.message : i18n.t('auth.resetPasswordFailed'),
           });
           throw error;
         }
@@ -329,6 +340,8 @@ export const useAuthStore = create<AuthStore>()(
             const data = await response.json();
             const userData = data.data;
             const metadata = (userData as any).metadata as Record<string, unknown> | undefined;
+            identify(userData.id, { email: userData.email, name: userData.name });
+            capture('login', { method: 'google' });
             set({
               user: userData,
               isLoading: false,
@@ -363,7 +376,7 @@ export const useAuthStore = create<AuthStore>()(
           const refreshToken = url.searchParams.get('refreshToken');
 
           if (!accessToken || !refreshToken) {
-            set({ isLoading: false, error: 'No se recibieron tokens de autenticación' });
+            set({ isLoading: false, error: i18n.t('auth.noTokensReceived') });
             return;
           }
 
@@ -371,7 +384,7 @@ export const useAuthStore = create<AuthStore>()(
         } catch (error) {
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : 'Error al iniciar sesión con Google',
+            error: error instanceof Error ? error.message : i18n.t('auth.googleLoginError'),
           });
         }
       },
@@ -391,7 +404,7 @@ export const useAuthStore = create<AuthStore>()(
           });
 
           if (!credential.identityToken) {
-            set({ isLoading: false, error: 'No se recibió token de Apple' });
+            set({ isLoading: false, error: i18n.t('auth.appleTokenError') });
             return;
           }
 
@@ -411,11 +424,14 @@ export const useAuthStore = create<AuthStore>()(
           const data = await response.json();
 
           if (!response.ok) {
-            throw new Error(data.message || 'Error al iniciar sesión con Apple');
+            throw new Error(data.message || i18n.t('auth.appleLoginError'));
           }
 
           const { user, tokens } = data.data as LoginResponse;
           const metadata = (user as any).metadata as Record<string, unknown> | undefined;
+
+          identify(user.id, { email: user.email, name: user.name });
+          capture('login', { method: 'apple' });
 
           set({
             user,
@@ -434,12 +450,13 @@ export const useAuthStore = create<AuthStore>()(
           }
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : 'Error al iniciar sesión con Apple',
+            error: error instanceof Error ? error.message : i18n.t('auth.appleLoginError'),
           });
         }
       },
 
       enterGuestMode: () => {
+        capture('guest_mode_entered');
         clearUserData();
         set({
           user: null,
@@ -465,6 +482,7 @@ export const useAuthStore = create<AuthStore>()(
               Authorization: `Bearer ${accessToken}`,
             },
           });
+          capture('ai_consent_accepted');
           set({ hasAIConsent: true });
         } catch {
           // Silently fail — consent flag will be retried

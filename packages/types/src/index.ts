@@ -347,6 +347,7 @@ export interface ProcessMessageRequest {
   imageUrl?: string;
   messageType?: MessageType;
   timezone?: string;
+  language?: string;
 }
 
 export interface ProcessMessageResponse {

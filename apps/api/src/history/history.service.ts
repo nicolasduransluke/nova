@@ -181,10 +181,12 @@ export class HistoryService {
 
       // Add Whoop as an entry if it's the source
       if (whoopBurn) {
+        const userMeta = (user?.metadata ?? {}) as Record<string, unknown>;
+        const isEnglish = userMeta.preferredLanguage === 'en';
         mappedEntries.unshift({
           id: `whoop-${dateKey}`,
           type: 'burn',
-          description: 'Whoop - Gasto calórico total',
+          description: isEnglish ? 'Whoop - Total calorie burn' : 'Whoop - Gasto calórico total',
           calories: whoopBurn,
           items: [],
           createdAt: new Date(dateKey).toISOString(),

@@ -3,6 +3,8 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Profile, WeightLog } from '@nova/types';
 import { api } from '@/lib/api';
 import { asyncStorage } from '@/lib/storage';
+import i18n from '@/i18n';
+import { capture } from '@/lib/analytics';
 
 export interface ProfileState {
   profile: Profile | null;
@@ -39,13 +41,13 @@ export const useProfileStore = create<ProfileStore>()(
           if (response.success && response.data) {
             set({ profile: response.data, isLoading: false });
           } else {
-            set({ profile: null, isLoading: false, error: response.error || 'No se pudo cargar el perfil' });
+            set({ profile: null, isLoading: false, error: response.error || i18n.t('profile.profileLoadError') });
           }
         } catch (error) {
           set({
             profile: null,
             isLoading: false,
-            error: error instanceof Error ? error.message : 'Error de conexión',
+            error: error instanceof Error ? error.message : i18n.t('profile.connectionError'),
           });
         }
       },
@@ -69,14 +71,15 @@ export const useProfileStore = create<ProfileStore>()(
           const response = await api.patch<Profile>(`/api/profiles/${userId}`, updates);
 
           if (response.success && response.data) {
+            capture('profile_updated', { fields: Object.keys(updates) });
             set({ profile: response.data, isLoading: false });
           } else {
-            set({ isLoading: false, error: response.error || 'No se pudo actualizar el perfil' });
+            set({ isLoading: false, error: response.error || i18n.t('profile.profileUpdateError') });
           }
         } catch (error) {
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : 'Error de conexión',
+            error: error instanceof Error ? error.message : i18n.t('profile.connectionError'),
           });
         }
       },
@@ -86,15 +89,16 @@ export const useProfileStore = create<ProfileStore>()(
         try {
           const response = await api.post<Profile>('/api/profiles', data);
           if (response.success && response.data) {
+            capture('profile_created');
             set({ profile: response.data, isLoading: false });
             return true;
           }
-          set({ isLoading: false, error: response.error || 'No se pudo crear el perfil' });
+          set({ isLoading: false, error: response.error || i18n.t('profile.profileCreateError') });
           return false;
         } catch (error) {
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : 'Error de conexión',
+            error: error instanceof Error ? error.message : i18n.t('profile.connectionError'),
           });
           return false;
         }

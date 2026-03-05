@@ -28,4 +28,8 @@ export class ProcessMessageDto {
   @IsOptional()
   @IsString()
   timezone?: string;
+
+  @IsOptional()
+  @IsString()
+  language?: string;
 }

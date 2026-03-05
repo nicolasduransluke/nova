@@ -14,11 +14,13 @@ import { useAuthStore } from '@/store/auth.store';
 import { api } from '@/lib/api';
 import { WeightChart } from '@/components/history/WeightChart';
 import { DayCard } from '@/components/history/DayCard';
+import { useTranslation } from 'react-i18next';
 import { colors } from '@/theme';
 
 const RANGE_OPTIONS = [7, 14, 30] as const;
 
 export default function HistoryScreen() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { user, isGuest, logout } = useAuthStore();
   const userId = user?.id;
@@ -62,7 +64,7 @@ export default function HistoryScreen() {
             style={[styles.rangeButton, days === opt && styles.rangeActive]}
           >
             <Text style={[styles.rangeText, days === opt && styles.rangeTextActive]}>
-              {opt} días
+              {t('history.daysRange', { count: opt })}
             </Text>
           </Pressable>
         ))}
@@ -76,7 +78,7 @@ export default function HistoryScreen() {
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
       <Text style={styles.emptyText}>
-        No hay registros en los últimos {days} días
+        {t('history.noRecords', { days })}
       </Text>
     </View>
   );
@@ -84,14 +86,14 @@ export default function HistoryScreen() {
   if (isGuest) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
-        <Text style={styles.screenTitle}>Historial</Text>
+        <Text style={styles.screenTitle}>{t('history.title')}</Text>
         <View style={styles.guestContainer}>
-          <Text style={styles.guestTitle}>Modo Invitado</Text>
+          <Text style={styles.guestTitle}>{t('history.guestTitle')}</Text>
           <Text style={styles.guestMessage}>
-            Crea una cuenta para guardar tu historial de comidas y ver tu progreso.
+            {t('history.guestMessage')}
           </Text>
           <Pressable onPress={logout} style={styles.guestButton}>
-            <Text style={styles.guestButtonText}>Crear cuenta</Text>
+            <Text style={styles.guestButtonText}>{t('history.createAccount')}</Text>
           </Pressable>
         </View>
       </View>

@@ -8,6 +8,7 @@ import {
   Modal,
 } from 'react-native';
 import type { DailySummary } from '@nova/types';
+import { useTranslation } from 'react-i18next';
 import { colors } from '@/theme';
 
 interface Props {
@@ -17,6 +18,7 @@ interface Props {
 }
 
 export function DailySummarySheet({ summary, visible, onClose }: Props) {
+  const { t } = useTranslation();
   const consumed = summary.intake ?? 0;
   const burned = summary.burn ?? 0;
   const tdee = summary.tdee ?? 2000;
@@ -37,12 +39,12 @@ export function DailySummarySheet({ summary, visible, onClose }: Props) {
           <View style={styles.handle} />
 
           <ScrollView showsVerticalScrollIndicator={false}>
-            <Text style={styles.title}>Resumen del Día</Text>
+            <Text style={styles.title}>{t('summary.title')}</Text>
 
             {/* Progress bar */}
             <View style={styles.progressSection}>
               <View style={styles.progressLabels}>
-                <Text style={styles.progressLabel}>Consumidas</Text>
+                <Text style={styles.progressLabel}>{t('summary.consumed')}</Text>
                 <Text style={styles.progressValue}>{consumed} / {tdee} kcal</Text>
               </View>
               <View style={styles.progressTrack}>
@@ -61,38 +63,38 @@ export function DailySummarySheet({ summary, visible, onClose }: Props) {
               <View style={styles.statCard}>
                 <Text style={styles.statEmoji}>{'🍽️'}</Text>
                 <Text style={styles.statValue}>{consumed}</Text>
-                <Text style={styles.statLabel}>Consumidas</Text>
+                <Text style={styles.statLabel}>{t('summary.consumed')}</Text>
               </View>
               <View style={styles.statCard}>
                 <Text style={styles.statEmoji}>{'🔥'}</Text>
                 <Text style={styles.statValue}>{burned}</Text>
-                <Text style={styles.statLabel}>Quemadas</Text>
+                <Text style={styles.statLabel}>{t('summary.burned')}</Text>
               </View>
               <View style={styles.statCard}>
                 <Text style={styles.statEmoji}>{'📉'}</Text>
                 <Text style={[styles.statValue, deficit > 0 ? styles.positive : styles.negative]}>
                   {deficit > 0 ? '+' : ''}{deficit}
                 </Text>
-                <Text style={styles.statLabel}>Déficit</Text>
+                <Text style={styles.statLabel}>{t('summary.deficit')}</Text>
               </View>
               <View style={styles.statCard}>
                 <Text style={styles.statEmoji}>{'🎯'}</Text>
                 <Text style={styles.statValue}>{remaining}</Text>
-                <Text style={styles.statLabel}>Restantes</Text>
+                <Text style={styles.statLabel}>{t('summary.remaining')}</Text>
               </View>
             </View>
 
             {/* Weight */}
             {summary.currentWeight && (
               <View style={styles.weightSection}>
-                <Text style={styles.weightLabel}>Peso actual</Text>
+                <Text style={styles.weightLabel}>{t('summary.currentWeight')}</Text>
                 <Text style={styles.weightValue}>{summary.currentWeight} kg</Text>
               </View>
             )}
           </ScrollView>
 
           <Pressable onPress={onClose} style={styles.closeButton}>
-            <Text style={styles.closeText}>Cerrar</Text>
+            <Text style={styles.closeText}>{t('common.close')}</Text>
           </Pressable>
         </View>
       </View>

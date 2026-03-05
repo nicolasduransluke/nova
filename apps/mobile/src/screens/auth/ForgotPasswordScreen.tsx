@@ -16,11 +16,13 @@ import { GradientBackground } from '@/components/common/GradientBackground';
 import { GlassCard } from '@/components/common/GlassCard';
 import { TextInput } from '@/components/common/TextInput';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
+import { useTranslation } from 'react-i18next';
 import { colors } from '@/theme';
 
 type Nav = NativeStackNavigationProp<AuthStackParamList, 'ForgotPassword'>;
 
 export default function ForgotPasswordScreen() {
+  const { t } = useTranslation();
   const navigation = useNavigation<Nav>();
   const { forgotPassword, isLoading, error, setError } = useAuthStore();
 
@@ -29,7 +31,7 @@ export default function ForgotPasswordScreen() {
 
   const handleSend = async () => {
     if (!email.trim()) {
-      setError('Por favor ingresa tu email');
+      setError(t('auth.enterEmail'));
       return;
     }
 
@@ -52,25 +54,25 @@ export default function ForgotPasswordScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <GlassCard>
-            <Text style={styles.title}>Recuperar Contraseña</Text>
+            <Text style={styles.title}>{t('auth.forgotPasswordTitle')}</Text>
 
             {sent ? (
               <View style={styles.successContainer}>
                 <Text style={styles.successIcon}>{'✓'}</Text>
                 <Text style={styles.successText}>
-                  Si existe una cuenta con ese email, recibirás un enlace para restablecer tu contraseña.
+                  {t('auth.emailSent')}
                 </Text>
                 <Pressable
                   onPress={() => navigation.navigate('Login')}
                   style={styles.backButton}
                 >
-                  <Text style={styles.backText}>Volver al inicio de sesión</Text>
+                  <Text style={styles.backText}>{t('auth.backToLogin')}</Text>
                 </Pressable>
               </View>
             ) : (
               <>
                 <Text style={styles.description}>
-                  Ingresa tu email y te enviaremos un enlace para restablecer tu contraseña.
+                  {t('auth.forgotDescription')}
                 </Text>
 
                 {error && (
@@ -80,8 +82,8 @@ export default function ForgotPasswordScreen() {
                 )}
 
                 <TextInput
-                  label="Email"
-                  placeholder="tu@email.com"
+                  label={t('auth.email')}
+                  placeholder={t('auth.emailPlaceholder')}
                   value={email}
                   onChangeText={(text) => {
                     setEmail(text);
@@ -92,7 +94,7 @@ export default function ForgotPasswordScreen() {
                 />
 
                 <PrimaryButton
-                  title="Enviar Enlace"
+                  title={t('auth.sendLink')}
                   onPress={handleSend}
                   loading={isLoading}
                   disabled={!email.trim()}
@@ -102,7 +104,7 @@ export default function ForgotPasswordScreen() {
                   onPress={() => navigation.goBack()}
                   style={styles.backLink}
                 >
-                  <Text style={styles.linkText}>Volver</Text>
+                  <Text style={styles.linkText}>{t('common.back')}</Text>
                 </Pressable>
               </>
             )}

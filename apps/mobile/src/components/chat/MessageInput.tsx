@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
+import { useTranslation } from 'react-i18next';
 import { colors } from '@/theme';
 
 interface Props {
@@ -19,6 +20,7 @@ interface Props {
 }
 
 export function MessageInput({ onSend, disabled = false }: Props) {
+  const { t } = useTranslation();
   const [text, setText] = useState('');
   const [imagePreview, setImagePreview] = useState<string | null>(null);
 
@@ -44,13 +46,13 @@ export function MessageInput({ onSend, disabled = false }: Props) {
   };
 
   const handlePickImage = () => {
-    Alert.alert('Agregar foto', undefined, [
+    Alert.alert(t('chat.addPhoto'), undefined, [
       {
-        text: 'Tomar foto',
+        text: t('chat.takePhoto'),
         onPress: async () => {
           const { status } = await ImagePicker.requestCameraPermissionsAsync();
           if (status !== 'granted') {
-            Alert.alert('Permiso necesario', 'Se necesita acceso a la cámara para tomar fotos.');
+            Alert.alert(t('chat.cameraPermissionTitle'), t('chat.cameraPermissionMessage'));
             return;
           }
           const result = await ImagePicker.launchCameraAsync({
@@ -62,7 +64,7 @@ export function MessageInput({ onSend, disabled = false }: Props) {
         },
       },
       {
-        text: 'Elegir de galería',
+        text: t('chat.pickFromGallery'),
         onPress: async () => {
           const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ['images'],
@@ -72,7 +74,7 @@ export function MessageInput({ onSend, disabled = false }: Props) {
           processResult(result);
         },
       },
-      { text: 'Cancelar', style: 'cancel' },
+      { text: t('common.cancel'), style: 'cancel' },
     ]);
   };
 
@@ -103,7 +105,7 @@ export function MessageInput({ onSend, disabled = false }: Props) {
           style={styles.input}
           value={text}
           onChangeText={setText}
-          placeholder="Escribe un mensaje..."
+          placeholder={t('chat.inputPlaceholder')}
           placeholderTextColor={colors.text.placeholder}
           multiline
           maxLength={2000}

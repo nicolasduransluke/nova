@@ -9,9 +9,11 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
 import { useChatStore } from '@/store/chat.store';
+import { useTranslation } from 'react-i18next';
 import { colors } from '@/theme';
 
 export default function PanelScreen() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { dailySummary, refreshDailySummary } = useChatStore();
   const isFocused = useIsFocused();
@@ -28,7 +30,7 @@ export default function PanelScreen() {
   if (isLoading) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
-        <Text style={styles.headerTitle}>Panel</Text>
+        <Text style={styles.headerTitle}>{t('panel.title')}</Text>
         <View style={styles.emptyContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
@@ -39,11 +41,11 @@ export default function PanelScreen() {
   if (isEmpty) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
-        <Text style={styles.headerTitle}>Panel</Text>
+        <Text style={styles.headerTitle}>{t('panel.title')}</Text>
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyEmoji}>{'🍽️'}</Text>
-          <Text style={styles.emptyTitle}>Sin registros hoy</Text>
-          <Text style={styles.emptyText}>Registra tu primera comida o actividad en el chat para ver tu resumen del dia.</Text>
+          <Text style={styles.emptyTitle}>{t('panel.emptyTitle')}</Text>
+          <Text style={styles.emptyText}>{t('panel.emptyMessage')}</Text>
         </View>
       </View>
     );
@@ -86,7 +88,7 @@ export default function PanelScreen() {
         {/* Deficit progress bar */}
         <View style={styles.progressSection}>
           <View style={styles.progressLabels}>
-            <Text style={styles.progressLabel}>Meta de deficit</Text>
+            <Text style={styles.progressLabel}>{t('panel.deficitGoal')}</Text>
             <Text style={[styles.progressValue, hitTarget && styles.progressValueHit]}>
               {deficit} / {targetDeficit} kcal
             </Text>
@@ -101,11 +103,11 @@ export default function PanelScreen() {
             />
           </View>
           {hitTarget && (
-            <Text style={styles.progressHint}>Meta diaria cumplida!</Text>
+            <Text style={styles.progressHint}>{t('panel.goalMet')}</Text>
           )}
           {!hitTarget && deficitProgress > 0 && (
             <Text style={styles.progressHintNeutral}>
-              Te faltan {targetDeficit - deficit} kcal para llegar a tu meta diaria
+              {t('panel.deficitRemaining', { remaining: targetDeficit - deficit })}
             </Text>
           )}
         </View>
@@ -115,13 +117,13 @@ export default function PanelScreen() {
           <View style={styles.statCard}>
             <Text style={styles.statEmoji}>{'🍽️'}</Text>
             <Text style={styles.statValue}>{consumed}</Text>
-            <Text style={styles.statLabel}>Consumidas</Text>
+            <Text style={styles.statLabel}>{t('panel.consumed')}</Text>
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statEmoji}>{'🔥'}</Text>
             <Text style={styles.statValue}>{burned > 0 ? burned : tdee}</Text>
             <Text style={styles.statLabel}>
-              {dailySummary.burnSource === 'whoop' ? 'Quemadas' : 'TDEE est.'}
+              {dailySummary.burnSource === 'whoop' ? t('panel.burned') : t('panel.tdeeEstimated')}
             </Text>
           </View>
           <View style={styles.statCard}>
@@ -129,30 +131,30 @@ export default function PanelScreen() {
             <Text style={[styles.statValue, deficit > 0 ? styles.positive : styles.negative]}>
               {deficit > 0 ? '+' : ''}{deficit}
             </Text>
-            <Text style={styles.statLabel}>Deficit</Text>
+            <Text style={styles.statLabel}>{t('panel.deficit')}</Text>
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statEmoji}>{'🍴'}</Text>
             <Text style={[styles.statValue, disponible > 0 ? styles.disponible : styles.negative]}>
               {disponible}
             </Text>
-            <Text style={styles.statLabel}>Disponible</Text>
-            <Text style={styles.statHint}>para comer</Text>
+            <Text style={styles.statLabel}>{t('panel.available')}</Text>
+            <Text style={styles.statHint}>{t('panel.toEat')}</Text>
           </View>
         </View>
 
         {/* Weight projection */}
         {currentWeight && (
           <View style={styles.weightSection}>
-            <Text style={styles.weightSectionTitle}>Peso</Text>
+            <Text style={styles.weightSectionTitle}>{t('panel.weight')}</Text>
             <View style={styles.weightRow}>
               <View style={styles.weightItem}>
-                <Text style={styles.weightLabel}>Actual</Text>
+                <Text style={styles.weightLabel}>{t('panel.current')}</Text>
                 <Text style={styles.weightValue}>{currentWeight} kg</Text>
               </View>
               {projectedWeight && (
                 <View style={styles.weightItem}>
-                  <Text style={styles.weightLabel}>Mañana</Text>
+                  <Text style={styles.weightLabel}>{t('panel.tomorrow')}</Text>
                   <Text style={[styles.weightValue, styles.projectedWeight]}>
                     {projectedWeight.toFixed(2)} kg
                   </Text>
@@ -160,7 +162,7 @@ export default function PanelScreen() {
               )}
               {weeklyTarget && (
                 <View style={styles.weightItem}>
-                  <Text style={styles.weightLabel}>Meta semanal</Text>
+                  <Text style={styles.weightLabel}>{t('panel.weeklyTarget')}</Text>
                   <Text style={[styles.weightValue, styles.goalWeightText]}>{weeklyTarget} kg</Text>
                 </View>
               )}

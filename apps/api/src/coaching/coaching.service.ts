@@ -13,6 +13,7 @@ interface CoachingUser {
   name: string;
   pushToken: string;
   timezone: string;
+  language: string; // 'es' | 'en'
   profile: {
     weight: number;
     height: number;
@@ -24,11 +25,19 @@ interface CoachingUser {
   } | null;
 }
 
-const COACHING_TITLES: Record<string, string> = {
-  meal_reminder: 'NOVA - Recordatorio',
-  daily_summary: 'NOVA - Resumen del día',
-  streak: 'NOVA - Racha',
-  pattern_insight: 'NOVA - Insight semanal',
+const COACHING_TITLES: Record<string, Record<string, string>> = {
+  es: {
+    meal_reminder: 'NOVA - Recordatorio',
+    daily_summary: 'NOVA - Resumen del día',
+    streak: 'NOVA - Racha',
+    pattern_insight: 'NOVA - Insight semanal',
+  },
+  en: {
+    meal_reminder: 'NOVA - Reminder',
+    daily_summary: 'NOVA - Daily Summary',
+    streak: 'NOVA - Streak',
+    pattern_insight: 'NOVA - Weekly Insight',
+  },
 };
 
 @Injectable()
@@ -80,18 +89,26 @@ export class CoachingService {
         if (todayIntake >= threshold) continue;
 
         // Generate message
-        const prompt = `Generate a brief, friendly meal reminder in Spanish for ${user.name}.
-It's ${mealType === 'breakfast' ? 'late morning' : 'mid-afternoon'} and they've only logged ${todayIntake} kcal so far today.
-Remind them to log their ${mealType === 'breakfast' ? 'desayuno' : 'almuerzo'}.
+        const lang = user.language;
+        const isSpanish = lang !== 'en';
+        const mealLabel = isSpanish
+          ? (mealType === 'breakfast' ? 'desayuno' : 'almuerzo')
+          : (mealType === 'breakfast' ? 'breakfast' : 'lunch');
+        const timeLabel = isSpanish
+          ? (mealType === 'breakfast' ? 'media mañana' : 'media tarde')
+          : (mealType === 'breakfast' ? 'late morning' : 'mid-afternoon');
+        const prompt = `Generate a brief, friendly meal reminder in ${isSpanish ? 'Spanish' : 'English'} for ${user.name}.
+It's ${timeLabel} and they've only logged ${todayIntake} kcal so far today.
+Remind them to log their ${mealLabel}.
 Keep it under 2 sentences, warm and motivating. Don't use emojis.`;
 
         const message = await this.claudeClient.generateResponse(prompt, {
-          systemPrompt: 'You are NOVA, a calorie deficit coach. Generate brief coaching messages in Spanish.',
+          systemPrompt: `You are NOVA, a calorie deficit coach. Generate brief coaching messages in ${isSpanish ? 'Spanish' : 'English'}.`,
           maxTokens: 150,
           temperature: 0.8,
         });
 
-        await this.saveAndSend(user.id, user.pushToken, 'meal_reminder', mealType, today, message);
+        await this.saveAndSend(user.id, user.pushToken, 'meal_reminder', mealType, today, message, lang);
       } catch (error) {
         this.logger.error(`Meal reminder error for user ${user.id}: ${error}`);
       }
@@ -139,7 +156,9 @@ Keep it under 2 sentences, warm and motivating. Don't use emojis.`;
           todayBurn,
         );
 
-        const prompt = `Generate a brief daily summary in Spanish for ${user.name}. Here are today's numbers:
+        const lang = user.language;
+        const isSpanish = lang !== 'en';
+        const prompt = `Generate a brief daily summary in ${isSpanish ? 'Spanish' : 'English'} for ${user.name}. Here are today's numbers:
 - Consumed: ${todayIntake} kcal
 - Exercise burn: ${todayBurn} kcal
 - TDEE: ${summary.tdee} kcal
@@ -151,12 +170,12 @@ ${summary.deficit >= summary.targetDeficit ? 'They met their deficit goal today.
 Keep it under 3 sentences. Be encouraging and data-focused. Don't use emojis.`;
 
         const message = await this.claudeClient.generateResponse(prompt, {
-          systemPrompt: 'You are NOVA, a calorie deficit coach. Generate brief coaching messages in Spanish.',
+          systemPrompt: `You are NOVA, a calorie deficit coach. Generate brief coaching messages in ${isSpanish ? 'Spanish' : 'English'}.`,
           maxTokens: 200,
           temperature: 0.7,
         });
 
-        await this.saveAndSend(user.id, user.pushToken, 'daily_summary', '', today, message);
+        await this.saveAndSend(user.id, user.pushToken, 'daily_summary', '', today, message, lang);
       } catch (error) {
         this.logger.error(`Daily summary error for user ${user.id}: ${error}`);
       }
@@ -182,17 +201,19 @@ Keep it under 3 sentences. Be encouraging and data-focused. Don't use emojis.`;
         if (milestones.includes(streak)) {
           const alreadySent = await this.hasCoachingLog(user.id, 'streak', `day_${streak}`, today);
           if (!alreadySent) {
-            const prompt = `Generate a streak celebration message in Spanish for ${user.name}.
+            const lang = user.language;
+            const isSpanish = lang !== 'en';
+            const prompt = `Generate a streak celebration message in ${isSpanish ? 'Spanish' : 'English'} for ${user.name}.
 They have logged their meals for ${streak} consecutive days!
 Keep it under 2 sentences. Be enthusiastic but not over-the-top. Don't use emojis.`;
 
             const message = await this.claudeClient.generateResponse(prompt, {
-              systemPrompt: 'You are NOVA, a calorie deficit coach. Generate brief coaching messages in Spanish.',
+              systemPrompt: `You are NOVA, a calorie deficit coach. Generate brief coaching messages in ${isSpanish ? 'Spanish' : 'English'}.`,
               maxTokens: 150,
               temperature: 0.8,
             });
 
-            await this.saveAndSend(user.id, user.pushToken, 'streak', `day_${streak}`, today, message);
+            await this.saveAndSend(user.id, user.pushToken, 'streak', `day_${streak}`, today, message, lang);
           }
         }
 
@@ -246,6 +267,8 @@ Keep it under 2 sentences. Be enthusiastic but not over-the-top. Don't use emoji
           dailyMap[dateKey] = (dailyMap[dateKey] || 0) + entry.calories;
         }
 
+        const lang = user.language;
+        const isSpanish = lang !== 'en';
         const prompt = `Analyze this 2-week daily calorie intake data and find patterns.
 Data (date: calories): ${JSON.stringify(dailyMap)}
 
@@ -256,18 +279,18 @@ Look for:
 - Any notable pattern
 
 If there's NO interesting pattern, respond with exactly: NO_PATTERN
-Otherwise, generate a brief insight message in Spanish (2-3 sentences).
+Otherwise, generate a brief insight message in ${isSpanish ? 'Spanish' : 'English'} (2-3 sentences).
 Be specific with numbers. Don't use emojis.`;
 
         const message = await this.claudeClient.generateResponse(prompt, {
-          systemPrompt: 'You are NOVA, a calorie deficit coach. Analyze eating patterns and give brief insights in Spanish.',
+          systemPrompt: `You are NOVA, a calorie deficit coach. Analyze eating patterns and give brief insights in ${isSpanish ? 'Spanish' : 'English'}.`,
           maxTokens: 200,
           temperature: 0.7,
         });
 
         if (message.trim() === 'NO_PATTERN') continue;
 
-        await this.saveAndSend(user.id, user.pushToken, 'pattern_insight', '', today, message);
+        await this.saveAndSend(user.id, user.pushToken, 'pattern_insight', '', today, message, lang);
       } catch (error) {
         this.logger.error(`Pattern insight error for user ${user.id}: ${error}`);
       }
@@ -284,6 +307,7 @@ Be specific with numbers. Don't use emojis.`;
     subtype: string,
     date: Date,
     message: string,
+    language: string = 'es',
   ): Promise<void> {
     // 1. Create ChatMessage
     await this.prisma.chatMessage.create({
@@ -301,7 +325,8 @@ Be specific with numbers. Don't use emojis.`;
     });
 
     // 2. Send push notification
-    const title = COACHING_TITLES[type] || 'NOVA';
+    const titles = COACHING_TITLES[language] || COACHING_TITLES.es;
+    const title = titles[type] || 'NOVA';
     const pushSent = await this.pushNotification.sendPushNotification(
       pushToken,
       title,
@@ -340,6 +365,7 @@ Be specific with numbers. Don't use emojis.`;
         name: true,
         pushToken: true,
         timezone: true,
+        metadata: true,
         profile: {
           select: {
             weight: true,
@@ -354,9 +380,19 @@ Be specific with numbers. Don't use emojis.`;
       },
     });
 
-    return users.filter(
-      (u): u is CoachingUser => u.pushToken !== null && u.timezone !== null,
-    );
+    return users
+      .filter((u) => u.pushToken !== null && u.timezone !== null)
+      .map((u) => {
+        const meta = (u.metadata ?? {}) as Record<string, unknown>;
+        return {
+          id: u.id,
+          name: u.name,
+          pushToken: u.pushToken!,
+          timezone: u.timezone!,
+          language: (meta.preferredLanguage as string) || 'es',
+          profile: u.profile,
+        };
+      });
   }
 
   private getLocalHour(timezone: string): number {
@@ -483,18 +519,20 @@ Be specific with numbers. Don't use emojis.`;
       if (alreadySent) return;
 
       const remaining = (current - goal).toFixed(1);
-      const prompt = `Generate a weight milestone celebration in Spanish for ${user.name}.
+      const lang = user.language;
+      const isSpanish = lang !== 'en';
+      const prompt = `Generate a weight milestone celebration in ${isSpanish ? 'Spanish' : 'English'} for ${user.name}.
 They just crossed below ${previousFloor} kg and are now at ${current} kg.
 Their goal is ${goal} kg (${remaining} kg remaining).
 Keep it under 2 sentences. Don't use emojis.`;
 
       const message = await this.claudeClient.generateResponse(prompt, {
-        systemPrompt: 'You are NOVA, a calorie deficit coach. Generate brief coaching messages in Spanish.',
+        systemPrompt: `You are NOVA, a calorie deficit coach. Generate brief coaching messages in ${isSpanish ? 'Spanish' : 'English'}.`,
         maxTokens: 150,
         temperature: 0.8,
       });
 
-      await this.saveAndSend(user.id, user.pushToken, 'streak', `weight_${currentFloor}`, today, message);
+      await this.saveAndSend(user.id, user.pushToken, 'streak', `weight_${currentFloor}`, today, message, lang);
     }
   }
 
@@ -515,16 +553,18 @@ Keep it under 2 sentences. Don't use emojis.`;
 
     if (daysSinceLastLog < 7) return;
 
-    const prompt = `Generate a gentle weight logging reminder in Spanish for ${user.name}.
+    const lang = user.language;
+    const isSpanish = lang !== 'en';
+    const prompt = `Generate a gentle weight logging reminder in ${isSpanish ? 'Spanish' : 'English'} for ${user.name}.
 They haven't logged their weight in ${daysSinceLastLog} days.
 Keep it under 2 sentences. Be encouraging, not pushy. Don't use emojis.`;
 
     const message = await this.claudeClient.generateResponse(prompt, {
-      systemPrompt: 'You are NOVA, a calorie deficit coach. Generate brief coaching messages in Spanish.',
+      systemPrompt: `You are NOVA, a calorie deficit coach. Generate brief coaching messages in ${isSpanish ? 'Spanish' : 'English'}.`,
       maxTokens: 150,
       temperature: 0.8,
     });
 
-    await this.saveAndSend(user.id, user.pushToken, 'streak', 'weight_nudge', today, message);
+    await this.saveAndSend(user.id, user.pushToken, 'streak', 'weight_nudge', today, message, lang);
   }
 }

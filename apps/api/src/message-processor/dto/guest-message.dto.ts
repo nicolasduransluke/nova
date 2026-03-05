@@ -9,4 +9,8 @@ export class GuestMessageDto {
   @IsOptional()
   @IsString()
   imageUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  language?: string;
 }

@@ -28,6 +28,7 @@ export interface IntegratorInput extends AgentInput {
   isProfileIncomplete?: boolean;
   isNewUser?: boolean;
   hasDefaultProfileData?: boolean; // true if height=170, age=30 (default values)
+  language?: string; // explicit language from client ('es' | 'en')
 }
 
 @Injectable()
@@ -108,8 +109,13 @@ Be calm, data-driven, brief. No hype language.`;
     };
   }
 
+  private isSpanish(input: IntegratorInput): boolean {
+    if (input.language) return input.language === 'es';
+    return this.detectSpanishMessage(input.message, input.context);
+  }
+
   private buildDataResponse(input: IntegratorInput): string {
-    const isSpanish = this.detectSpanishMessage(input.message, input.context);
+    const isSpanish = this.isSpanish(input);
     const { intent, agentOutputs, dailySummary } = input;
 
     // Extract items from agent outputs or extracted data
@@ -266,7 +272,7 @@ ${intent}
       });
     }
 
-    const isSpanish = this.detectSpanishMessage(message, context);
+    const isSpanish = this.isSpanish(input);
 
     prompt += `
 ## Language Requirement

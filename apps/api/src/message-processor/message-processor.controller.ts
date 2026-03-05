@@ -45,6 +45,7 @@ export class MessageProcessorController {
         imageUrl: dto.imageUrl,
         messageType: dto.messageType,
         timezone: dto.timezone,
+        language: dto.language,
       });
 
       const processingTime = Date.now() - startTime;
@@ -108,6 +109,7 @@ export class MessageProcessorController {
         imageUrl: dto.imageUrl,
         messageType: dto.messageType,
         timezone: dto.timezone,
+        language: dto.language,
       });
 
       return {

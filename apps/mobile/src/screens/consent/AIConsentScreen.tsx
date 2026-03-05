@@ -12,11 +12,13 @@ import { useAuthStore } from '@/store/auth.store';
 import { GradientBackground } from '@/components/common/GradientBackground';
 import { GlassCard } from '@/components/common/GlassCard';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
+import { useTranslation } from 'react-i18next';
 import { colors } from '@/theme';
 
 const PRIVACY_URL = 'https://nova-ebon-seven.vercel.app/privacy';
 
 export default function AIConsentScreen() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { acceptAIConsent, logout } = useAuthStore();
 
@@ -33,57 +35,49 @@ export default function AIConsentScreen() {
       <ScrollView
         contentContainerStyle={[styles.container, { paddingTop: insets.top + 24 }]}
       >
-        <Text style={styles.title}>Uso de Inteligencia Artificial</Text>
+        <Text style={styles.title}>{t('consent.title')}</Text>
 
         <GlassCard>
-          <Text style={styles.heading}>NOVA utiliza IA para funcionar</Text>
+          <Text style={styles.heading}>{t('consent.heading')}</Text>
 
-          <Text style={styles.body}>
-            Para brindarte estimaciones de calorías y recomendaciones personalizadas,
-            NOVA envía cierta información a servicios de inteligencia artificial
-            (Google Gemini).
-          </Text>
+          <Text style={styles.body}>{t('consent.body')}</Text>
 
-          <Text style={styles.subheading}>Datos que se comparten:</Text>
+          <Text style={styles.subheading}>{t('consent.dataSharedTitle')}</Text>
 
           <View style={styles.bulletList}>
             <Text style={styles.bullet}>
-              {'\u2022'} Descripciones y fotos de tus comidas
+              {'\u2022'} {t('consent.dataSharedMeals')}
             </Text>
             <Text style={styles.bullet}>
-              {'\u2022'} Datos de tu perfil (peso, altura, edad, sexo, objetivo)
+              {'\u2022'} {t('consent.dataSharedProfile')}
             </Text>
             <Text style={styles.bullet}>
-              {'\u2022'} Historial de conversación reciente para contexto
+              {'\u2022'} {t('consent.dataSharedHistory')}
             </Text>
           </View>
 
-          <Text style={styles.subheading}>Con quién se comparte:</Text>
+          <Text style={styles.subheading}>{t('consent.sharedWithTitle')}</Text>
 
           <View style={styles.bulletList}>
             <Text style={styles.bullet}>
-              {'\u2022'} Google Gemini AI (para análisis nutricional y respuestas)
+              {'\u2022'} {t('consent.sharedWithGemini')}
             </Text>
           </View>
 
-          <Text style={styles.body}>
-            Estos datos se usan exclusivamente para proporcionarte el servicio
-            de coaching nutricional. No se almacenan de forma permanente por el
-            proveedor de IA.
-          </Text>
+          <Text style={styles.body}>{t('consent.disclaimer')}</Text>
 
           <Pressable onPress={() => Linking.openURL(PRIVACY_URL)}>
-            <Text style={styles.link}>Ver Política de Privacidad completa</Text>
+            <Text style={styles.link}>{t('consent.privacyLink')}</Text>
           </Pressable>
 
           <PrimaryButton
-            title="Acepto"
+            title={t('consent.accept')}
             onPress={handleAccept}
             style={styles.acceptButton}
           />
 
           <Pressable onPress={handleDecline} style={styles.declineButton}>
-            <Text style={styles.declineText}>No, gracias</Text>
+            <Text style={styles.declineText}>{t('consent.decline')}</Text>
           </Pressable>
         </GlassCard>
       </ScrollView>

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import { GradientBackground } from '@/components/common/GradientBackground';
 import { GlassCard } from '@/components/common/GlassCard';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
 import { ProgressDots } from '@/components/common/ProgressDots';
+import { useTranslation } from 'react-i18next';
 import { colors } from '@/theme';
 import { connectWhoop } from '@/lib/whoop';
 
@@ -31,15 +32,16 @@ interface OnboardingData {
   weeklyGoal: number;
 }
 
-const WEEKLY_OPTIONS = [
-  { value: 0.25, label: '0.25 kg/sem', desc: 'Conservador' },
-  { value: 0.5, label: '0.5 kg/sem', desc: 'Recomendado' },
-  { value: 0.75, label: '0.75 kg/sem', desc: 'Moderado' },
-  { value: 1.0, label: '1.0 kg/sem', desc: 'Agresivo' },
-];
-
 export default function OnboardingScreen() {
+  const { t } = useTranslation();
   const { createProfile, isLoading } = useProfileStore();
+
+  const WEEKLY_OPTIONS = useMemo(() => [
+    { value: 0.25, label: `0.25 ${t('common.kgPerWeek')}`, desc: t('onboarding.conservative') },
+    { value: 0.5, label: `0.5 ${t('common.kgPerWeek')}`, desc: t('onboarding.recommended') },
+    { value: 0.75, label: `0.75 ${t('common.kgPerWeek')}`, desc: t('onboarding.moderateGoal') },
+    { value: 1.0, label: `1.0 ${t('common.kgPerWeek')}`, desc: t('onboarding.aggressive') },
+  ], [t]);
 
   const [step, setStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -103,7 +105,7 @@ export default function OnboardingScreen() {
     });
 
     if (!success) {
-      setError('Error al crear el perfil. Intenta de nuevo.');
+      setError(t('onboarding.createProfileError'));
     }
   };
 
@@ -160,8 +162,8 @@ export default function OnboardingScreen() {
             <Animated.View style={{ opacity: fadeAnim }}>
               {step === 0 && (
                 <View style={styles.stepPanel}>
-                  <Text style={styles.stepTitle}>Bienvenido a NOVA</Text>
-                  <Text style={styles.stepSubtitle}>Vamos a personalizar tu experiencia</Text>
+                  <Text style={styles.stepTitle}>{t('onboarding.welcomeTitle')}</Text>
+                  <Text style={styles.stepSubtitle}>{t('onboarding.welcomeSubtitle')}</Text>
                   <View style={styles.sexRow}>
                     <Pressable
                       onPress={() => update({ sex: 'male' })}
@@ -171,7 +173,7 @@ export default function OnboardingScreen() {
                       ]}
                     >
                       <Text style={styles.sexIcon}>{'👨'}</Text>
-                      <Text style={styles.sexLabel}>Hombre</Text>
+                      <Text style={styles.sexLabel}>{t('onboarding.male')}</Text>
                     </Pressable>
                     <Pressable
                       onPress={() => update({ sex: 'female' })}
@@ -181,7 +183,7 @@ export default function OnboardingScreen() {
                       ]}
                     >
                       <Text style={styles.sexIcon}>{'👩'}</Text>
-                      <Text style={styles.sexLabel}>Mujer</Text>
+                      <Text style={styles.sexLabel}>{t('onboarding.female')}</Text>
                     </Pressable>
                   </View>
                 </View>
@@ -189,8 +191,8 @@ export default function OnboardingScreen() {
 
               {step === 1 && (
                 <View style={styles.stepPanel}>
-                  <Text style={styles.stepTitle}>Tu edad</Text>
-                  <Text style={styles.stepSubtitle}>Necesaria para calcular tu metabolismo</Text>
+                  <Text style={styles.stepTitle}>{t('onboarding.ageTitle')}</Text>
+                  <Text style={styles.stepSubtitle}>{t('onboarding.ageSubtitle')}</Text>
                   <View style={styles.ageRow}>
                     <Pressable
                       onPress={() => update({ age: Math.max(16, data.age - 1) })}
@@ -226,10 +228,10 @@ export default function OnboardingScreen() {
 
               {step === 2 && (
                 <View style={styles.stepPanel}>
-                  <Text style={styles.stepTitle}>Tus medidas</Text>
-                  <Text style={styles.stepSubtitle}>Para personalizar tus objetivos</Text>
+                  <Text style={styles.stepTitle}>{t('onboarding.measuresTitle')}</Text>
+                  <Text style={styles.stepSubtitle}>{t('onboarding.measuresSubtitle')}</Text>
 
-                  <Text style={styles.inputLabel}>Altura</Text>
+                  <Text style={styles.inputLabel}>{t('onboarding.heightLabel')}</Text>
                   <View style={styles.inputRow}>
                     <RNTextInput
                       style={styles.numericInput}
@@ -242,7 +244,7 @@ export default function OnboardingScreen() {
                     <Text style={styles.unitText}>cm</Text>
                   </View>
 
-                  <Text style={styles.inputLabel}>Peso actual</Text>
+                  <Text style={styles.inputLabel}>{t('onboarding.currentWeight')}</Text>
                   <View style={styles.inputRow}>
                     <RNTextInput
                       style={styles.numericInput}
@@ -259,10 +261,10 @@ export default function OnboardingScreen() {
 
               {step === 3 && (
                 <View style={styles.stepPanel}>
-                  <Text style={styles.stepTitle}>Tu objetivo</Text>
-                  <Text style={styles.stepSubtitle}>Define tu meta de peso</Text>
+                  <Text style={styles.stepTitle}>{t('onboarding.goalTitle')}</Text>
+                  <Text style={styles.stepSubtitle}>{t('onboarding.goalSubtitle')}</Text>
 
-                  <Text style={styles.inputLabel}>Peso meta</Text>
+                  <Text style={styles.inputLabel}>{t('onboarding.goalWeight')}</Text>
                   <View style={styles.inputRow}>
                     <RNTextInput
                       style={styles.numericInput}
@@ -275,7 +277,7 @@ export default function OnboardingScreen() {
                     <Text style={styles.unitText}>kg</Text>
                   </View>
 
-                  <Text style={styles.inputLabel}>Ritmo semanal</Text>
+                  <Text style={styles.inputLabel}>{t('onboarding.weeklyPace')}</Text>
                   <View style={styles.weeklyGrid}>
                     {WEEKLY_OPTIONS.map((opt) => (
                       <Pressable
@@ -294,8 +296,8 @@ export default function OnboardingScreen() {
 
                   {estimatedWeeks && (
                     <View style={styles.estimateBox}>
-                      <Text style={styles.estimateLabel}>Tiempo estimado</Text>
-                      <Text style={styles.estimateValue}>~{estimatedWeeks} semanas</Text>
+                      <Text style={styles.estimateLabel}>{t('onboarding.estimatedTime')}</Text>
+                      <Text style={styles.estimateValue}>{t('onboarding.estimatedWeeks', { weeks: estimatedWeeks })}</Text>
                     </View>
                   )}
                 </View>
@@ -303,19 +305,19 @@ export default function OnboardingScreen() {
 
               {step === 4 && (
                 <View style={styles.stepPanel}>
-                  <Text style={styles.stepTitle}>Whoop</Text>
+                  <Text style={styles.stepTitle}>{t('onboarding.whoopTitle')}</Text>
                   <Text style={styles.stepSubtitle}>
-                    Conecta tu Whoop para trackear calorías quemadas automáticamente
+                    {t('onboarding.whoopSubtitle')}
                   </Text>
 
                   {whoopLoading ? (
                     <View style={styles.whoopLoadingBox}>
                       <ActivityIndicator color={colors.primaryLight} size="large" />
-                      <Text style={styles.whoopLoadingText}>Conectando...</Text>
+                      <Text style={styles.whoopLoadingText}>{t('onboarding.connecting')}</Text>
                     </View>
                   ) : (
                     <Pressable onPress={handleConnectWhoop} style={styles.whoopConnectButton}>
-                      <Text style={styles.whoopConnectText}>Conectar Whoop</Text>
+                      <Text style={styles.whoopConnectText}>{t('onboarding.connectWhoop')}</Text>
                     </Pressable>
                   )}
                 </View>
@@ -326,13 +328,13 @@ export default function OnboardingScreen() {
             <View style={styles.navRow}>
               {step > 0 ? (
                 <Pressable onPress={handleBack} style={styles.backButton}>
-                  <Text style={styles.backText}>Anterior</Text>
+                  <Text style={styles.backText}>{t('onboarding.previous')}</Text>
                 </Pressable>
               ) : (
                 <View />
               )}
               <PrimaryButton
-                title={isLoading ? 'Guardando...' : step === 4 ? 'Omitir' : step === 3 ? 'Siguiente' : 'Siguiente'}
+                title={isLoading ? t('common.saving') : step === 4 ? t('onboarding.skip') : t('onboarding.next')}
                 onPress={handleNext}
                 loading={isLoading}
                 disabled={!isStepValid() || whoopLoading}

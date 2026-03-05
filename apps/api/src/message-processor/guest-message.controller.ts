@@ -31,6 +31,7 @@ export class GuestMessageController {
       const result = await this.messageProcessor.processGuestMessage(
         dto.content,
         dto.imageUrl,
+        dto.language,
       );
 
       return {

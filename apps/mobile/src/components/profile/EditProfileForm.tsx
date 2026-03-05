@@ -7,16 +7,9 @@ import {
   StyleSheet,
 } from 'react-native';
 import type { Profile, ActivityLevel } from '@nova/types';
+import { useTranslation } from 'react-i18next';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
 import { colors } from '@/theme';
-
-const ACTIVITY_LEVELS: { value: ActivityLevel; label: string }[] = [
-  { value: 'sedentary', label: 'Sedentario' },
-  { value: 'light', label: 'Ligero' },
-  { value: 'moderate', label: 'Moderado' },
-  { value: 'active', label: 'Activo' },
-  { value: 'very_active', label: 'Muy activo' },
-];
 
 const WEEKLY_OPTIONS = [
   { value: 0.25, label: '0.25 kg' },
@@ -33,6 +26,16 @@ interface Props {
 }
 
 export function EditProfileForm({ profile, onSave, onCancel, isLoading }: Props) {
+  const { t } = useTranslation();
+
+  const ACTIVITY_LEVELS: { value: ActivityLevel; label: string }[] = [
+    { value: 'sedentary', label: t('profile.sedentary') },
+    { value: 'light', label: t('profile.light') },
+    { value: 'moderate', label: t('profile.moderate') },
+    { value: 'active', label: t('profile.active') },
+    { value: 'very_active', label: t('profile.veryActive') },
+  ];
+
   const [form, setForm] = useState({
     weight: String(profile.weight),
     height: String(profile.height),
@@ -65,11 +68,11 @@ export function EditProfileForm({ profile, onSave, onCancel, isLoading }: Props)
 
   return (
     <View style={styles.container}>
-      <Text style={styles.sectionTitle}>Datos básicos</Text>
+      <Text style={styles.sectionTitle}>{t('profile.basicData')}</Text>
 
       <View style={styles.row}>
         <View style={styles.field}>
-          <Text style={styles.label}>Peso (kg)</Text>
+          <Text style={styles.label}>{t('profile.weightKg')}</Text>
           <TextInput
             style={styles.input}
             value={form.weight}
@@ -79,7 +82,7 @@ export function EditProfileForm({ profile, onSave, onCancel, isLoading }: Props)
           />
         </View>
         <View style={styles.field}>
-          <Text style={styles.label}>Altura (cm)</Text>
+          <Text style={styles.label}>{t('profile.heightCm')}</Text>
           <TextInput
             style={styles.input}
             value={form.height}
@@ -92,7 +95,7 @@ export function EditProfileForm({ profile, onSave, onCancel, isLoading }: Props)
 
       <View style={styles.row}>
         <View style={styles.field}>
-          <Text style={styles.label}>Edad</Text>
+          <Text style={styles.label}>{t('profile.age')}</Text>
           <TextInput
             style={styles.input}
             value={form.age}
@@ -102,7 +105,7 @@ export function EditProfileForm({ profile, onSave, onCancel, isLoading }: Props)
           />
         </View>
         <View style={styles.field}>
-          <Text style={styles.label}>Peso meta (kg)</Text>
+          <Text style={styles.label}>{t('profile.goalWeightKg')}</Text>
           <TextInput
             style={styles.input}
             value={form.goalWeight}
@@ -113,7 +116,7 @@ export function EditProfileForm({ profile, onSave, onCancel, isLoading }: Props)
         </View>
       </View>
 
-      <Text style={styles.sectionTitle}>Meta semanal</Text>
+      <Text style={styles.sectionTitle}>{t('profile.weeklyGoal')}</Text>
       <View style={styles.optionsRow}>
         {WEEKLY_OPTIONS.map((opt) => (
           <Pressable
@@ -134,7 +137,7 @@ export function EditProfileForm({ profile, onSave, onCancel, isLoading }: Props)
         ))}
       </View>
 
-      <Text style={styles.sectionTitle}>Nivel de actividad</Text>
+      <Text style={styles.sectionTitle}>{t('profile.activityLevel')}</Text>
       <View style={styles.optionsRow}>
         {ACTIVITY_LEVELS.map((opt) => (
           <Pressable
@@ -157,10 +160,10 @@ export function EditProfileForm({ profile, onSave, onCancel, isLoading }: Props)
 
       <View style={styles.buttonsRow}>
         <Pressable onPress={onCancel} style={styles.cancelButton}>
-          <Text style={styles.cancelText}>Cancelar</Text>
+          <Text style={styles.cancelText}>{t('common.cancel')}</Text>
         </Pressable>
         <PrimaryButton
-          title={isLoading ? 'Guardando...' : 'Guardar'}
+          title={isLoading ? t('common.saving') : t('common.save')}
           onPress={handleSave}
           loading={isLoading}
           style={{ flex: 1 }}

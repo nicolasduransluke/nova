@@ -16,12 +16,14 @@ import { GradientBackground } from '@/components/common/GradientBackground';
 import { GlassCard } from '@/components/common/GlassCard';
 import { TextInput } from '@/components/common/TextInput';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
+import { useTranslation } from 'react-i18next';
 import { colors } from '@/theme';
 import * as AppleAuthentication from 'expo-apple-authentication';
 
 type Nav = NativeStackNavigationProp<AuthStackParamList, 'Login'>;
 
 export default function LoginScreen() {
+  const { t } = useTranslation();
   const navigation = useNavigation<Nav>();
   const { login, loginWithGoogle, loginWithApple, enterGuestMode, isLoading, error, setError } = useAuthStore();
 
@@ -30,7 +32,7 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
-      setError('Por favor completa todos los campos');
+      setError(t('auth.fillAllFields'));
       return;
     }
 
@@ -53,11 +55,11 @@ export default function LoginScreen() {
         >
           <View style={styles.logoContainer}>
             <Text style={styles.logo}>NOVA</Text>
-            <Text style={styles.subtitle}>Coach de Déficit Calórico</Text>
+            <Text style={styles.subtitle}>{t('auth.appSubtitle')}</Text>
           </View>
 
           <GlassCard>
-            <Text style={styles.title}>Iniciar Sesión</Text>
+            <Text style={styles.title}>{t('auth.loginTitle')}</Text>
 
             {error && (
               <View style={styles.errorBanner}>
@@ -66,8 +68,8 @@ export default function LoginScreen() {
             )}
 
             <TextInput
-              label="Email"
-              placeholder="tu@email.com"
+              label={t('auth.email')}
+              placeholder={t('auth.emailPlaceholder')}
               value={email}
               onChangeText={(text) => {
                 setEmail(text);
@@ -78,8 +80,8 @@ export default function LoginScreen() {
             />
 
             <TextInput
-              label="Contraseña"
-              placeholder="Tu contraseña"
+              label={t('auth.password')}
+              placeholder={t('auth.passwordPlaceholder')}
               value={password}
               onChangeText={(text) => {
                 setPassword(text);
@@ -93,11 +95,11 @@ export default function LoginScreen() {
               onPress={() => navigation.navigate('ForgotPassword')}
               style={styles.forgotLink}
             >
-              <Text style={styles.linkText}>¿Olvidaste tu contraseña?</Text>
+              <Text style={styles.linkText}>{t('auth.forgotPassword')}</Text>
             </Pressable>
 
             <PrimaryButton
-              title="Iniciar Sesión"
+              title={t('auth.loginButton')}
               onPress={handleLogin}
               loading={isLoading}
               disabled={!email.trim() || !password.trim()}
@@ -105,7 +107,7 @@ export default function LoginScreen() {
 
             <View style={styles.divider}>
               <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>o</Text>
+              <Text style={styles.dividerText}>{t('common.or')}</Text>
               <View style={styles.dividerLine} />
             </View>
 
@@ -115,7 +117,7 @@ export default function LoginScreen() {
               disabled={isLoading}
             >
               <Text style={styles.googleIcon}>G</Text>
-              <Text style={styles.googleText}>Continuar con Google</Text>
+              <Text style={styles.googleText}>{t('auth.continueWithGoogle')}</Text>
             </Pressable>
 
             {Platform.OS === 'ios' && (
@@ -129,13 +131,13 @@ export default function LoginScreen() {
             )}
 
             <Pressable onPress={enterGuestMode} style={styles.guestLink}>
-              <Text style={styles.guestText}>Probar sin cuenta</Text>
+              <Text style={styles.guestText}>{t('auth.tryWithoutAccount')}</Text>
             </Pressable>
 
             <View style={styles.registerContainer}>
-              <Text style={styles.registerText}>¿No tienes cuenta? </Text>
+              <Text style={styles.registerText}>{t('auth.noAccount')}</Text>
               <Pressable onPress={() => navigation.navigate('Register')}>
-                <Text style={styles.registerLink}>Crear cuenta</Text>
+                <Text style={styles.registerLink}>{t('auth.createAccount')}</Text>
               </Pressable>
             </View>
           </GlassCard>

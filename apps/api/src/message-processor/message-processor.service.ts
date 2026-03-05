@@ -415,6 +415,7 @@ export class MessageProcessorService {
   async processGuestMessage(
     content: string,
     imageUrl?: string,
+    language?: string,
   ): Promise<ProcessMessageResponse> {
     this.logger.debug('Processing guest message');
 
@@ -497,7 +498,7 @@ export class MessageProcessorService {
     };
 
     const result = await this.orchestrator.processMessage(
-      { userId: guestUserId, content, imageUrl },
+      { userId: guestUserId, content, imageUrl, language },
       noopDeps,
     );
 

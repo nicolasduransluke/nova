@@ -196,4 +196,19 @@ export class AuthController {
       data: result,
     };
   }
+
+  // Language preference
+  @UseGuards(JwtAuthGuard)
+  @Post('language')
+  @HttpCode(HttpStatus.OK)
+  async setLanguage(
+    @CurrentUser() user: JwtPayload,
+    @Body() body: { language: string },
+  ) {
+    const result = await this.authService.setPreferredLanguage(user.sub, body.language);
+    return {
+      success: true,
+      data: result,
+    };
+  }
 }

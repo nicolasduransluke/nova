@@ -16,12 +16,14 @@ import { GradientBackground } from '@/components/common/GradientBackground';
 import { GlassCard } from '@/components/common/GlassCard';
 import { TextInput } from '@/components/common/TextInput';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
+import { useTranslation } from 'react-i18next';
 import { colors } from '@/theme';
 import * as AppleAuthentication from 'expo-apple-authentication';
 
 type Nav = NativeStackNavigationProp<AuthStackParamList, 'Register'>;
 
 export default function RegisterScreen() {
+  const { t } = useTranslation();
   const navigation = useNavigation<Nav>();
   const { register, loginWithGoogle, loginWithApple, isLoading, error, setError } = useAuthStore();
 
@@ -32,17 +34,17 @@ export default function RegisterScreen() {
 
   const handleRegister = async () => {
     if (!name.trim() || !email.trim() || !password.trim()) {
-      setError('Por favor completa todos los campos');
+      setError(t('auth.fillAllFields'));
       return;
     }
 
     if (password !== confirmPassword) {
-      setError('Las contraseñas no coinciden');
+      setError(t('auth.passwordMismatch'));
       return;
     }
 
     if (password.length < 6) {
-      setError('La contraseña debe tener al menos 6 caracteres');
+      setError(t('auth.passwordTooShort'));
       return;
     }
 
@@ -72,7 +74,7 @@ export default function RegisterScreen() {
           </View>
 
           <GlassCard>
-            <Text style={styles.title}>Crear Cuenta</Text>
+            <Text style={styles.title}>{t('auth.registerTitle')}</Text>
 
             {error && (
               <View style={styles.errorBanner}>
@@ -81,8 +83,8 @@ export default function RegisterScreen() {
             )}
 
             <TextInput
-              label="Nombre"
-              placeholder="Tu nombre"
+              label={t('auth.name')}
+              placeholder={t('auth.namePlaceholder')}
               value={name}
               onChangeText={(text) => { setName(text); clearError(); }}
               autoComplete="name"
@@ -90,8 +92,8 @@ export default function RegisterScreen() {
             />
 
             <TextInput
-              label="Email"
-              placeholder="tu@email.com"
+              label={t('auth.email')}
+              placeholder={t('auth.emailPlaceholder')}
               value={email}
               onChangeText={(text) => { setEmail(text); clearError(); }}
               keyboardType="email-address"
@@ -99,8 +101,8 @@ export default function RegisterScreen() {
             />
 
             <TextInput
-              label="Contraseña"
-              placeholder="Mínimo 6 caracteres"
+              label={t('auth.password')}
+              placeholder={t('auth.passwordMinLength')}
               value={password}
               onChangeText={(text) => { setPassword(text); clearError(); }}
               secureTextEntry
@@ -108,15 +110,15 @@ export default function RegisterScreen() {
             />
 
             <TextInput
-              label="Confirmar Contraseña"
-              placeholder="Repite tu contraseña"
+              label={t('auth.confirmPassword')}
+              placeholder={t('auth.confirmPasswordPlaceholder')}
               value={confirmPassword}
               onChangeText={(text) => { setConfirmPassword(text); clearError(); }}
               secureTextEntry
             />
 
             <PrimaryButton
-              title="Crear Cuenta"
+              title={t('auth.registerButton')}
               onPress={handleRegister}
               loading={isLoading}
               disabled={!name.trim() || !email.trim() || !password.trim() || !confirmPassword.trim()}
@@ -124,7 +126,7 @@ export default function RegisterScreen() {
 
             <View style={styles.divider}>
               <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>o</Text>
+              <Text style={styles.dividerText}>{t('common.or')}</Text>
               <View style={styles.dividerLine} />
             </View>
 
@@ -134,7 +136,7 @@ export default function RegisterScreen() {
               disabled={isLoading}
             >
               <Text style={styles.googleIcon}>G</Text>
-              <Text style={styles.googleText}>Continuar con Google</Text>
+              <Text style={styles.googleText}>{t('auth.continueWithGoogle')}</Text>
             </Pressable>
 
             {Platform.OS === 'ios' && (
@@ -148,9 +150,9 @@ export default function RegisterScreen() {
             )}
 
             <View style={styles.loginContainer}>
-              <Text style={styles.loginText}>¿Ya tienes cuenta? </Text>
+              <Text style={styles.loginText}>{t('auth.hasAccount')}</Text>
               <Pressable onPress={() => navigation.navigate('Login')}>
-                <Text style={styles.loginLink}>Iniciar sesión</Text>
+                <Text style={styles.loginLink}>{t('auth.signIn')}</Text>
               </Pressable>
             </View>
           </GlassCard>
