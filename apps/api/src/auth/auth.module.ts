@@ -18,7 +18,11 @@ import { DatabaseModule } from '../infrastructure/database/database.module';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET') || 'nova-jwt-secret-change-in-production',
+        secret: (() => {
+          const s = configService.get<string>('JWT_SECRET');
+          if (!s) throw new Error('JWT_SECRET environment variable is required');
+          return s;
+        })(),
         signOptions: {
           expiresIn: configService.get<string>('JWT_EXPIRES_IN') || '15m',
         } as any,

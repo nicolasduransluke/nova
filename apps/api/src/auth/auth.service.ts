@@ -141,7 +141,7 @@ export class AuthService {
   async refreshTokens(refreshToken: string) {
     try {
       const payload = this.jwtService.verify(refreshToken, {
-        secret: this.configService.get<string>('JWT_SECRET') || 'nova-jwt-secret-change-in-production',
+        secret: this.configService.get<string>('JWT_SECRET'),
       });
 
       const user = await this.prisma.user.findUnique({
@@ -214,13 +214,13 @@ export class AuthService {
       },
     });
 
-    // Return the token - in production, this would be sent via email
-    return {
+    const result: Record<string, string> = {
       message: 'If your email is registered, you will receive a password reset link',
-      // In production, remove this and send email instead
-      _devResetToken: resetToken,
-      _devResetUrl: `http://localhost:3000/reset-password?token=${resetToken}&email=${user.email}`,
     };
+    if (process.env.NODE_ENV === 'development') {
+      result._devResetToken = resetToken;
+    }
+    return result;
   }
 
   async resetPassword(dto: ResetPasswordDto) {

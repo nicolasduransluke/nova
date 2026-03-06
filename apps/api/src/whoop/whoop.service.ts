@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../infrastructure/database/prisma.service';
+import { encrypt, decrypt, isEncrypted } from '../common/encryption.util';
 
 export interface WhoopTokens {
   access_token: string;
@@ -88,12 +89,14 @@ export class WhoopService {
   private readonly redirectUri: string;
   private readonly baseUrl = 'https://api.prod.whoop.com/developer/v1';
   private readonly authUrl = 'https://api.prod.whoop.com/oauth/oauth2';
+  private readonly encryptionKey: string | undefined;
   private readonly refreshLocks = new Map<string, Promise<{ accessToken: string; metadata: Record<string, any> } | null>>();
 
   constructor(
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
   ) {
+    this.encryptionKey = this.configService.get<string>('WHOOP_ENCRYPTION_KEY');
     this.clientId = this.configService.get<string>('WHOOP_CLIENT_ID') || '';
     this.clientSecret = this.configService.get<string>('WHOOP_CLIENT_SECRET') || '';
 
@@ -387,12 +390,17 @@ export class WhoopService {
       return null;
     }
 
+    // Decrypt tokens if they are encrypted
+    const decryptedAccessToken = (whoopData.encrypted && this.encryptionKey)
+      ? decrypt(whoopData.accessToken, this.encryptionKey)
+      : whoopData.accessToken;
+
     // 5-minute buffer before expiry
     const bufferMs = 5 * 60 * 1000;
     const isExpired = whoopData.expiresAt && Date.now() > (whoopData.expiresAt - bufferMs);
 
     if (!isExpired) {
-      return { accessToken: whoopData.accessToken, metadata };
+      return { accessToken: decryptedAccessToken, metadata };
     }
 
     // If a refresh is already in flight for this user, await it
@@ -414,13 +422,20 @@ export class WhoopService {
     whoopData: Record<string, any>,
   ): Promise<{ accessToken: string; metadata: Record<string, any> } | null> {
     try {
-      const newTokens = await this.refreshTokens(whoopData.refreshToken);
+      // Decrypt refresh token if encrypted
+      const refreshTokenPlain = (whoopData.encrypted && this.encryptionKey)
+        ? decrypt(whoopData.refreshToken, this.encryptionKey)
+        : whoopData.refreshToken;
 
+      const newTokens = await this.refreshTokens(refreshTokenPlain);
+
+      // Encrypt new tokens if encryption key is available
       const updatedWhoop = {
         ...whoopData,
-        accessToken: newTokens.access_token,
-        refreshToken: newTokens.refresh_token,
+        accessToken: this.encryptionKey ? encrypt(newTokens.access_token, this.encryptionKey) : newTokens.access_token,
+        refreshToken: this.encryptionKey ? encrypt(newTokens.refresh_token, this.encryptionKey) : newTokens.refresh_token,
         expiresAt: Date.now() + newTokens.expires_in * 1000,
+        encrypted: !!this.encryptionKey,
       };
       const updatedMetadata = { ...metadata, whoop: updatedWhoop };
 

@@ -24,7 +24,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         ExtractJwt.fromUrlQueryParameter('token'),
       ]),
       ignoreExpiration: false,
-      secretOrKey: configService.get<string>('JWT_SECRET') || 'nova-jwt-secret-change-in-production',
+      secretOrKey: (() => {
+        const s = configService.get<string>('JWT_SECRET');
+        if (!s) throw new Error('JWT_SECRET environment variable is required');
+        return s;
+      })(),
     });
   }
 

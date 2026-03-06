@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 import { HealthController } from './presentation/controllers/health.controller';
 import { UserController } from './presentation/controllers/user.controller';
 import { ProfileController } from './presentation/controllers/profile.controller';
@@ -26,6 +28,7 @@ import { CoachingModule } from './coaching/coaching.module';
       envFilePath: '.env',
     }),
     ScheduleModule.forRoot(),
+    ThrottlerModule.forRoot([{ ttl: 60000, limit: 30 }]),
     DatabaseModule,
     AuthModule,
     MailModule,
@@ -44,6 +47,10 @@ import { CoachingModule } from './coaching/coaching.module';
     {
       provide: 'IUserRepository',
       useClass: UserRepository,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
     },
   ],
 })

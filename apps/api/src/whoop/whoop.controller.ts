@@ -9,11 +9,14 @@ import {
   UseGuards,
   HttpException,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
 import { Response, Request } from 'express';
+import { ConfigService } from '@nestjs/config';
 import { WhoopService } from './whoop.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PrismaService } from '../infrastructure/database/prisma.service';
+import { encrypt } from '../common/encryption.util';
 
 interface AuthenticatedRequest extends Request {
   user: { sub: string; email: string; name: string };
@@ -21,9 +24,12 @@ interface AuthenticatedRequest extends Request {
 
 @Controller('auth/whoop')
 export class WhoopController {
+  private readonly logger = new Logger(WhoopController.name);
+
   constructor(
     private readonly whoopService: WhoopService,
     private readonly prisma: PrismaService,
+    private readonly configService: ConfigService,
   ) {}
 
   /**
@@ -61,11 +67,9 @@ export class WhoopController {
     @Req() req: AuthenticatedRequest,
     @Body() body: { code: string },
   ) {
-    console.log('Whoop callback - received request');
     const { code } = body;
     const userId = req.user.sub;
-    console.log('Whoop callback - userId:', userId);
-    console.log('Whoop callback - code:', code?.substring(0, 20) + '...');
+    this.logger.log(`Whoop callback initiated for user ${userId}`);
 
     if (!code) {
       throw new HttpException(
@@ -88,15 +92,18 @@ export class WhoopController {
       });
 
       const currentMetadata = (user?.metadata ?? {}) as Record<string, any>;
+      const encryptionKey = this.configService.get<string>('WHOOP_ENCRYPTION_KEY');
+      const whoopMeta: Record<string, any> = {
+        userId: whoopProfile.user_id,
+        accessToken: encryptionKey ? encrypt(tokens.access_token, encryptionKey) : tokens.access_token,
+        refreshToken: encryptionKey ? encrypt(tokens.refresh_token, encryptionKey) : tokens.refresh_token,
+        expiresAt: Date.now() + tokens.expires_in * 1000,
+        connectedAt: new Date().toISOString(),
+        encrypted: !!encryptionKey,
+      };
       const updatedMetadata = {
         ...currentMetadata,
-        whoop: {
-          userId: whoopProfile.user_id,
-          accessToken: tokens.access_token,
-          refreshToken: tokens.refresh_token,
-          expiresAt: Date.now() + tokens.expires_in * 1000,
-          connectedAt: new Date().toISOString(),
-        },
+        whoop: whoopMeta,
       };
 
       // Store tokens in user metadata
@@ -116,7 +123,7 @@ export class WhoopController {
         },
       };
     } catch (error) {
-      console.error('Whoop callback error:', error);
+      this.logger.error(`Whoop callback error: ${error}`);
       throw new HttpException(
         'Failed to connect Whoop account',
         HttpStatus.INTERNAL_SERVER_ERROR,
