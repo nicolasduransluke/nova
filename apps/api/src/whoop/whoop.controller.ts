@@ -81,6 +81,12 @@ export class WhoopController {
     try {
       // Exchange code for tokens
       const tokens = await this.whoopService.exchangeCodeForTokens(code);
+      this.logger.log(`Whoop token exchange result keys: ${Object.keys(tokens).join(', ')}`);
+
+      if (!tokens.access_token || !tokens.refresh_token) {
+        this.logger.error(`Whoop token exchange missing fields: access_token=${!!tokens.access_token}, refresh_token=${!!tokens.refresh_token}, body=${JSON.stringify(tokens)}`);
+        throw new Error('Whoop token exchange returned incomplete data');
+      }
 
       // Get Whoop user profile
       const whoopProfile = await this.whoopService.getProfile(tokens.access_token);
