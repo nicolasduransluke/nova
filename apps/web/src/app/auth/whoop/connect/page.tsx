@@ -6,7 +6,7 @@ import { useSearchParams } from 'next/navigation';
 const WHOOP_CLIENT_ID = '8e820c10-a75d-4701-867f-72fd8225d967';
 const WHOOP_AUTH_URL = 'https://api.prod.whoop.com/oauth/oauth2/auth';
 const WHOOP_REDIRECT_URI = 'https://nova-ebon-seven.vercel.app/auth/whoop/callback';
-const WHOOP_SCOPES = 'read:profile read:cycles read:recovery read:workout read:sleep read:body_measurement';
+const WHOOP_SCOPES = 'read:profile read:cycles read:recovery read:workout read:sleep read:body_measurement offline';
 
 export default function WhoopConnect() {
   const searchParams = useSearchParams();

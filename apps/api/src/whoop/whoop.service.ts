@@ -124,6 +124,7 @@ export class WhoopService {
       'read:workout',
       'read:sleep',
       'read:body_measurement',
+      'offline',
     ].join(' ');
 
     const params = new URLSearchParams({
@@ -182,7 +183,7 @@ export class WhoopService {
         refresh_token: refreshToken,
         client_id: this.clientId,
         client_secret: this.clientSecret,
-        scope: 'read:profile read:cycles read:recovery read:workout read:sleep read:body_measurement',
+        scope: 'read:profile read:cycles read:recovery read:workout read:sleep read:body_measurement offline',
       }),
     });
 
