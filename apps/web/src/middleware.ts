@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 // Routes that require authentication
-const protectedRoutes = ['/chat', '/history', '/onboarding'];
+const protectedRoutes = ['/chat', '/history', '/onboarding', '/coach'];
 
 // Routes that should redirect to home if already authenticated
 const authRoutes = ['/login', '/register'];
@@ -53,9 +53,17 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Redirect to chat if trying to access auth routes while authenticated
+  // Redirect to appropriate page if trying to access auth routes while authenticated
   if (isAuthRoute && isAuthenticated) {
-    return NextResponse.redirect(new URL('/chat', request.url));
+    let userRole = 'patient';
+    if (authStorage?.value) {
+      try {
+        const parsed = JSON.parse(authStorage.value);
+        userRole = parsed.state?.user?.role || 'patient';
+      } catch { /* ignore */ }
+    }
+    const redirectTo = userRole === 'coach' ? '/coach' : '/chat';
+    return NextResponse.redirect(new URL(redirectTo, request.url));
   }
 
   return NextResponse.next();

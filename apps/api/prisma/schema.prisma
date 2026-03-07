@@ -22,6 +22,7 @@ model User {
   password      String?   // null if using OAuth
   provider      String    @default("local") // "local", "google", "apple"
   providerId    String?   @map("provider_id") // ID from OAuth provider
+  role          String    @default("patient") // "patient", "coach", "admin"
   emailVerified Boolean   @default(false) @map("email_verified")
   resetToken    String?   @map("reset_token")
   resetTokenExp DateTime? @map("reset_token_exp")
@@ -41,9 +42,57 @@ model User {
   chatMessages   ChatMessage[]
   coachingLogs   CoachingLog[]
 
+  // Coach relations
+  coachPatients   CoachPatient[]   @relation("CoachRelation")
+  patientCoaches  CoachPatient[]   @relation("PatientRelation")
+  sentInvitations CoachInvitation[] @relation("InvitationCoach")
+
   // Indexes
   @@index([provider, providerId])
+  @@index([role])
   @@map("users")
+}
+
+// ============================================
+// Coach-Patient Relationship Domain
+// ============================================
+
+model CoachPatient {
+  id        String   @id @default(uuid())
+  coachId   String   @map("coach_id")
+  patientId String   @map("patient_id")
+  status    String   @default("active") // "active", "paused", "ended"
+  notes     String?  // coach's private notes about the patient
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  coach   User @relation("CoachRelation", fields: [coachId], references: [id], onDelete: Cascade)
+  patient User @relation("PatientRelation", fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@unique([coachId, patientId])
+  @@index([coachId, status])
+  @@index([patientId])
+  @@map("coach_patients")
+}
+
+model CoachInvitation {
+  id           String    @id @default(uuid())
+  coachId      String    @map("coach_id")
+  patientEmail String    @map("patient_email")
+  status       String    @default("pending") // "pending", "accepted", "declined", "expired"
+  token        String    @unique // unique invitation token
+  expiresAt    DateTime  @map("expires_at")
+  acceptedAt   DateTime? @map("accepted_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  coach User @relation("InvitationCoach", fields: [coachId], references: [id], onDelete: Cascade)
+
+  @@index([patientEmail, status])
+  @@index([coachId])
+  @@index([token])
+  @@map("coach_invitations")
 }
 
 // ============================================

@@ -20,6 +20,7 @@ import { MailModule } from './mail/mail.module';
 import { NutritionModule } from './nutrition/nutrition.module';
 import { WhoopModule } from './whoop/whoop.module';
 import { CoachingModule } from './coaching/coaching.module';
+import { CoachModule } from './coach/coach.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { CoachingModule } from './coaching/coaching.module';
     MessageProcessorModule,
     HistoryModule,
     CoachingModule,
+    CoachModule,
   ],
   controllers: [HealthController, UserController, ProfileController, WeightLogsController],
   providers: [

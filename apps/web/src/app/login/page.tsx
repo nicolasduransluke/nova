@@ -18,7 +18,8 @@ export default function LoginPage() {
 
     try {
       await login(email, password);
-      router.push('/');
+      const user = useAuthStore.getState().user;
+      router.push(user?.role === 'coach' ? '/coach' : '/chat');
     } catch {
       // Error is handled in the store
     }

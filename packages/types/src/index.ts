@@ -1,5 +1,6 @@
 // User Domain
 export type AuthProvider = 'local' | 'google' | 'apple';
+export type UserRole = 'patient' | 'coach' | 'admin';
 
 export interface User {
   id: string;
@@ -7,6 +8,7 @@ export interface User {
   name: string;
   provider: AuthProvider;
   providerId?: string;
+  role: UserRole;
   emailVerified: boolean;
   metadata: Record<string, unknown>;
   createdAt: Date;
@@ -355,4 +357,41 @@ export interface ProcessMessageResponse {
   response: FinalResponse;
   intent: MessageIntent;
   processedAt: Date;
+}
+
+// Coach Domain
+export type CoachPatientStatus = 'active' | 'paused' | 'ended';
+export type InvitationStatus = 'pending' | 'accepted' | 'declined' | 'expired';
+
+export interface CoachPatient {
+  id: string;
+  coachId: string;
+  patientId: string;
+  status: CoachPatientStatus;
+  notes?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CoachInvitation {
+  id: string;
+  coachId: string;
+  patientEmail: string;
+  status: InvitationStatus;
+  token: string;
+  expiresAt: Date;
+  acceptedAt?: Date;
+  createdAt: Date;
+}
+
+export interface CoachPatientSummary {
+  patient: Pick<User, 'id' | 'name' | 'email'>;
+  relationship: CoachPatient;
+  profile?: Profile;
+  latestWeight?: WeightLog;
+  todaySummary?: DailySummary;
+}
+
+export interface InvitePatientDto {
+  patientEmail: string;
 }

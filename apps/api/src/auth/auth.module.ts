@@ -9,6 +9,7 @@ import { LocalStrategy } from './strategies/local.strategy';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { AppleStrategy } from './strategies/apple.strategy';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { RolesGuard } from './guards/roles.guard';
 import { DatabaseModule } from '../infrastructure/database/database.module';
 
 @Module({
@@ -38,7 +39,8 @@ import { DatabaseModule } from '../infrastructure/database/database.module';
     GoogleStrategy,
     AppleStrategy,
     JwtAuthGuard,
+    RolesGuard,
   ],
-  exports: [AuthService, JwtAuthGuard, JwtModule],
+  exports: [AuthService, JwtAuthGuard, RolesGuard, JwtModule],
 })
 export class AuthModule {}

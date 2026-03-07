@@ -1,0 +1,14 @@
+import { Module } from '@nestjs/common';
+import { CoachController } from './coach.controller';
+import { CoachService } from './coach.service';
+import { DatabaseModule } from '../infrastructure/database/database.module';
+import { HistoryModule } from '../history/history.module';
+import { AuthModule } from '../auth/auth.module';
+
+@Module({
+  imports: [DatabaseModule, HistoryModule, AuthModule],
+  controllers: [CoachController],
+  providers: [CoachService],
+  exports: [CoachService],
+})
+export class CoachModule {}

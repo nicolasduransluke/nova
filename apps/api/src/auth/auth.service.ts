@@ -61,7 +61,7 @@ export class AuthService {
       },
     });
 
-    const tokens = await this.generateTokens(user.id, user.email, user.name);
+    const tokens = await this.generateTokens(user.id, user.email, user.name, user.role);
     await this.updateRefreshToken(user.id, tokens.refreshToken);
 
     return {
@@ -88,7 +88,7 @@ export class AuthService {
   }
 
   async login(user: any) {
-    const tokens = await this.generateTokens(user.id, user.email, user.name);
+    const tokens = await this.generateTokens(user.id, user.email, user.name, user.role);
     await this.updateRefreshToken(user.id, tokens.refreshToken);
 
     return {
@@ -157,7 +157,7 @@ export class AuthService {
         throw new UnauthorizedException('Invalid refresh token');
       }
 
-      const tokens = await this.generateTokens(user.id, user.email, user.name);
+      const tokens = await this.generateTokens(user.id, user.email, user.name, user.role);
       await this.updateRefreshToken(user.id, tokens.refreshToken);
 
       return {
@@ -343,8 +343,8 @@ export class AuthService {
     return this.sanitizeUser(user);
   }
 
-  private async generateTokens(userId: string, email: string, name: string): Promise<AuthTokens> {
-    const payload = { sub: userId, email, name };
+  private async generateTokens(userId: string, email: string, name: string, role: string = 'patient'): Promise<AuthTokens> {
+    const payload = { sub: userId, email, name, role };
     const accessExpiresIn = this.configService.get<string>('JWT_EXPIRES_IN') || '15m';
     const refreshExpiresIn = this.configService.get<string>('JWT_REFRESH_EXPIRES_IN') || '7d';
 

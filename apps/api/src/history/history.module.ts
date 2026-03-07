@@ -8,5 +8,6 @@ import { DatabaseModule } from '../infrastructure/database/database.module';
   imports: [DatabaseModule, WhoopModule],
   controllers: [HistoryController],
   providers: [HistoryService],
+  exports: [HistoryService],
 })
 export class HistoryModule {}
