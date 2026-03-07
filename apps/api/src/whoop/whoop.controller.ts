@@ -83,8 +83,8 @@ export class WhoopController {
       const tokens = await this.whoopService.exchangeCodeForTokens(code);
       this.logger.log(`Whoop token exchange result keys: ${Object.keys(tokens).join(', ')}`);
 
-      if (!tokens.access_token || !tokens.refresh_token) {
-        this.logger.error(`Whoop token exchange missing fields: access_token=${!!tokens.access_token}, refresh_token=${!!tokens.refresh_token}, body=${JSON.stringify(tokens)}`);
+      if (!tokens.access_token) {
+        this.logger.error(`Whoop token exchange missing access_token: ${JSON.stringify(tokens)}`);
         throw new Error('Whoop token exchange returned incomplete data');
       }
 
@@ -102,7 +102,9 @@ export class WhoopController {
       const whoopMeta: Record<string, any> = {
         userId: whoopProfile.user_id,
         accessToken: encryptionKey ? encrypt(tokens.access_token, encryptionKey) : tokens.access_token,
-        refreshToken: encryptionKey ? encrypt(tokens.refresh_token, encryptionKey) : tokens.refresh_token,
+        refreshToken: tokens.refresh_token
+          ? (encryptionKey ? encrypt(tokens.refresh_token, encryptionKey) : tokens.refresh_token)
+          : null,
         expiresAt: Date.now() + tokens.expires_in * 1000,
         connectedAt: new Date().toISOString(),
         encrypted: !!encryptionKey,

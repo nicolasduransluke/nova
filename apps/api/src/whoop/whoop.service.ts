@@ -5,7 +5,7 @@ import { encrypt, decrypt, isEncrypted } from '../common/encryption.util';
 
 export interface WhoopTokens {
   access_token: string;
-  refresh_token: string;
+  refresh_token?: string;
   expires_in: number;
   token_type: string;
   scope: string;
@@ -422,6 +422,11 @@ export class WhoopService {
     whoopData: Record<string, any>,
   ): Promise<{ accessToken: string; metadata: Record<string, any> } | null> {
     try {
+      if (!whoopData.refreshToken) {
+        this.logger.warn(`No refresh token available for user ${userId}, clearing Whoop data`);
+        throw new Error('No refresh token available');
+      }
+
       // Decrypt refresh token if encrypted
       const refreshTokenPlain = (whoopData.encrypted && this.encryptionKey)
         ? decrypt(whoopData.refreshToken, this.encryptionKey)
@@ -433,7 +438,9 @@ export class WhoopService {
       const updatedWhoop = {
         ...whoopData,
         accessToken: this.encryptionKey ? encrypt(newTokens.access_token, this.encryptionKey) : newTokens.access_token,
-        refreshToken: this.encryptionKey ? encrypt(newTokens.refresh_token, this.encryptionKey) : newTokens.refresh_token,
+        refreshToken: newTokens.refresh_token
+          ? (this.encryptionKey ? encrypt(newTokens.refresh_token, this.encryptionKey) : newTokens.refresh_token)
+          : whoopData.refreshToken,
         expiresAt: Date.now() + newTokens.expires_in * 1000,
         encrypted: !!this.encryptionKey,
       };
