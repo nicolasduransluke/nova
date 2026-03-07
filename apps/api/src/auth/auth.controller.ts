@@ -17,6 +17,7 @@ import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { LocalAuthGuard } from './guards/local-auth.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { GoogleOAuthGuard } from './guards/google-oauth.guard';
 import { CurrentUser, JwtPayload } from './decorators/current-user.decorator';
 import { Public } from './decorators/public.decorator';
 import {
@@ -118,24 +119,30 @@ export class AuthController {
   // OAuth - Google
   @Public()
   @Get('google')
-  @UseGuards(AuthGuard('google'))
+  @UseGuards(GoogleOAuthGuard)
   async googleAuth() {
     // Initiates Google OAuth flow
   }
 
   @Public()
   @Get('google/callback')
-  @UseGuards(AuthGuard('google'))
+  @UseGuards(GoogleOAuthGuard)
   async googleAuthCallback(@Req() req: Request, @Res() res: Response) {
     const result = await this.authService.login(req.user);
-    const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
 
-    // Redirect to frontend with tokens
     const params = new URLSearchParams({
       accessToken: result.tokens.accessToken,
       refreshToken: result.tokens.refreshToken,
     });
 
+    // Mobile flow: redirect directly to app via deep link
+    if (req.query.state === 'mobile') {
+      res.redirect(`nova://callback?${params.toString()}`);
+      return;
+    }
+
+    // Web flow: redirect to frontend callback page
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
     res.redirect(`${frontendUrl}/auth/callback?${params.toString()}`);
   }
 

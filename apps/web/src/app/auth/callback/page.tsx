@@ -15,7 +15,9 @@ function OAuthCallbackHandler() {
 
     if (accessToken && refreshToken) {
       // Check if this OAuth flow was initiated from the mobile app
-      const isMobile = localStorage.getItem('oauth_mobile') === 'true';
+      // Primary: check URL param (set by API when state=mobile)
+      // Fallback: check localStorage (legacy, may not persist in iOS in-app browser)
+      const isMobile = searchParams.get('mobile') === 'true' || localStorage.getItem('oauth_mobile') === 'true';
       if (isMobile) {
         localStorage.removeItem('oauth_mobile');
         window.location.href = `nova://callback?accessToken=${encodeURIComponent(accessToken)}&refreshToken=${encodeURIComponent(refreshToken)}`;

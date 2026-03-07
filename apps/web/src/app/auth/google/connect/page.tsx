@@ -6,11 +6,9 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://striking-nature-prod
 
 export default function GoogleConnect() {
   useEffect(() => {
-    // Flag so the callback page knows to redirect to the mobile app
-    localStorage.setItem('oauth_mobile', 'true');
-
-    // Redirect to API's Google OAuth endpoint (no token needed - this IS the login)
-    window.location.href = `${API_URL}/api/auth/google`;
+    // Redirect to API's Google OAuth endpoint with mobile flag
+    // The API passes mobile=true as OAuth state, so Google returns it in the callback
+    window.location.href = `${API_URL}/api/auth/google?mobile=true`;
   }, []);
 
   return (

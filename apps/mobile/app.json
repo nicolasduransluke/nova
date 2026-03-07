@@ -18,7 +18,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.cotalker.nova-mobile",
-      "buildNumber": "18",
+      "buildNumber": "19",
       "usesAppleSignIn": true,
       "infoPlist": {
         "NSCameraUsageDescription": "NOVA necesita acceso a tu cámara para tomar fotos de tus comidas.",
