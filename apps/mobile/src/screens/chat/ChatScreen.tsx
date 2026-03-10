@@ -16,6 +16,7 @@ import { useChatStore } from '@/store/chat.store';
 import { useAuthStore } from '@/store/auth.store';
 import { MessageList } from '@/components/chat/MessageList';
 import { MessageInput } from '@/components/chat/MessageInput';
+import { CoachInvitationBanner } from '@/components/common/CoachInvitationBanner';
 import { useTranslation } from 'react-i18next';
 import { colors } from '@/theme';
 
@@ -91,6 +92,9 @@ export default function ChatScreen() {
           </Text>
         </Pressable>
       )}
+
+      {/* Coach invitation banner */}
+      {!isGuest && <CoachInvitationBanner />}
 
       {/* Messages */}
       <KeyboardAvoidingView
