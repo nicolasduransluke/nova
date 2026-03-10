@@ -107,22 +107,9 @@ export default function CoachDashboard() {
               <p className="text-xs text-white/40 uppercase mb-1">Avg Streak</p>
               <p className="text-2xl font-bold">{stats.totals.avgStreak}d</p>
             </div>
-            <div className="rounded-xl bg-white/5 border border-white/10 p-4 sm:col-span-3 lg:col-span-1">
-              <p className="text-xs text-white/40 uppercase mb-1">Engagement</p>
-              <div className="flex items-end gap-1 h-8">
-                {stats.patients.map((p) => {
-                  const maxMsg = Math.max(...stats.patients.map((x) => x.weekMessages), 1);
-                  const h = Math.max((p.weekMessages / maxMsg) * 100, 8);
-                  return (
-                    <div
-                      key={p.patientId}
-                      className="flex-1 rounded-sm bg-nova-primary/60"
-                      style={{ height: `${h}%` }}
-                      title={`${p.name}: ${p.weekMessages} msgs`}
-                    />
-                  );
-                })}
-              </div>
+            <div className="rounded-xl bg-white/5 border border-white/10 p-4">
+              <p className="text-xs text-white/40 uppercase mb-1">Msgs / Patient</p>
+              <p className="text-2xl font-bold">{stats.totals.patients > 0 ? Math.round(stats.totals.weekMessages / stats.totals.patients * 10) / 10 : 0}</p>
             </div>
           </div>
 
