@@ -597,10 +597,100 @@ export class CoachService {
       });
     }
 
-    return this.prisma.coachingPlan.update({
+    const oldGoals = plan.goals as Record<string, any>;
+    const oldInstructions = plan.instructions;
+
+    const updated = await this.prisma.coachingPlan.update({
       where: { id: planId },
       data: { ...data, goals: data.goals ? (data.goals as any) : undefined },
     });
+
+    // Notify patient if goals or instructions changed (not coachNotes-only edits)
+    const goalsChanged = data.goals && JSON.stringify(data.goals) !== JSON.stringify(oldGoals);
+    const instructionsChanged = data.instructions != null && data.instructions !== oldInstructions;
+
+    if (goalsChanged || instructionsChanged) {
+      this.notifyPatientOfPlanEdit(patientId, coachId, oldGoals, data.goals as Record<string, any> | undefined, oldInstructions, data.instructions, instructionsChanged ?? false).catch((err) =>
+        this.logger.error(`Failed to notify patient of plan edit: ${err}`),
+      );
+    }
+
+    return updated;
+  }
+
+  /**
+   * Send a lightweight chat message when the coach edits the active plan.
+   * Only mentions what actually changed.
+   */
+  private async notifyPatientOfPlanEdit(
+    patientId: string,
+    coachId: string,
+    oldGoals: Record<string, any>,
+    newGoals: Record<string, any> | undefined,
+    oldInstructions: string,
+    newInstructions: string | undefined,
+    instructionsChanged: boolean,
+  ) {
+    const [coach, patient] = await Promise.all([
+      this.prisma.user.findUnique({ where: { id: coachId }, select: { name: true } }),
+      this.prisma.user.findUnique({ where: { id: patientId }, select: { metadata: true } }),
+    ]);
+
+    const coachName = coach?.name?.split(' ')[0] || 'Tu coach';
+    const meta = (patient?.metadata ?? {}) as Record<string, unknown>;
+    const isEnglish = meta.preferredLanguage === 'en';
+
+    const changes: string[] = [];
+
+    if (newGoals) {
+      const goalLabels: Record<string, [string, string, string]> = {
+        dailyCalories: ['Calorías/día', 'Daily calories', 'kcal'],
+        weeklyWorkouts: ['Entrenamientos/sem', 'Workouts/week', ''],
+        proteinTarget: ['Proteína/día', 'Protein/day', 'g'],
+        weeklyWeightGoal: ['Meta peso/sem', 'Weight goal/week', 'kg'],
+      };
+
+      for (const [key, [esLabel, enLabel, unit]] of Object.entries(goalLabels)) {
+        if (newGoals[key] != null && newGoals[key] !== oldGoals[key]) {
+          const label = isEnglish ? enLabel : esLabel;
+          const suffix = unit ? ` ${unit}` : '';
+          if (oldGoals[key] != null) {
+            changes.push(`- ${label}: ${oldGoals[key]}${suffix} → ${newGoals[key]}${suffix}`);
+          } else {
+            changes.push(`- ${label}: ${newGoals[key]}${suffix}`);
+          }
+        }
+      }
+    }
+
+    if (instructionsChanged) {
+      changes.push(isEnglish
+        ? '- Updated plan guidelines'
+        : '- Indicaciones actualizadas');
+    }
+
+    if (changes.length === 0) return;
+
+    const header = isEnglish
+      ? `Your coach ${coachName} adjusted your plan:`
+      : `Tu coach ${coachName} ajustó tu plan:`;
+
+    const content = [header, ...changes].join('\n');
+
+    await this.prisma.chatMessage.create({
+      data: {
+        id: generateId(),
+        userId: patientId,
+        type: 'text',
+        content,
+        sender: 'agent',
+        metadata: {
+          source: 'coaching_plan_edit',
+        } as Prisma.InputJsonValue,
+      },
+    });
+
+    this.logger.debug(`Sent plan edit notification to patient ${patientId}`);
   }
 
   async getPlanProgress(coachId: string, patientId: string) {
