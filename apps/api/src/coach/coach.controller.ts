@@ -170,6 +170,47 @@ export class CoachController {
     return ok(await this.coachService.updateCoachInsights(user.sub, patientId, body.insights));
   }
 
+  // ─── Coaching Logs & Style ─────────────────────────────
+
+  @Get('patients/:patientId/coaching-logs')
+  @Roles('coach')
+  async getCoachingLogs(
+    @CurrentUser() user: JwtPayload,
+    @Param('patientId') patientId: string,
+    @Query('days') days?: string,
+  ) {
+    return ok(await this.coachService.getCoachingLogs(user.sub, patientId, Number(days) || 30));
+  }
+
+  @Patch('patients/:patientId/coaching-logs/:logId/dislike')
+  @Roles('coach')
+  async dislikeCoachingLog(
+    @CurrentUser() user: JwtPayload,
+    @Param('patientId') patientId: string,
+    @Param('logId') logId: string,
+  ) {
+    return ok(await this.coachService.dislikeCoachingLog(user.sub, patientId, logId));
+  }
+
+  @Get('patients/:patientId/style')
+  @Roles('coach')
+  async getPatientStyle(
+    @CurrentUser() user: JwtPayload,
+    @Param('patientId') patientId: string,
+  ) {
+    return ok(await this.coachService.getPatientStyle(user.sub, patientId));
+  }
+
+  @Patch('patients/:patientId/style')
+  @Roles('coach')
+  async updatePatientStyle(
+    @CurrentUser() user: JwtPayload,
+    @Param('patientId') patientId: string,
+    @Body() body: { styleInstructions: string },
+  ) {
+    return ok(await this.coachService.updatePatientStyle(user.sub, patientId, body.styleInstructions));
+  }
+
   // ─── Patient endpoints ────────────────────────────────────
 
   @Get('my-coach')

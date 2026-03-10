@@ -219,14 +219,16 @@ model ChatMessage {
 // ============================================
 
 model CoachingLog {
-  id        String   @id @default(uuid())
-  userId    String   @map("user_id")
-  type      String   // "meal_reminder", "daily_summary", "streak", "pattern_insight"
-  subtype   String   @default("")
-  date      DateTime
-  message   String
-  pushSent  Boolean  @default(false) @map("push_sent")
-  sentAt    DateTime @default(now()) @map("sent_at")
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  type        String   // "meal_reminder", "daily_summary", "streak", "pattern_insight"
+  subtype     String   @default("")
+  date        DateTime
+  message     String
+  pushSent    Boolean  @default(false) @map("push_sent")
+  sentAt      DateTime @default(now()) @map("sent_at")
+  triggerData Json?    @map("trigger_data") // {condition, observed, threshold}
+  disliked    Boolean  @default(false)
 
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -266,14 +268,15 @@ model CoachingPlan {
 }
 
 model PatientProfileAI {
-  id             String    @id @default(uuid())
-  patientId      String    @unique @map("patient_id")
-  behavioralData Json      @default("{}") @map("behavioral_data") // Layer 1: auto-generated weekly
-  coachInsights  Json      @default("[]") @map("coach_insights")  // Layer 3: explicit coach knowledge
-  coachLearnings Json      @default("{}") @map("coach_learnings") // Layer 2: auto from plan history
-  lastAnalyzedAt DateTime? @map("last_analyzed_at")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
+  id                String    @id @default(uuid())
+  patientId         String    @unique @map("patient_id")
+  behavioralData    Json      @default("{}") @map("behavioral_data") // Layer 1: auto-generated weekly
+  coachInsights     Json      @default("[]") @map("coach_insights")  // Layer 3: explicit coach knowledge
+  coachLearnings    Json      @default("{}") @map("coach_learnings") // Layer 2: auto from plan history
+  styleInstructions String    @default("") @map("style_instructions") // Coach's AI communication style for this patient
+  lastAnalyzedAt    DateTime? @map("last_analyzed_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
 
   patient User @relation("PatientAIProfile", fields: [patientId], references: [id], onDelete: Cascade)
 

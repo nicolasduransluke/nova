@@ -865,6 +865,67 @@ export class CoachService {
     return (profile?.coachInsights as string[]) || [];
   }
 
+  // ─── Coaching Logs & Style ──────────────────────────────
+
+  async getCoachingLogs(coachId: string, patientId: string, days: number = 30) {
+    await this.verifyCoachAccess(coachId, patientId);
+
+    const since = new Date();
+    since.setDate(since.getDate() - days);
+
+    return this.prisma.coachingLog.findMany({
+      where: {
+        userId: patientId,
+        sentAt: { gte: since },
+      },
+      orderBy: { sentAt: 'desc' },
+    });
+  }
+
+  async dislikeCoachingLog(coachId: string, patientId: string, logId: string) {
+    await this.verifyCoachAccess(coachId, patientId);
+
+    const log = await this.prisma.coachingLog.findUnique({ where: { id: logId } });
+    if (!log || log.userId !== patientId) {
+      throw new NotFoundException('Coaching log not found');
+    }
+
+    return this.prisma.coachingLog.update({
+      where: { id: logId },
+      data: { disliked: true },
+    });
+  }
+
+  async getPatientStyle(coachId: string, patientId: string) {
+    await this.verifyCoachAccess(coachId, patientId);
+
+    const profile = await this.prisma.patientProfileAI.findUnique({
+      where: { patientId },
+    });
+    return profile?.styleInstructions || '';
+  }
+
+  async updatePatientStyle(coachId: string, patientId: string, styleInstructions: string) {
+    await this.verifyCoachAccess(coachId, patientId);
+
+    return this.prisma.patientProfileAI.upsert({
+      where: { patientId },
+      update: { styleInstructions },
+      create: {
+        patientId,
+        styleInstructions,
+      },
+    });
+  }
+
+  // Also expose style for coaching service (no auth — internal use)
+  async getStyleForPatient(patientId: string): Promise<string> {
+    const profile = await this.prisma.patientProfileAI.findUnique({
+      where: { patientId },
+    });
+    return profile?.styleInstructions || '';
+  }
+
   private async calculatePlanResults(plan: any) {
     const goals = plan.goals as any;
 

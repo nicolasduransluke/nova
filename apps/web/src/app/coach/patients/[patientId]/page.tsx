@@ -32,7 +32,7 @@ interface ChatMsg {
   createdAt: string;
 }
 
-type Tab = 'overview' | 'plan' | 'history' | 'weight' | 'chat';
+type Tab = 'overview' | 'plan' | 'history' | 'weight' | 'chat' | 'coaching';
 
 export default function PatientDetailPage() {
   const { patientId } = useParams<{ patientId: string }>();
@@ -101,6 +101,7 @@ export default function PatientDetailPage() {
     { key: 'history', label: 'Calorie History' },
     { key: 'weight', label: 'Weight' },
     { key: 'chat', label: 'Chat Log' },
+    { key: 'coaching', label: 'Coaching AI' },
   ];
 
   return (
@@ -147,6 +148,7 @@ export default function PatientDetailPage() {
       {tab === 'history' && <HistoryTab history={history} />}
       {tab === 'weight' && <WeightTab weightHistory={weightHistory} profile={profile} />}
       {tab === 'chat' && <ChatTab messages={messages} />}
+      {tab === 'coaching' && <CoachingTab patientId={patientId} />}
     </div>
   );
 }
@@ -876,6 +878,218 @@ function PlanTab({ patientId }: { patientId: string }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Coaching AI Tab ──────────────────────────────────────
+
+interface CoachingLogEntry {
+  id: string;
+  type: string;
+  subtype: string;
+  date: string;
+  message: string;
+  pushSent: boolean;
+  sentAt: string;
+  triggerData: Record<string, unknown> | null;
+  disliked: boolean;
+}
+
+const TYPE_LABELS: Record<string, { label: string; schedule: string }> = {
+  meal_reminder: { label: 'Meal Reminder', schedule: '11:00 / 15:00 local' },
+  daily_summary: { label: 'Daily Summary', schedule: '21:00 local' },
+  streak: { label: 'Streak / Milestone', schedule: 'Milestone-based' },
+  pattern_insight: { label: 'Pattern Insight', schedule: 'Monday 10:00 UTC' },
+};
+
+function CoachingTab({ patientId }: { patientId: string }) {
+  const [logs, setLogs] = useState<CoachingLogEntry[]>([]);
+  const [style, setStyle] = useState('');
+  const [savedStyle, setSavedStyle] = useState('');
+  const [loadingLogs, setLoadingLogs] = useState(true);
+  const [savingStyle, setSavingStyle] = useState(false);
+  const [expandedLog, setExpandedLog] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadData();
+  }, [patientId]);
+
+  async function loadData() {
+    const [logsRes, styleRes] = await Promise.all([
+      api.get<CoachingLogEntry[]>(`/api/coach/patients/${patientId}/coaching-logs?days=30`),
+      api.get<string>(`/api/coach/patients/${patientId}/style`),
+    ]);
+    if (logsRes.success && logsRes.data) setLogs(logsRes.data);
+    if (styleRes.success && styleRes.data != null) {
+      setStyle(styleRes.data);
+      setSavedStyle(styleRes.data);
+    }
+    setLoadingLogs(false);
+  }
+
+  async function saveStyle() {
+    setSavingStyle(true);
+    const res = await api.patch(`/api/coach/patients/${patientId}/style`, { styleInstructions: style });
+    if (res.success) setSavedStyle(style);
+    setSavingStyle(false);
+  }
+
+  async function handleDislike(logId: string) {
+    await api.patch(`/api/coach/patients/${patientId}/coaching-logs/${logId}/dislike`, {});
+    setLogs((prev) => prev.map((l) => l.id === logId ? { ...l, disliked: true } : l));
+  }
+
+  if (loadingLogs) {
+    return (
+      <div className="flex items-center justify-center h-32">
+        <div className="h-6 w-6 border-2 border-nova-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8">
+      {/* AI Communication Style */}
+      <div className="rounded-xl bg-white/5 border border-white/10 p-5">
+        <h3 className="font-semibold mb-1">Estilo de comunicacion AI</h3>
+        <p className="text-xs text-white/40 mb-3">
+          Instrucciones para personalizar como la IA se comunica con este paciente en mensajes automaticos.
+        </p>
+        <textarea
+          value={style}
+          onChange={(e) => {
+            setStyle(e.target.value);
+            e.target.style.height = 'auto';
+            e.target.style.height = e.target.scrollHeight + 'px';
+          }}
+          onFocus={(e) => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
+          placeholder='Ej: "Hablale directo, sin diminutivos. Mensajes cortos. Motivar con energia y consistencia."'
+          className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white text-sm placeholder-white/30 resize-none overflow-hidden focus:outline-none focus:ring-1 focus:ring-nova-primary"
+          rows={3}
+        />
+        {style !== savedStyle && (
+          <button
+            onClick={saveStyle}
+            disabled={savingStyle}
+            className="mt-2 px-4 py-1.5 bg-nova-primary hover:bg-nova-primary/90 disabled:opacity-50 rounded-lg text-sm font-medium transition-colors"
+          >
+            {savingStyle ? 'Guardando...' : 'Guardar estilo'}
+          </button>
+        )}
+      </div>
+
+      {/* Automated Messages */}
+      <div>
+        <h3 className="font-semibold mb-1">Mensajes automaticos</h3>
+        <p className="text-xs text-white/40 mb-4">
+          Historial de mensajes enviados automaticamente por NOVA (ultimos 30 dias).
+        </p>
+
+        {logs.length === 0 ? (
+          <p className="text-white/30 text-sm text-center py-8">No hay mensajes automaticos registrados.</p>
+        ) : (
+          <div className="space-y-2">
+            {logs.map((log) => {
+              const typeInfo = TYPE_LABELS[log.type] || { label: log.type, schedule: '—' };
+              const isExpanded = expandedLog === log.id;
+              return (
+                <div
+                  key={log.id}
+                  className={`rounded-xl border p-4 transition-colors ${
+                    log.disliked ? 'bg-red-500/5 border-red-500/20' : 'bg-white/5 border-white/10'
+                  }`}
+                >
+                  {/* Header row */}
+                  <div
+                    className="flex items-center justify-between cursor-pointer"
+                    onClick={() => setExpandedLog(isExpanded ? null : log.id)}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-nova-primary/20 text-nova-primary">
+                        {typeInfo.label}
+                      </span>
+                      <span className="text-xs text-white/40">
+                        {new Date(log.sentAt).toLocaleString()}
+                      </span>
+                      {log.pushSent && (
+                        <span className="text-xs text-emerald-400/60" title="Push sent">push</span>
+                      )}
+                      {log.disliked && (
+                        <span className="text-xs text-red-400">disliked</span>
+                      )}
+                    </div>
+                    <svg
+                      className={`h-4 w-4 text-white/30 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                      fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+
+                  {/* Message preview */}
+                  <p className={`text-sm text-white/70 mt-2 ${isExpanded ? '' : 'line-clamp-2'}`}>
+                    {log.message}
+                  </p>
+
+                  {/* Expanded details */}
+                  {isExpanded && (
+                    <div className="mt-3 pt-3 border-t border-white/10 space-y-2">
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div>
+                          <span className="text-white/40">Tipo: </span>
+                          <span className="text-white/70">{log.type}{log.subtype ? ` / ${log.subtype}` : ''}</span>
+                        </div>
+                        <div>
+                          <span className="text-white/40">Horario: </span>
+                          <span className="text-white/70">{typeInfo.schedule}</span>
+                        </div>
+                      </div>
+
+                      {log.triggerData && (
+                        <div className="text-xs">
+                          <span className="text-white/40">Trigger: </span>
+                          <span className="text-white/70 font-mono">
+                            {Object.entries(log.triggerData)
+                              .filter(([k]) => k !== 'dailyMap')
+                              .map(([k, v]) => `${k}: ${v}`)
+                              .join(' | ')}
+                          </span>
+                        </div>
+                      )}
+
+                      {!log.disliked && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDislike(log.id); }}
+                          className="text-xs text-white/30 hover:text-red-400 transition-colors flex items-center gap-1 mt-1"
+                        >
+                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M10 15v4a3 3 0 003 3l4-9V2H5.72a2 2 0 00-2 1.7l-1.38 9a2 2 0 002 2.3zm7-13h2.67A2.31 2.31 0 0122 4v7a2.31 2.31 0 01-2.33 2H17" />
+                          </svg>
+                          Mark as bad output
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Schedule reference */}
+      <div className="rounded-xl bg-white/5 border border-white/10 p-5">
+        <h3 className="font-semibold mb-3">Horarios de mensajes</h3>
+        <div className="grid grid-cols-2 gap-2 text-sm">
+          {Object.entries(TYPE_LABELS).map(([, info]) => (
+            <div key={info.label} className="flex justify-between">
+              <span className="text-white/60">{info.label}</span>
+              <span className="text-white/40">{info.schedule}</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
