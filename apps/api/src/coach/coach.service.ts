@@ -31,9 +31,7 @@ export class CoachService {
       throw new ForbiddenException('Only coaches can invite patients');
     }
 
-    if (patientEmail && coach.email.toLowerCase() === patientEmail.toLowerCase()) {
-      throw new BadRequestException('Cannot invite yourself');
-    }
+    // Self-coaching is allowed (coach can be their own patient)
 
     // If email provided, check if relationship already exists
     if (patientEmail) {
@@ -162,10 +160,7 @@ export class CoachService {
       throw new NotFoundException('No account found with this email. Please register in the Nova app first.');
     }
 
-    // Prevent coach from accepting their own invitation
-    if (patient.id === invitation.coachId) {
-      throw new BadRequestException('Cannot accept your own invitation');
-    }
+    // Self-coaching is allowed
 
     await this.prisma.coachPatient.upsert({
       where: {
