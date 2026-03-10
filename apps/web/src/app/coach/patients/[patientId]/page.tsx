@@ -167,11 +167,21 @@ function OverviewTab({
   const currentWeight = latestWeight?.weight ?? profile.weight;
   const remaining = profile.goalWeight ? currentWeight - profile.goalWeight : null;
 
+  // Mifflin-St Jeor TDEE calculation
+  const bmr = profile.sex === 'male'
+    ? 10 * currentWeight + 6.25 * profile.height - 5 * profile.age + 5
+    : 10 * currentWeight + 6.25 * profile.height - 5 * profile.age - 161;
+  const activityMultipliers: Record<string, number> = {
+    sedentary: 1.2, light: 1.375, moderate: 1.55, active: 1.725, very_active: 1.9,
+  };
+  const tdee = Math.round(bmr * (activityMultipliers[profile.activityLevel] || 1.55));
+
   const stats = [
     { label: 'Current Weight', value: `${currentWeight} kg` },
     { label: 'Goal Weight', value: profile.goalWeight ? `${profile.goalWeight} kg` : '—' },
     { label: 'Remaining', value: remaining != null ? `${remaining.toFixed(1)} kg` : '—' },
     { label: 'Weekly Goal', value: profile.weeklyGoal ? `${profile.weeklyGoal} kg/wk` : '—' },
+    { label: 'TDEE', value: `${tdee} kcal` },
     { label: 'Height', value: `${profile.height} cm` },
     { label: 'Age', value: `${profile.age}` },
     { label: 'Sex', value: profile.sex },
