@@ -260,6 +260,7 @@ export class WhoopService {
 
     const data = await response.json();
     const records = data.records || [];
+    this.logger.debug(`getLatestCycle: ${records.length} records found. Details: ${JSON.stringify(records.map((r: any) => ({ id: r.id, start: r.start, end: r.end, score_state: r.score_state, kj: r.score?.kilojoule })))}`);
     // Return the most recent cycle (first in the list, sorted by start desc by Whoop API)
     return records[0] || null;
   }

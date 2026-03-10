@@ -114,6 +114,7 @@ export class HistoryService {
           try {
             // Fetch the latest cycle (may have started yesterday but still in progress)
             const latestCycle = await this.whoopService.getLatestCycle(whoopToken.accessToken);
+            this.logger.debug(`Latest Whoop cycle: id=${latestCycle?.id}, start=${latestCycle?.start}, score_state=${latestCycle?.score_state}, kilojoule=${latestCycle?.score?.kilojoule}`);
             if (latestCycle?.score?.kilojoule) {
               const calories = Math.round(latestCycle.score.kilojoule * 0.239);
               // Use the cycle's start time to determine which day it belongs to
