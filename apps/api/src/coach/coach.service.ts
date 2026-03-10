@@ -7,6 +7,8 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import * as crypto from 'crypto';
+import { Prisma } from '@prisma/client';
+import { generateId } from '@nova/utils';
 import { PrismaService } from '../infrastructure/database/prisma.service';
 import { HistoryService } from '../history/history.service';
 
@@ -477,7 +479,77 @@ export class CoachService {
     });
 
     this.logger.log(`Coach ${coachId} created plan v${version} for patient ${patientId}`);
+
+    // Send a chat message to the patient notifying them of the new plan
+    this.notifyPatientOfPlan(patientId, coachId, plan).catch((err) =>
+      this.logger.error(`Failed to notify patient of new plan: ${err}`),
+    );
+
     return plan;
+  }
+
+  /**
+   * Send a Nova chat message to the patient introducing the new coaching plan.
+   */
+  private async notifyPatientOfPlan(
+    patientId: string,
+    coachId: string,
+    plan: { version: number; goals: any; instructions: string },
+  ) {
+    // Get coach name and patient language preference
+    const [coach, patient] = await Promise.all([
+      this.prisma.user.findUnique({ where: { id: coachId }, select: { name: true } }),
+      this.prisma.user.findUnique({ where: { id: patientId }, select: { metadata: true } }),
+    ]);
+
+    const coachName = coach?.name?.split(' ')[0] || 'Tu coach';
+    const meta = (patient?.metadata ?? {}) as Record<string, unknown>;
+    const isEnglish = meta.preferredLanguage === 'en';
+
+    const goals = plan.goals as Record<string, any>;
+    const lines: string[] = [];
+
+    if (isEnglish) {
+      lines.push(`Your coach ${coachName} just set up a new plan for you (v${plan.version}):`);
+      if (goals.dailyCalories) lines.push(`- Daily calorie budget: ${goals.dailyCalories} kcal`);
+      if (goals.weeklyWorkouts) lines.push(`- Workouts per week: ${goals.weeklyWorkouts}`);
+      if (goals.proteinGrams) lines.push(`- Protein target: ${goals.proteinGrams}g/day`);
+      if (goals.weeklyWeightGoal) lines.push(`- Weekly weight goal: ${goals.weeklyWeightGoal} kg`);
+      if (plan.instructions) {
+        lines.push('');
+        lines.push(`Guidelines: ${plan.instructions}`);
+      }
+      lines.push('');
+      lines.push("I'll help you follow this plan. Let's go!");
+    } else {
+      lines.push(`Tu coach ${coachName} acaba de crear un nuevo plan para ti (v${plan.version}):`);
+      if (goals.dailyCalories) lines.push(`- Presupuesto diario: ${goals.dailyCalories} kcal`);
+      if (goals.weeklyWorkouts) lines.push(`- Entrenamientos por semana: ${goals.weeklyWorkouts}`);
+      if (goals.proteinGrams) lines.push(`- Proteína objetivo: ${goals.proteinGrams}g/día`);
+      if (goals.weeklyWeightGoal) lines.push(`- Meta de peso semanal: ${goals.weeklyWeightGoal} kg`);
+      if (plan.instructions) {
+        lines.push('');
+        lines.push(`Indicaciones: ${plan.instructions}`);
+      }
+      lines.push('');
+      lines.push('Voy a ayudarte a seguir este plan. Vamos!');
+    }
+
+    await this.prisma.chatMessage.create({
+      data: {
+        id: generateId(),
+        userId: patientId,
+        type: 'text',
+        content: lines.join('\n'),
+        sender: 'agent',
+        metadata: {
+          source: 'coaching_plan',
+          planVersion: plan.version,
+        } as Prisma.InputJsonValue,
+      },
+    });
+
+    this.logger.debug(`Sent plan notification to patient ${patientId} for plan v${plan.version}`);
   }
 
   async getPlans(coachId: string, patientId: string) {
