@@ -44,6 +44,12 @@ export class CoachController {
     return ok(await this.coachService.getCoachInvitations(user.sub));
   }
 
+  @Get('dashboard-stats')
+  @Roles('coach')
+  async getDashboardStats(@CurrentUser() user: JwtPayload) {
+    return ok(await this.coachService.getDashboardStats(user.sub));
+  }
+
   @Get('patients')
   @Roles('coach')
   async getPatients(@CurrentUser() user: JwtPayload) {

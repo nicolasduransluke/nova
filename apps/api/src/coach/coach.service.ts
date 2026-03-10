@@ -311,6 +311,77 @@ export class CoachService {
     return patients;
   }
 
+  async getDashboardStats(coachId: string) {
+    const relationships = await this.prisma.coachPatient.findMany({
+      where: { coachId, status: 'active' },
+      select: { patientId: true },
+    });
+    const patientIds = relationships.map((r) => r.patientId);
+    if (patientIds.length === 0) {
+      return { totals: { patients: 0, weekMessages: 0, weekEntries: 0, activePatients7d: 0, avgStreak: 0 }, patients: [] };
+    }
+
+    const now = new Date();
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    // Aggregated totals
+    const [weekMessages, weekEntries] = await Promise.all([
+      this.prisma.chatMessage.count({ where: { userId: { in: patientIds }, sender: 'user', createdAt: { gte: sevenDaysAgo } } }),
+      this.prisma.calorieEntry.count({ where: { userId: { in: patientIds }, date: { gte: sevenDaysAgo } } }),
+    ]);
+
+    // Per-patient stats (parallel)
+    const perPatient = await Promise.all(
+      patientIds.map(async (pid) => {
+        const [user, wkMsg, wkEnt, lastMsg, monthEntries] = await Promise.all([
+          this.prisma.user.findUnique({ where: { id: pid }, select: { name: true } }),
+          this.prisma.chatMessage.count({ where: { userId: pid, sender: 'user', createdAt: { gte: sevenDaysAgo } } }),
+          this.prisma.calorieEntry.count({ where: { userId: pid, date: { gte: sevenDaysAgo } } }),
+          this.prisma.chatMessage.findFirst({ where: { userId: pid, sender: 'user' }, orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
+          this.prisma.calorieEntry.findMany({ where: { userId: pid, type: 'intake', date: { gte: thirtyDaysAgo } }, select: { date: true } }),
+        ]);
+
+        // Streak (simple: count consecutive days back from today with entries)
+        const daySet = new Set(monthEntries.map((e) => e.date.toISOString().split('T')[0]));
+        let streak = 0;
+        const d = new Date();
+        for (let i = 0; i < 30; i++) {
+          if (daySet.has(d.toISOString().split('T')[0])) { streak++; } else break;
+          d.setDate(d.getDate() - 1);
+        }
+
+        const activeDays = daySet.size;
+
+        return {
+          patientId: pid,
+          name: user?.name ?? '',
+          weekMessages: wkMsg,
+          weekEntries: wkEnt,
+          streak,
+          activeDays30d: activeDays,
+          lastMessageAt: lastMsg?.createdAt ?? null,
+        };
+      }),
+    );
+
+    const activePatients7d = perPatient.filter((p) => p.weekMessages > 0 || p.weekEntries > 0).length;
+    const avgStreak = perPatient.length > 0
+      ? Math.round(perPatient.reduce((sum, p) => sum + p.streak, 0) / perPatient.length * 10) / 10
+      : 0;
+
+    return {
+      totals: {
+        patients: patientIds.length,
+        weekMessages,
+        weekEntries,
+        activePatients7d,
+        avgStreak,
+      },
+      patients: perPatient,
+    };
+  }
+
   async getPatientDetail(coachId: string, patientId: string) {
     await this.verifyCoachAccess(coachId, patientId);
 

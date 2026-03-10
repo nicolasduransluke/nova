@@ -20,12 +20,33 @@ interface PatientData {
   latestWeight: { weight: number; date: string } | null;
 }
 
+interface DashboardStats {
+  totals: {
+    patients: number;
+    weekMessages: number;
+    weekEntries: number;
+    activePatients7d: number;
+    avgStreak: number;
+  };
+  patients: {
+    patientId: string;
+    name: string;
+    weekMessages: number;
+    weekEntries: number;
+    streak: number;
+    activeDays30d: number;
+    lastMessageAt: string | null;
+  }[];
+}
+
 export default function CoachDashboard() {
   const [patients, setPatients] = useState<PatientData[]>([]);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadPatients();
+    loadStats();
   }, []);
 
   async function loadPatients() {
@@ -34,6 +55,11 @@ export default function CoachDashboard() {
       setPatients(res.data);
     }
     setLoading(false);
+  }
+
+  async function loadStats() {
+    const res = await api.get<DashboardStats>('/api/coach/dashboard-stats');
+    if (res.success && res.data) setStats(res.data);
   }
 
   if (loading) {
@@ -60,6 +86,87 @@ export default function CoachDashboard() {
           + Invite Patient
         </Link>
       </div>
+
+      {/* Consolidated Stats */}
+      {stats && stats.totals.patients > 0 && (
+        <div className="mb-8">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
+            <div className="rounded-xl bg-white/5 border border-white/10 p-4">
+              <p className="text-xs text-white/40 uppercase mb-1">Active Patients</p>
+              <p className="text-2xl font-bold">{stats.totals.activePatients7d}<span className="text-sm text-white/40 font-normal">/{stats.totals.patients}</span></p>
+            </div>
+            <div className="rounded-xl bg-white/5 border border-white/10 p-4">
+              <p className="text-xs text-white/40 uppercase mb-1">Messages (week)</p>
+              <p className="text-2xl font-bold">{stats.totals.weekMessages}</p>
+            </div>
+            <div className="rounded-xl bg-white/5 border border-white/10 p-4">
+              <p className="text-xs text-white/40 uppercase mb-1">Entries (week)</p>
+              <p className="text-2xl font-bold">{stats.totals.weekEntries}</p>
+            </div>
+            <div className="rounded-xl bg-white/5 border border-white/10 p-4">
+              <p className="text-xs text-white/40 uppercase mb-1">Avg Streak</p>
+              <p className="text-2xl font-bold">{stats.totals.avgStreak}d</p>
+            </div>
+            <div className="rounded-xl bg-white/5 border border-white/10 p-4 sm:col-span-3 lg:col-span-1">
+              <p className="text-xs text-white/40 uppercase mb-1">Engagement</p>
+              <div className="flex items-end gap-1 h-8">
+                {stats.patients.map((p) => {
+                  const maxMsg = Math.max(...stats.patients.map((x) => x.weekMessages), 1);
+                  const h = Math.max((p.weekMessages / maxMsg) * 100, 8);
+                  return (
+                    <div
+                      key={p.patientId}
+                      className="flex-1 rounded-sm bg-nova-primary/60"
+                      style={{ height: `${h}%` }}
+                      title={`${p.name}: ${p.weekMessages} msgs`}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Per-patient comparison table */}
+          <div className="rounded-xl bg-white/5 border border-white/10 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/10 text-white/40 text-xs uppercase">
+                  <th className="text-left py-2 px-4">Patient</th>
+                  <th className="text-right py-2 px-4">Msgs/wk</th>
+                  <th className="text-right py-2 px-4">Entries/wk</th>
+                  <th className="text-right py-2 px-4">Streak</th>
+                  <th className="text-right py-2 px-4">Active Days</th>
+                  <th className="text-right py-2 px-4">Last Active</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.patients
+                  .sort((a, b) => b.weekMessages - a.weekMessages)
+                  .map((p) => (
+                    <tr key={p.patientId} className="border-b border-white/5 hover:bg-white/5">
+                      <td className="py-2 px-4 font-medium">{p.name}</td>
+                      <td className="py-2 px-4 text-right">{p.weekMessages}</td>
+                      <td className="py-2 px-4 text-right">{p.weekEntries}</td>
+                      <td className="py-2 px-4 text-right">{p.streak}d</td>
+                      <td className="py-2 px-4 text-right">{p.activeDays30d}/30</td>
+                      <td className="py-2 px-4 text-right text-white/40">
+                        {p.lastMessageAt
+                          ? (() => {
+                              const diff = Date.now() - new Date(p.lastMessageAt).getTime();
+                              const hrs = Math.floor(diff / 3600000);
+                              if (hrs < 1) return `${Math.floor(diff / 60000)}m`;
+                              if (hrs < 24) return `${hrs}h`;
+                              return `${Math.floor(hrs / 24)}d`;
+                            })()
+                          : '—'}
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {patients.length === 0 ? (
         <div className="text-center py-20 border border-white/10 rounded-2xl bg-white/5">
