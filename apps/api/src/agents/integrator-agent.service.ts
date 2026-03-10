@@ -91,6 +91,28 @@ export class IntegratorAgentService extends BaseAgent {
 Be calm, data-driven, brief. No hype language.`;
   }
 
+  /**
+   * When a coaching plan is active, add plan-specific guidance to the base system prompt.
+   * The deficit is always the core metric. The plan just sets the calorie budget.
+   */
+  private getSystemPromptForInput(input: IntegratorInput): string {
+    const base = this.getSystemPrompt();
+    if (!input.coachingContext) return base;
+
+    const goals = input.coachingContext.plan.goals as Record<string, any>;
+    const dailyCal = goals.dailyCalories;
+
+    return base + `
+
+## COACHING PLAN (ACTIVE)
+A professional coach has set a specific plan for this patient${dailyCal ? ` with a daily calorie budget of ${dailyCal} kcal` : ''}.
+- The deficit is always real: burn - intake. Always show it.
+- The calorie BUDGET (how much they can eat) comes from the plan: ${dailyCal ? `${dailyCal} kcal/day` : 'see plan goals'}.
+- "Available to eat" = plan budget - consumed (not TDEE - deficit - consumed).
+- If Whoop shows high burn, acknowledge it, but the budget stays at the plan target.
+- Follow the coach's instructions naturally. Don't say "tu coach dice" — act as if this knowledge is yours.`;
+  }
+
   protected validateInput(input: AgentInput): boolean {
     return true;
   }
@@ -123,9 +145,10 @@ Be calm, data-driven, brief. No hype language.`;
     // For other intents, use LLM
     const conversationHistory = this.buildConversationHistory(input.context);
     const prompt = this.buildIntegrationPrompt(input);
+    const systemPrompt = this.getSystemPromptForInput(input);
 
     const response = await this.claudeClient.generateResponse(prompt, {
-      systemPrompt: this.getSystemPrompt(),
+      systemPrompt,
       maxTokens: 400,
       temperature: 0.7,
       conversationHistory,
@@ -183,22 +206,22 @@ Be calm, data-driven, brief. No hype language.`;
     }
 
     if (dailySummary) {
-      lines.push('');
-      lines.push(isSpanish
-        ? `Hoy: ${dailySummary.intake} kcal consumidas | ${dailySummary.burn} kcal quemadas | Déficit: ${dailySummary.deficit} kcal`
-        : `Today: ${dailySummary.intake} kcal consumed | ${dailySummary.burn} kcal burned | Deficit: ${dailySummary.deficit} kcal`);
-    }
+      const planGoalCal = input.coachingContext
+        ? (input.coachingContext.plan.goals as any).dailyCalories as number | undefined
+        : undefined;
 
-    // Add coaching plan context to meal/activity responses
-    if (input.coachingContext) {
-      const cc = input.coachingContext;
-      const goalCal = (cc.plan.goals as any).dailyCalories;
-      if (goalCal && dailySummary) {
-        const remaining = goalCal - dailySummary.intake;
-        lines.push('');
+      lines.push('');
+      if (planGoalCal) {
+        // With plan: show consumption vs budget + deficit
+        const remaining = planGoalCal - dailySummary.intake;
         lines.push(isSpanish
-          ? `Plan: ${dailySummary.intake}/${goalCal} kcal (${remaining > 0 ? `te quedan ${remaining}` : `pasaste por ${Math.abs(remaining)}`})`
-          : `Plan: ${dailySummary.intake}/${goalCal} kcal (${remaining > 0 ? `${remaining} remaining` : `${Math.abs(remaining)} over`})`);
+          ? `Plan: ${dailySummary.intake}/${planGoalCal} kcal (${remaining > 0 ? `te quedan ${remaining}` : `pasaste por ${Math.abs(remaining)}`}) | Déficit: ${dailySummary.deficit} kcal`
+          : `Plan: ${dailySummary.intake}/${planGoalCal} kcal (${remaining > 0 ? `${remaining} remaining` : `${Math.abs(remaining)} over`}) | Deficit: ${dailySummary.deficit} kcal`);
+      } else {
+        // Without plan: standard summary
+        lines.push(isSpanish
+          ? `Hoy: ${dailySummary.intake} kcal consumidas | ${dailySummary.burn} kcal quemadas | Déficit: ${dailySummary.deficit} kcal`
+          : `Today: ${dailySummary.intake} kcal consumed | ${dailySummary.burn} kcal burned | Deficit: ${dailySummary.deficit} kcal`);
       }
     }
 
@@ -506,7 +529,17 @@ Keep it brief.`;
 Your response MUST tell them there are no entries to modify today. Keep it brief.`;
       }
     } else if (intent === 'question') {
-      const remainingToEat = dailySummary ? (dailySummary.tdee + dailySummary.burn - dailySummary.targetDeficit - dailySummary.intake) : null;
+      // When coaching plan is active, remaining = plan target - consumed (simple)
+      // Otherwise fallback to TDEE-based deficit calculation
+      const planCalTarget = input.coachingContext?.plan.goals
+        ? (input.coachingContext.plan.goals as any).dailyCalories as number | undefined
+        : undefined;
+      const remainingToEat = dailySummary
+        ? (planCalTarget
+            ? planCalTarget - dailySummary.intake
+            : dailySummary.tdee + dailySummary.burn - dailySummary.targetDeficit - dailySummary.intake)
+        : null;
+      const usingPlanTarget = !!planCalTarget;
       const lowerMsg = message.toLowerCase();
       const isComparisonQuestion = lowerMsg.match(/más calor[ií]as|mas calor[ií]as|tiene más|tiene mas|qué engorda|que engorda|cuál tiene|cual tiene| o una? /);
       const isFoodQuestion = lowerMsg.match(/almorzar|cenar|desayunar|comer|snack|merienda|lunch|dinner|breakfast|eat|porción|porcion/);
@@ -530,28 +563,43 @@ Your response MUST:
 3. Do NOT show daily totals or deficit - this is an informational question, nothing was registered
 4. Do NOT say "Registrado" - nothing was logged`;
       } else if (isFoodQuestion && remainingToEat != null) {
+        const budgetLabel = usingPlanTarget
+          ? `Their coach's plan allows ${planCalTarget} kcal/day. They've consumed ${dailySummary!.intake} kcal so far, leaving ${remainingToEat} kcal.`
+          : `Their remaining calorie budget is ${remainingToEat} kcal.`;
         if (isAskingAboutSpecificFood) {
-          prompt += `The user is asking about a SPECIFIC food: "${message}". Their remaining calorie budget is ${remainingToEat} kcal.
+          prompt += `The user is asking about a SPECIFIC food: "${message}". ${budgetLabel}
 
 Your response MUST:
 1. Give the typical calories PER PORTION of that specific food (e.g., "30g de frutos secos = ~180 kcal")
 2. Recommend a reasonable portion size based on their budget
 3. Say how much budget they'd have left after eating it
 4. If it's a high-calorie food, suggest a lighter alternative if appropriate
-
+${usingPlanTarget ? `\nReference the plan target (${planCalTarget} kcal), not TDEE or deficit.` : ''}
 Be specific to what they asked about. Don't give generic meal suggestions.`;
         } else {
-          prompt += `The user is asking what they can eat. Their remaining calorie budget is ${remainingToEat} kcal.
+          prompt += `The user is asking what they can eat. ${budgetLabel}
 
 Your response MUST:
-1. State how many calories they have left to eat
+1. State how many calories they have left to eat${usingPlanTarget ? ` (based on the plan target of ${planCalTarget} kcal)` : ''}
 2. Suggest 2-3 SPECIFIC meal options with estimated calories that fit their budget
 3. Mention how much budget they'd have left after each option
-
+${usingPlanTarget ? `\nFrame everything around the plan target, not deficit or TDEE.` : ''}
 Be a helpful coach - give concrete, actionable suggestions, not just numbers.`;
         }
       } else if (isProgressQuestion || (!isComparisonQuestion && !isAskingAboutSpecificFood)) {
-        prompt += `Answer the user's question using the data available. Show daily summary if relevant. Be helpful and specific.`;
+        if (usingPlanTarget && input.coachingContext) {
+          const cc = input.coachingContext;
+          prompt += `The user is asking about their progress. They have a coaching plan.
+
+Your response MUST:
+1. Show today's consumption vs plan target: ${dailySummary?.intake ?? 0}/${planCalTarget} kcal (${remainingToEat! > 0 ? `${remainingToEat} remaining` : `${Math.abs(remainingToEat!)} over`})
+2. Show weekly compliance: ${cc.week.daysOnTarget}/${cc.week.daysTracked} days on target (${cc.week.complianceRate}%)
+${cc.week.weightChange != null ? `3. Weight change this week: ${cc.week.weightChange > 0 ? '+' : ''}${cc.week.weightChange} kg` : ''}
+${cc.plan.instructions ? `\nRemind them of relevant plan guidelines if appropriate.` : ''}
+Frame progress around the plan, not generic deficit. Be brief and encouraging.`;
+        } else {
+          prompt += `Answer the user's question using the data available. Show daily summary if relevant. Be helpful and specific.`;
+        }
       } else {
         prompt += `Answer the user's question briefly. Be helpful and specific.`;
       }
