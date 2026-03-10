@@ -59,6 +59,15 @@ export class CoachController {
     return ok(await this.coachService.getPatientDetail(user.sub, patientId));
   }
 
+  @Get('patients/:patientId/usage')
+  @Roles('coach')
+  async getPatientUsage(
+    @CurrentUser() user: JwtPayload,
+    @Param('patientId') patientId: string,
+  ) {
+    return ok(await this.coachService.getPatientUsage(user.sub, patientId));
+  }
+
   @Get('patients/:patientId/history')
   @Roles('coach')
   async getPatientHistory(

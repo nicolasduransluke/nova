@@ -333,6 +333,70 @@ export class CoachService {
     return { patient, profile, latestWeight };
   }
 
+  async getPatientUsage(coachId: string, patientId: string) {
+    await this.verifyCoachAccess(coachId, patientId);
+
+    const now = new Date();
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    const [
+      totalMessages,
+      weekMessages,
+      totalEntries,
+      weekEntries,
+      totalWeightLogs,
+      photoMessages,
+      lastMessage,
+      lastEntry,
+      monthEntries,
+    ] = await Promise.all([
+      this.prisma.chatMessage.count({ where: { userId: patientId, sender: 'user' } }),
+      this.prisma.chatMessage.count({ where: { userId: patientId, sender: 'user', createdAt: { gte: sevenDaysAgo } } }),
+      this.prisma.calorieEntry.count({ where: { userId: patientId } }),
+      this.prisma.calorieEntry.count({ where: { userId: patientId, date: { gte: sevenDaysAgo } } }),
+      this.prisma.weightLog.count({ where: { userId: patientId } }),
+      this.prisma.chatMessage.count({ where: { userId: patientId, sender: 'user', type: 'image' } }),
+      this.prisma.chatMessage.findFirst({ where: { userId: patientId, sender: 'user' }, orderBy: { createdAt: 'desc' } }),
+      this.prisma.calorieEntry.findFirst({ where: { userId: patientId }, orderBy: { date: 'desc' } }),
+      this.prisma.calorieEntry.findMany({
+        where: { userId: patientId, type: 'intake', date: { gte: thirtyDaysAgo } },
+        select: { date: true },
+      }),
+    ]);
+
+    // Calculate active days (unique days with entries in last 30 days)
+    const activeDays = new Set(monthEntries.map(e => e.date.toISOString().split('T')[0])).size;
+
+    // Calculate streak
+    let streak = 0;
+    const checkDate = new Date();
+    for (let i = 0; i < 60; i++) {
+      const dayStart = new Date(Date.UTC(checkDate.getUTCFullYear(), checkDate.getUTCMonth(), checkDate.getUTCDate()));
+      const dayEnd = new Date(dayStart);
+      dayEnd.setDate(dayEnd.getDate() + 1);
+      const count = await this.prisma.calorieEntry.count({
+        where: { userId: patientId, type: 'intake', date: { gte: dayStart, lt: dayEnd } },
+      });
+      if (count === 0) break;
+      streak++;
+      checkDate.setDate(checkDate.getDate() - 1);
+    }
+
+    return {
+      totalMessages,
+      weekMessages,
+      totalEntries,
+      weekEntries,
+      totalWeightLogs,
+      photoMessages,
+      activeDays30d: activeDays,
+      streak,
+      lastMessageAt: lastMessage?.createdAt || null,
+      lastEntryAt: lastEntry?.date || null,
+    };
+  }
+
   async getPatientHistory(coachId: string, patientId: string, days: number) {
     await this.verifyCoachAccess(coachId, patientId);
     return this.historyService.getDailyHistory(patientId, days);

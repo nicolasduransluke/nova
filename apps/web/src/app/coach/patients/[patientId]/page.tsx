@@ -143,7 +143,7 @@ export default function PatientDetailPage() {
       </div>
 
       {/* Tab content */}
-      {tab === 'overview' && <OverviewTab profile={profile} latestWeight={latestWeight} patient={patient} />}
+      {tab === 'overview' && <OverviewTab profile={profile} latestWeight={latestWeight} patient={patient} patientId={patientId} />}
       {tab === 'plan' && <PlanTab patientId={patientId} />}
       {tab === 'history' && <HistoryTab history={history} />}
       {tab === 'weight' && <WeightTab weightHistory={weightHistory} profile={profile} />}
@@ -153,15 +153,38 @@ export default function PatientDetailPage() {
   );
 }
 
+interface UsageStats {
+  totalMessages: number;
+  weekMessages: number;
+  totalEntries: number;
+  weekEntries: number;
+  totalWeightLogs: number;
+  photoMessages: number;
+  activeDays30d: number;
+  streak: number;
+  lastMessageAt: string | null;
+  lastEntryAt: string | null;
+}
+
 function OverviewTab({
   profile,
   latestWeight,
   patient,
+  patientId,
 }: {
   profile: PatientDetail['profile'];
   latestWeight: PatientDetail['latestWeight'];
   patient: PatientDetail['patient'];
+  patientId: string;
 }) {
+  const [usage, setUsage] = useState<UsageStats | null>(null);
+
+  useEffect(() => {
+    api.get<UsageStats>(`/api/coach/patients/${patientId}/usage`).then((res) => {
+      if (res.success && res.data) setUsage(res.data);
+    });
+  }, [patientId]);
+
   if (!profile) {
     return <p className="text-white/40">This patient hasn&apos;t set up their profile yet.</p>;
   }
@@ -191,6 +214,17 @@ function OverviewTab({
     { label: 'Objective', value: profile.objective.replace('_', ' ') },
   ];
 
+  function timeAgo(dateStr: string | null) {
+    if (!dateStr) return 'Never';
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    return `${days}d ago`;
+  }
+
   return (
     <div>
       <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-3">
@@ -201,6 +235,45 @@ function OverviewTab({
           </div>
         ))}
       </div>
+
+      {/* Usage / Adoption */}
+      {usage && (
+        <div className="mt-6">
+          <h3 className="text-sm font-semibold text-white/60 uppercase mb-3">Adoption & Usage</h3>
+          <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+            <div className="rounded-xl bg-white/5 border border-white/10 p-4">
+              <p className="text-xs text-white/40 uppercase mb-1">Streak</p>
+              <p className="text-lg font-semibold">{usage.streak}d</p>
+            </div>
+            <div className="rounded-xl bg-white/5 border border-white/10 p-4">
+              <p className="text-xs text-white/40 uppercase mb-1">Active Days (30d)</p>
+              <p className="text-lg font-semibold">{usage.activeDays30d}</p>
+            </div>
+            <div className="rounded-xl bg-white/5 border border-white/10 p-4">
+              <p className="text-xs text-white/40 uppercase mb-1">Messages (week)</p>
+              <p className="text-lg font-semibold">{usage.weekMessages}</p>
+            </div>
+            <div className="rounded-xl bg-white/5 border border-white/10 p-4">
+              <p className="text-xs text-white/40 uppercase mb-1">Entries (week)</p>
+              <p className="text-lg font-semibold">{usage.weekEntries}</p>
+            </div>
+            <div className="rounded-xl bg-white/5 border border-white/10 p-4">
+              <p className="text-xs text-white/40 uppercase mb-1">Food Photos</p>
+              <p className="text-lg font-semibold">{usage.photoMessages}</p>
+            </div>
+            <div className="rounded-xl bg-white/5 border border-white/10 p-4">
+              <p className="text-xs text-white/40 uppercase mb-1">Weight Logs</p>
+              <p className="text-lg font-semibold">{usage.totalWeightLogs}</p>
+            </div>
+          </div>
+          <div className="flex gap-6 mt-3 text-xs text-white/30">
+            <span>Last message: {timeAgo(usage.lastMessageAt)}</span>
+            <span>Last entry: {timeAgo(usage.lastEntryAt)}</span>
+            <span>Total messages: {usage.totalMessages} | Total entries: {usage.totalEntries}</span>
+          </div>
+        </div>
+      )}
+
       <p className="text-xs text-white/30 mt-4">
         Member since {new Date(patient.createdAt).toLocaleDateString()}
       </p>
@@ -539,7 +612,7 @@ function PlanTab({ patientId }: { patientId: string }) {
         />
 
         {/* Live Preview */}
-        {showPreview && (
+        {showPreview && parsedGoals && (
           <div className="mt-4 rounded-lg bg-white/5 border border-nova-primary/30 p-4">
             <p className="text-sm text-nova-primary font-medium mb-3">Preview del plan:</p>
             <div className="grid grid-cols-2 gap-3">
