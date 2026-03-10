@@ -8,7 +8,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 interface InvitationInfo {
   coachName: string;
   coachEmail: string;
-  patientEmail: string;
+  patientEmail: string | null;
   expiresAt: string;
 }
 
@@ -30,7 +30,10 @@ export default function AcceptInvitePage() {
       const data = await res.json();
       if (data.success && data.data) {
         setInvitation(data.data);
-        setEmail(data.data.patientEmail);
+        // Pre-fill email only if invitation was created for a specific email
+        if (data.data.patientEmail) {
+          setEmail(data.data.patientEmail);
+        }
       }
     } catch {
       // Failed to load
@@ -158,10 +161,10 @@ export default function AcceptInvitePage() {
             Al aceptar, tu coach podra ver tu historial de calorias, peso y conversaciones con Nova para guiarte mejor.
           </p>
 
-          {/* Email confirmation */}
+          {/* Email input */}
           <div className="mb-6">
             <label className="block text-sm font-medium text-white/70 mb-2">
-              Confirma tu email
+              Tu email en Nova
             </label>
             <input
               type="email"
@@ -171,7 +174,7 @@ export default function AcceptInvitePage() {
               placeholder="tu@email.com"
             />
             <p className="text-xs text-white/30 mt-2">
-              Debe ser el mismo email con el que usas Nova
+              Ingresa el email con el que te registraste en Nova
             </p>
           </div>
 

@@ -35,7 +35,7 @@ export class CoachController {
     @CurrentUser() user: JwtPayload,
     @Body() dto: InvitePatientDto,
   ) {
-    return ok(await this.coachService.invitePatient(user.sub, dto.patientEmail));
+    return ok(await this.coachService.invitePatient(user.sub, dto.patientEmail ?? undefined));
   }
 
   @Get('invitations')

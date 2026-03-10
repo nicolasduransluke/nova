@@ -84,7 +84,7 @@ model CoachPatient {
 model CoachInvitation {
   id           String    @id @default(uuid())
   coachId      String    @map("coach_id")
-  patientEmail String    @map("patient_email")
+  patientEmail String?   @map("patient_email")
   status       String    @default("pending") // "pending", "accepted", "declined", "expired"
   token        String    @unique // unique invitation token
   expiresAt    DateTime  @map("expires_at")

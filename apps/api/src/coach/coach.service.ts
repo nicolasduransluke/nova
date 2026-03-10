@@ -11,6 +11,7 @@ import { Prisma } from '@prisma/client';
 import { generateId } from '@nova/utils';
 import { PrismaService } from '../infrastructure/database/prisma.service';
 import { HistoryService } from '../history/history.service';
+import { PushNotificationService } from '../coaching/push-notification.service';
 
 @Injectable()
 export class CoachService {
@@ -19,48 +20,37 @@ export class CoachService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly historyService: HistoryService,
+    private readonly pushNotificationService: PushNotificationService,
   ) {}
 
   // ─── Invitations ───────────────────────────────────────────
 
-  async invitePatient(coachId: string, patientEmail: string) {
+  async invitePatient(coachId: string, patientEmail?: string) {
     const coach = await this.prisma.user.findUnique({ where: { id: coachId } });
     if (!coach || coach.role !== 'coach') {
       throw new ForbiddenException('Only coaches can invite patients');
     }
 
-    if (coach.email.toLowerCase() === patientEmail.toLowerCase()) {
+    if (patientEmail && coach.email.toLowerCase() === patientEmail.toLowerCase()) {
       throw new BadRequestException('Cannot invite yourself');
     }
 
-    // Check if relationship already exists
-    const existingPatient = await this.prisma.user.findUnique({
-      where: { email: patientEmail.toLowerCase() },
-    });
-
-    if (existingPatient) {
-      const existingRelation = await this.prisma.coachPatient.findUnique({
-        where: {
-          coachId_patientId: { coachId, patientId: existingPatient.id },
-        },
+    // If email provided, check if relationship already exists
+    if (patientEmail) {
+      const existingPatient = await this.prisma.user.findUnique({
+        where: { email: patientEmail.toLowerCase() },
       });
-      if (existingRelation && existingRelation.status === 'active') {
-        throw new ConflictException('This patient is already linked to you');
+
+      if (existingPatient) {
+        const existingRelation = await this.prisma.coachPatient.findUnique({
+          where: {
+            coachId_patientId: { coachId, patientId: existingPatient.id },
+          },
+        });
+        if (existingRelation && existingRelation.status === 'active') {
+          throw new ConflictException('This patient is already linked to you');
+        }
       }
-    }
-
-    // Check for pending invitation
-    const pendingInvite = await this.prisma.coachInvitation.findFirst({
-      where: {
-        coachId,
-        patientEmail: patientEmail.toLowerCase(),
-        status: 'pending',
-        expiresAt: { gt: new Date() },
-      },
-    });
-
-    if (pendingInvite) {
-      throw new ConflictException('An invitation is already pending for this email');
     }
 
     const token = crypto.randomBytes(32).toString('hex');
@@ -69,13 +59,13 @@ export class CoachService {
     const invitation = await this.prisma.coachInvitation.create({
       data: {
         coachId,
-        patientEmail: patientEmail.toLowerCase(),
+        patientEmail: patientEmail?.toLowerCase() || null,
         token,
         expiresAt,
       },
     });
 
-    this.logger.log(`Coach ${coachId} invited ${patientEmail}`);
+    this.logger.log(`Coach ${coachId} created invite link${patientEmail ? ` for ${patientEmail}` : ''}`);
 
     return {
       id: invitation.id,
@@ -159,7 +149,8 @@ export class CoachService {
       throw new BadRequestException('Invitation has expired');
     }
 
-    if (email.toLowerCase() !== invitation.patientEmail) {
+    // If invitation was created for a specific email, validate it
+    if (invitation.patientEmail && email.toLowerCase() !== invitation.patientEmail) {
       throw new ForbiddenException('This invitation is not for this email');
     }
 
@@ -169,6 +160,11 @@ export class CoachService {
 
     if (!patient) {
       throw new NotFoundException('No account found with this email. Please register in the Nova app first.');
+    }
+
+    // Prevent coach from accepting their own invitation
+    if (patient.id === invitation.coachId) {
+      throw new BadRequestException('Cannot accept your own invitation');
     }
 
     await this.prisma.coachPatient.upsert({
@@ -550,6 +546,35 @@ export class CoachService {
     });
 
     this.logger.debug(`Sent plan notification to patient ${patientId} for plan v${plan.version}`);
+
+    // Send push notification
+    await this.sendPlanPush(
+      patientId,
+      isEnglish ? `New plan from ${coachName}` : `Nuevo plan de ${coachName}`,
+      isEnglish
+        ? `${coachName} set up a new nutrition plan for you. Open Nova to see the details.`
+        : `${coachName} creó un nuevo plan nutricional para ti. Abre Nova para ver los detalles.`,
+    );
+  }
+
+  /** Look up patient's push token and send a push notification. */
+  private async sendPlanPush(patientId: string, title: string, body: string) {
+    try {
+      const patient = await this.prisma.user.findUnique({
+        where: { id: patientId },
+        select: { pushToken: true },
+      });
+      if (patient?.pushToken) {
+        await this.pushNotificationService.sendPushNotification(
+          patient.pushToken,
+          title,
+          body,
+          { type: 'coaching_plan' },
+        );
+      }
+    } catch (err) {
+      this.logger.error(`Failed to send plan push to ${patientId}: ${err}`);
+    }
   }
 
   async getPlans(coachId: string, patientId: string) {
@@ -663,10 +688,10 @@ export class CoachService {
       }
     }
 
-    if (instructionsChanged) {
+    if (instructionsChanged && newInstructions) {
       changes.push(isEnglish
-        ? '- Updated plan guidelines'
-        : '- Indicaciones actualizadas');
+        ? `- Guidelines: ${newInstructions}`
+        : `- Indicaciones: ${newInstructions}`);
     }
 
     if (changes.length === 0) return;
@@ -691,6 +716,15 @@ export class CoachService {
     });
 
     this.logger.debug(`Sent plan edit notification to patient ${patientId}`);
+
+    // Send push notification
+    await this.sendPlanPush(
+      patientId,
+      isEnglish ? `Plan updated by ${coachName}` : `Plan actualizado por ${coachName}`,
+      isEnglish
+        ? `${coachName} made changes to your plan. Open Nova to see what changed.`
+        : `${coachName} hizo cambios en tu plan. Abre Nova para ver qué cambió.`,
+    );
   }
 
   async getPlanProgress(coachId: string, patientId: string) {

@@ -2,7 +2,7 @@
   "expo": {
     "name": "NOVA",
     "slug": "nova-mobile",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "nova",
@@ -18,7 +18,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.cotalker.nova-mobile",
-      "buildNumber": "19",
+      "buildNumber": "22",
       "usesAppleSignIn": true,
       "infoPlist": {
         "NSCameraUsageDescription": "NOVA necesita acceso a tu cámara para tomar fotos de tus comidas.",
