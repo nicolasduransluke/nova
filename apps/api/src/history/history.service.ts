@@ -114,14 +114,25 @@ export class HistoryService {
           try {
             // Fetch the latest cycle (may have started yesterday but still in progress)
             const latestCycle = await this.whoopService.getLatestCycle(whoopToken.accessToken);
-            this.logger.debug(`Latest Whoop cycle: id=${latestCycle?.id}, start=${latestCycle?.start}, score_state=${latestCycle?.score_state}, kilojoule=${latestCycle?.score?.kilojoule}`);
+            this.logger.debug(`Latest Whoop cycle: id=${latestCycle?.id}, start=${latestCycle?.start}, end=${latestCycle?.end}, score_state=${latestCycle?.score_state}, kilojoule=${latestCycle?.score?.kilojoule}`);
             if (latestCycle?.score?.kilojoule) {
               const calories = Math.round(latestCycle.score.kilojoule * 0.239);
-              // Use the cycle's start time to determine which day it belongs to
-              const cycleStartLocal = toDateKeyInTimezone(new Date(latestCycle.start), userTimezone);
-              if (!whoopCaloriesByDate.has(cycleStartLocal)) {
-                whoopCaloriesByDate.set(cycleStartLocal, calories);
-                this.logger.debug(`Assigned in-progress Whoop cycle to ${cycleStartLocal}: ${calories} cal`);
+              let dateKey = toDateKeyInTimezone(new Date(latestCycle.start), userTimezone);
+
+              // Whoop cycles start when the user falls asleep (evening/night).
+              // An in-progress cycle (end=null) that started at 11 PM on March 8
+              // actually covers March 9's activity. If the start date already has
+              // data from a completed cycle, shift to the next calendar day.
+              if (whoopCaloriesByDate.has(dateKey) && !latestCycle.end) {
+                const nextDay = new Date(dateKey + 'T12:00:00Z');
+                nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+                dateKey = nextDay.toISOString().split('T')[0];
+                this.logger.debug(`Whoop cycle start maps to ${toDateKeyInTimezone(new Date(latestCycle.start), userTimezone)} (already has data), shifted to ${dateKey}`);
+              }
+
+              if (!whoopCaloriesByDate.has(dateKey)) {
+                whoopCaloriesByDate.set(dateKey, calories);
+                this.logger.debug(`Assigned in-progress Whoop cycle to ${dateKey}: ${calories} cal`);
               }
             }
           } catch (e) {
