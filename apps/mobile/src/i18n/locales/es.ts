@@ -57,6 +57,7 @@ const es = {
     consumed: 'Consumidas',
     burned: 'Quemadas',
     tdeeEstimated: 'TDEE est.',
+    deficit: 'Déficit',
     available: 'Disponible',
     toEat: 'para comer',
     weight: 'Peso',

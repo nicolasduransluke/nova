@@ -59,6 +59,7 @@ const en: Translations = {
     consumed: 'Consumed',
     burned: 'Burned',
     tdeeEstimated: 'TDEE est.',
+    deficit: 'Deficit',
     available: 'Available',
     toEat: 'to eat',
     weight: 'Weight',

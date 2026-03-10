@@ -212,10 +212,10 @@ export class HistoryService {
         });
       }
 
-      // If burn comes from Whoop, it already includes TDEE
-      // For manual entries, we'd need to add TDEE but we don't have profile TDEE calculation here
-      // So for history, deficit = burn - intake (Whoop already has TDEE included)
-      const deficit = burn - intake;
+      // If burn comes from Whoop, it already includes TDEE (total daily burn)
+      // For manual/no burn, use TDEE as the base burn + any manual exercise
+      const totalBurn = burnSource === 'whoop' ? burn : tdee + burn;
+      const deficit = totalBurn - intake;
 
       const summary: DailySummary = {
         date: new Date(dateKey),
