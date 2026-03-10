@@ -103,16 +103,28 @@ export class HistoryService {
         const whoopResult = await this.whoopService.getCyclesForRange(whoopToken.accessToken, since, now);
         whoopCaloriesByDate = whoopResult.caloriesByDate;
 
-        // Whoop range queries don't include today's in-progress cycle — fetch it separately
+        // Whoop range queries only return COMPLETED cycles (with scores).
+        // The current in-progress cycle (yesterday or today) won't appear in the range query.
+        // Fetch it separately and assign to the correct day based on cycle start time.
         const todayKey = toDateKeyInTimezone(new Date(), userTimezone);
-        if (!whoopCaloriesByDate.has(todayKey)) {
+        const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const yesterdayKey = toDateKeyInTimezone(yesterday, userTimezone);
+
+        if (!whoopCaloriesByDate.has(todayKey) || !whoopCaloriesByDate.has(yesterdayKey)) {
           try {
-            const todaySummary = await this.whoopService.getDailySummary(whoopToken.accessToken);
-            if (todaySummary.caloriesBurned > 0) {
-              whoopCaloriesByDate.set(todayKey, todaySummary.caloriesBurned);
+            // Fetch the latest cycle (may have started yesterday but still in progress)
+            const latestCycle = await this.whoopService.getLatestCycle(whoopToken.accessToken);
+            if (latestCycle?.score?.kilojoule) {
+              const calories = Math.round(latestCycle.score.kilojoule * 0.239);
+              // Use the cycle's start time to determine which day it belongs to
+              const cycleStartLocal = toDateKeyInTimezone(new Date(latestCycle.start), userTimezone);
+              if (!whoopCaloriesByDate.has(cycleStartLocal)) {
+                whoopCaloriesByDate.set(cycleStartLocal, calories);
+                this.logger.debug(`Assigned in-progress Whoop cycle to ${cycleStartLocal}: ${calories} cal`);
+              }
             }
           } catch (e) {
-            this.logger.debug(`Could not fetch today's Whoop cycle: ${e}`);
+            this.logger.debug(`Could not fetch latest Whoop cycle: ${e}`);
           }
         }
 

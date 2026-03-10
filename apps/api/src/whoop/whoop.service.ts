@@ -238,6 +238,33 @@ export class WhoopService {
   }
 
   /**
+   * Get the latest/most recent cycle (may be in-progress, started yesterday).
+   * Uses a 2-day window to catch cycles that started yesterday but haven't closed.
+   */
+  async getLatestCycle(accessToken: string): Promise<WhoopCycle | null> {
+    const now = new Date();
+    const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
+    const response = await fetch(
+      `${this.baseUrl}/cycle?start=${twoDaysAgo.toISOString()}&end=${now.toISOString()}&limit=5`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      },
+    );
+
+    if (!response.ok) {
+      this.logger.error(`Failed to get latest cycle: ${response.statusText}`);
+      return null;
+    }
+
+    const data = await response.json();
+    const records = data.records || [];
+    // Return the most recent cycle (first in the list, sorted by start desc by Whoop API)
+    return records[0] || null;
+  }
+
+  /**
    * Get today's recovery
    */
   async getTodayRecovery(accessToken: string): Promise<WhoopRecovery | null> {
