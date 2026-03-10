@@ -136,6 +136,85 @@ export class CoachService {
     return { message: 'Invitation accepted' };
   }
 
+  async acceptInvitationByEmail(token: string, email: string) {
+    const invitation = await this.prisma.coachInvitation.findUnique({
+      where: { token },
+    });
+
+    if (!invitation) {
+      throw new NotFoundException('Invitation not found');
+    }
+
+    if (invitation.status !== 'pending') {
+      throw new BadRequestException(`Invitation already ${invitation.status}`);
+    }
+
+    if (invitation.expiresAt < new Date()) {
+      await this.prisma.coachInvitation.update({
+        where: { id: invitation.id },
+        data: { status: 'expired' },
+      });
+      throw new BadRequestException('Invitation has expired');
+    }
+
+    if (email.toLowerCase() !== invitation.patientEmail) {
+      throw new ForbiddenException('This invitation is not for this email');
+    }
+
+    const patient = await this.prisma.user.findUnique({
+      where: { email: email.toLowerCase() },
+    });
+
+    if (!patient) {
+      throw new NotFoundException('No account found with this email. Please register in the Nova app first.');
+    }
+
+    await this.prisma.coachPatient.upsert({
+      where: {
+        coachId_patientId: {
+          coachId: invitation.coachId,
+          patientId: patient.id,
+        },
+      },
+      update: { status: 'active' },
+      create: {
+        coachId: invitation.coachId,
+        patientId: patient.id,
+        status: 'active',
+      },
+    });
+
+    await this.prisma.coachInvitation.update({
+      where: { id: invitation.id },
+      data: { status: 'accepted', acceptedAt: new Date() },
+    });
+
+    this.logger.log(`Patient ${patient.id} (${email}) accepted invitation via link from coach ${invitation.coachId}`);
+    return { message: 'Invitation accepted' };
+  }
+
+  async getInvitationInfo(token: string) {
+    const invitation = await this.prisma.coachInvitation.findUnique({
+      where: { token },
+      include: { coach: { select: { id: true, name: true, email: true } } },
+    });
+
+    if (!invitation || invitation.status !== 'pending') {
+      return null;
+    }
+
+    if (invitation.expiresAt < new Date()) {
+      return null;
+    }
+
+    return {
+      coachName: invitation.coach.name,
+      coachEmail: invitation.coach.email,
+      patientEmail: invitation.patientEmail,
+      expiresAt: invitation.expiresAt,
+    };
+  }
+
   async declineInvitation(patientId: string, token: string) {
     const invitation = await this.prisma.coachInvitation.findUnique({
       where: { token },
