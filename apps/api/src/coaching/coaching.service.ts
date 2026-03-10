@@ -88,8 +88,11 @@ export class CoachingService {
         const todayIntake = await this.getTodayIntake(user.id, user.timezone);
         if (todayIntake >= threshold) continue;
 
-        // Get coach style instructions
-        const style = await this.getStyleInstructions(user.id);
+        // Get coach style + active plan
+        const [style, planInstructions] = await Promise.all([
+          this.getStyleInstructions(user.id),
+          this.getActivePlanInstructions(user.id),
+        ]);
 
         // Generate message
         const lang = user.language;
@@ -103,9 +106,10 @@ export class CoachingService {
         const prompt = `Generate a brief, friendly meal reminder in ${isSpanish ? 'Spanish' : 'English'} for ${user.name}.
 It's ${timeLabel} and they've only logged ${todayIntake} kcal so far today.
 Remind them to log their ${mealLabel}.
+IMPORTANT: If the coaching plan includes fasting or specific meal timing, adapt your message accordingly. Do NOT tell the patient to eat if their plan says they should be fasting at this hour. Instead, acknowledge their fasting and encourage them to stay on track.
 Keep it under 2 sentences, warm and motivating. Don't use emojis.`;
 
-        const systemPrompt = this.buildSystemPrompt(isSpanish, style);
+        const systemPrompt = this.buildSystemPrompt(isSpanish, style, planInstructions);
 
         const message = await this.claudeClient.generateResponse(prompt, {
           systemPrompt,
@@ -162,7 +166,10 @@ Keep it under 2 sentences, warm and motivating. Don't use emojis.`;
           todayBurn,
         );
 
-        const style = await this.getStyleInstructions(user.id);
+        const [style, planInstructions] = await Promise.all([
+          this.getStyleInstructions(user.id),
+          this.getActivePlanInstructions(user.id),
+        ]);
         const lang = user.language;
         const isSpanish = lang !== 'en';
         const prompt = `Generate a brief daily summary in ${isSpanish ? 'Spanish' : 'English'} for ${user.name}. Here are today's numbers:
@@ -176,7 +183,7 @@ Keep it under 2 sentences, warm and motivating. Don't use emojis.`;
 ${summary.deficit >= summary.targetDeficit ? 'They met their deficit goal today.' : 'They fell short of their deficit goal.'}
 Keep it under 3 sentences. Be encouraging and data-focused. Don't use emojis.`;
 
-        const systemPrompt = this.buildSystemPrompt(isSpanish, style);
+        const systemPrompt = this.buildSystemPrompt(isSpanish, style, planInstructions);
 
         const message = await this.claudeClient.generateResponse(prompt, {
           systemPrompt,
@@ -211,14 +218,17 @@ Keep it under 3 sentences. Be encouraging and data-focused. Don't use emojis.`;
         if (milestones.includes(streak)) {
           const alreadySent = await this.hasCoachingLog(user.id, 'streak', `day_${streak}`, today);
           if (!alreadySent) {
-            const style = await this.getStyleInstructions(user.id);
+            const [style, planInstructions] = await Promise.all([
+          this.getStyleInstructions(user.id),
+          this.getActivePlanInstructions(user.id),
+        ]);
             const lang = user.language;
             const isSpanish = lang !== 'en';
             const prompt = `Generate a streak celebration message in ${isSpanish ? 'Spanish' : 'English'} for ${user.name}.
 They have logged their meals for ${streak} consecutive days!
 Keep it under 2 sentences. Be enthusiastic but not over-the-top. Don't use emojis.`;
 
-            const systemPrompt = this.buildSystemPrompt(isSpanish, style);
+            const systemPrompt = this.buildSystemPrompt(isSpanish, style, planInstructions);
 
             const message = await this.claudeClient.generateResponse(prompt, {
               systemPrompt,
@@ -281,7 +291,10 @@ Keep it under 2 sentences. Be enthusiastic but not over-the-top. Don't use emoji
           dailyMap[dateKey] = (dailyMap[dateKey] || 0) + entry.calories;
         }
 
-        const style = await this.getStyleInstructions(user.id);
+        const [style, planInstructions] = await Promise.all([
+          this.getStyleInstructions(user.id),
+          this.getActivePlanInstructions(user.id),
+        ]);
         const lang = user.language;
         const isSpanish = lang !== 'en';
         const prompt = `Analyze this 2-week daily calorie intake data and find patterns.
@@ -297,7 +310,7 @@ If there's NO interesting pattern, respond with exactly: NO_PATTERN
 Otherwise, generate a brief insight message in ${isSpanish ? 'Spanish' : 'English'} (2-3 sentences).
 Be specific with numbers. Don't use emojis.`;
 
-        const systemPrompt = this.buildSystemPrompt(isSpanish, style);
+        const systemPrompt = this.buildSystemPrompt(isSpanish, style, planInstructions);
 
         const message = await this.claudeClient.generateResponse(prompt, {
           systemPrompt,
@@ -538,7 +551,10 @@ Be specific with numbers. Don't use emojis.`;
       const alreadySent = await this.hasCoachingLog(user.id, 'streak', `weight_${currentFloor}`, today);
       if (alreadySent) return;
 
-      const style = await this.getStyleInstructions(user.id);
+      const [style, planInstructions] = await Promise.all([
+          this.getStyleInstructions(user.id),
+          this.getActivePlanInstructions(user.id),
+        ]);
       const remaining = (current - goal).toFixed(1);
       const lang = user.language;
       const isSpanish = lang !== 'en';
@@ -547,7 +563,7 @@ They just crossed below ${previousFloor} kg and are now at ${current} kg.
 Their goal is ${goal} kg (${remaining} kg remaining).
 Keep it under 2 sentences. Don't use emojis.`;
 
-      const systemPrompt = this.buildSystemPrompt(isSpanish, style);
+      const systemPrompt = this.buildSystemPrompt(isSpanish, style, planInstructions);
 
       const message = await this.claudeClient.generateResponse(prompt, {
         systemPrompt,
@@ -577,14 +593,17 @@ Keep it under 2 sentences. Don't use emojis.`;
 
     if (daysSinceLastLog < 7) return;
 
-    const style = await this.getStyleInstructions(user.id);
+    const [style, planInstructions] = await Promise.all([
+          this.getStyleInstructions(user.id),
+          this.getActivePlanInstructions(user.id),
+        ]);
     const lang = user.language;
     const isSpanish = lang !== 'en';
     const prompt = `Generate a gentle weight logging reminder in ${isSpanish ? 'Spanish' : 'English'} for ${user.name}.
 They haven't logged their weight in ${daysSinceLastLog} days.
 Keep it under 2 sentences. Be encouraging, not pushy. Don't use emojis.`;
 
-    const systemPrompt = this.buildSystemPrompt(isSpanish, style);
+    const systemPrompt = this.buildSystemPrompt(isSpanish, style, planInstructions);
 
     const message = await this.claudeClient.generateResponse(prompt, {
       systemPrompt,
@@ -600,8 +619,11 @@ Keep it under 2 sentences. Be encouraging, not pushy. Don't use emojis.`;
   // Style & prompt helpers
   // ==========================================
 
-  private buildSystemPrompt(isSpanish: boolean, style: string): string {
+  private buildSystemPrompt(isSpanish: boolean, style: string, planInstructions?: string): string {
     let base = `You are NOVA, a calorie deficit coach. Generate brief coaching messages in ${isSpanish ? 'Spanish' : 'English'}.`;
+    if (planInstructions) {
+      base += `\n\nACTIVE COACHING PLAN INSTRUCTIONS (set by the patient's human coach — ALWAYS respect these):\n${planInstructions}`;
+    }
     if (style) {
       base += `\n\nCommunication style for this patient:\n${style}`;
     }
@@ -613,5 +635,19 @@ Keep it under 2 sentences. Be encouraging, not pushy. Don't use emojis.`;
       where: { patientId: userId },
     });
     return profile?.styleInstructions || '';
+  }
+
+  private async getActivePlanInstructions(userId: string): Promise<string | undefined> {
+    const plan = await this.prisma.coachingPlan.findFirst({
+      where: { patientId: userId, status: 'active' },
+    });
+    if (!plan) return undefined;
+    const goals = plan.goals as Record<string, any>;
+    const parts: string[] = [];
+    if (goals.dailyCalories) parts.push(`Daily calorie target: ${goals.dailyCalories} kcal`);
+    if (goals.weeklyWorkouts) parts.push(`Weekly workouts: ${goals.weeklyWorkouts}`);
+    if (goals.proteinGrams) parts.push(`Protein target: ${goals.proteinGrams}g/day`);
+    if (plan.instructions) parts.push(`Coach instructions: ${plan.instructions}`);
+    return parts.length > 0 ? parts.join('\n') : undefined;
   }
 }
