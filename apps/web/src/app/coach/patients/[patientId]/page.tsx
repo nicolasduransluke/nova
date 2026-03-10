@@ -450,13 +450,13 @@ function PlanTab({ patientId }: { patientId: string }) {
       if (part.length > 3) instructionParts.push(part);
     });
 
-    setParsedGoals(Object.keys(goals).length > 0 ? goals : null);
-    setParsedInstructions(instructionParts.join('. '));
-    setShowPreview(Object.keys(goals).length > 0);
+    const hasGoals = Object.keys(goals).length > 0;
+    setParsedGoals(hasGoals ? goals : {});
+    setParsedInstructions(hasGoals ? instructionParts.join('. ') : text);
+    setShowPreview(hasGoals || text.trim().length > 10);
   }
 
   async function createPlan() {
-    if (!parsedGoals) return;
     setCreating(true);
     const res = await api.post(`/api/coach/patients/${patientId}/plans`, {
       goals: parsedGoals,
@@ -539,9 +539,9 @@ function PlanTab({ patientId }: { patientId: string }) {
         />
 
         {/* Live Preview */}
-        {showPreview && parsedGoals && (
+        {showPreview && (
           <div className="mt-4 rounded-lg bg-white/5 border border-nova-primary/30 p-4">
-            <p className="text-sm text-nova-primary font-medium mb-3">Plan detectado:</p>
+            <p className="text-sm text-nova-primary font-medium mb-3">Preview del plan:</p>
             <div className="grid grid-cols-2 gap-3">
               {parsedGoals.dailyCalories != null && (
                 <div className="flex items-center justify-between">
