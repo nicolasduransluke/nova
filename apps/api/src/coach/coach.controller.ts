@@ -177,6 +177,11 @@ export class CoachController {
     return ok(await this.coachService.getMyCoach(user.sub));
   }
 
+  @Get('my-plan')
+  async getMyPlan(@CurrentUser() user: JwtPayload) {
+    return ok(await this.coachService.getActivePlanForPatient(user.sub));
+  }
+
   @Get('pending-invitations')
   async getPendingInvitations(@CurrentUser() user: JwtPayload) {
     return ok(await this.coachService.getPatientInvitations(user.email));

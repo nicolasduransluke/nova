@@ -65,6 +65,12 @@ export class HistoryService {
     const targetDeficit = Math.round((weeklyGoal * 7700) / 7);
     const tdee = this.calculateTDEE(profile);
 
+    // Check for active coaching plan
+    const activePlan = await this.prisma.coachingPlan.findFirst({
+      where: { patientId: userId, status: 'active' },
+    });
+    const planDailyCalories = (activePlan?.goals as any)?.dailyCalories as number | undefined;
+
     // Fetch latest weight for currentWeight
     const latestWeight = await this.prisma.weightLog.findFirst({
       where: { userId },
@@ -210,6 +216,7 @@ export class HistoryService {
         goalWeight: profile?.goalWeight ?? undefined,
         currentWeight: currentWeight ?? undefined,
         weeklyWeightTarget,
+        ...(planDailyCalories ? { dailyCalorieTarget: planDailyCalories } : {}),
       };
 
       result.push({

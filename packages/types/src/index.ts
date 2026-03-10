@@ -236,6 +236,7 @@ export interface DailySummary {
   currentWeight?: number; // last recorded weight
   weeklyWeightTarget?: number; // target weight for end of this week (based on start-of-week weight)
   weightProgress?: WeightProgress;
+  dailyCalorieTarget?: number; // from coaching plan — overrides targetDeficit-based calculations
 }
 
 // API Response Types

@@ -58,16 +58,25 @@ export default function PanelScreen() {
   const targetDeficit = dailySummary.targetDeficit ?? 550;
   const currentWeight = dailySummary.currentWeight;
   const goalWeight = dailySummary.goalWeight;
+  const planCalories = (dailySummary as any).dailyCalorieTarget as number | undefined;
 
   // Use actual burn (Whoop) if available, otherwise TDEE as estimated burn
   const effectiveBurn = burned > 0 ? burned : tdee;
 
-  // How much more can they eat and still hit their deficit target
-  const disponible = Math.max(0, effectiveBurn - targetDeficit - consumed);
+  // When coach has set a calorie target, use it directly
+  // Otherwise fall back to deficit-based calculation
+  const hasPlan = planCalories != null && planCalories > 0;
+  const disponible = hasPlan
+    ? Math.max(0, planCalories - consumed)
+    : Math.max(0, effectiveBurn - targetDeficit - consumed);
 
-  // Deficit progress: how close to hitting the target deficit
-  const deficitProgress = targetDeficit > 0 ? Math.min((deficit / targetDeficit) * 100, 150) : 0;
-  const hitTarget = deficit >= targetDeficit;
+  // Progress bar: with plan = consumed/target, without plan = deficit/targetDeficit
+  const deficitProgress = hasPlan
+    ? Math.min((consumed / planCalories) * 100, 150)
+    : targetDeficit > 0 ? Math.min((deficit / targetDeficit) * 100, 150) : 0;
+  const hitTarget = hasPlan
+    ? consumed <= planCalories
+    : deficit >= targetDeficit;
 
   // Projected weight tomorrow: lose deficit/7700 kg per day
   const projectedWeight = currentWeight && deficit > 0
@@ -85,12 +94,16 @@ export default function PanelScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Deficit progress bar */}
+        {/* Progress bar: plan calories or deficit goal */}
         <View style={styles.progressSection}>
           <View style={styles.progressLabels}>
-            <Text style={styles.progressLabel}>{t('panel.deficitGoal')}</Text>
+            <Text style={styles.progressLabel}>
+              {hasPlan ? t('panel.planGoal', { defaultValue: 'Plan del coach' }) : t('panel.deficitGoal')}
+            </Text>
             <Text style={[styles.progressValue, hitTarget && styles.progressValueHit]}>
-              {deficit} / {targetDeficit} kcal
+              {hasPlan
+                ? `${consumed} / ${planCalories} kcal`
+                : `${deficit} / ${targetDeficit} kcal`}
             </Text>
           </View>
           <View style={styles.progressTrack}>
@@ -102,10 +115,20 @@ export default function PanelScreen() {
               ]}
             />
           </View>
-          {hitTarget && (
+          {hasPlan && hitTarget && consumed > 0 && (
+            <Text style={styles.progressHint}>
+              {t('panel.withinPlan', { defaultValue: `Te quedan ${disponible} kcal` })}
+            </Text>
+          )}
+          {hasPlan && !hitTarget && (
+            <Text style={[styles.progressHintNeutral, { color: '#f87171' }]}>
+              {t('panel.overPlan', { defaultValue: `Pasaste por ${consumed - planCalories!} kcal` })}
+            </Text>
+          )}
+          {!hasPlan && hitTarget && (
             <Text style={styles.progressHint}>{t('panel.goalMet')}</Text>
           )}
-          {!hitTarget && deficitProgress > 0 && (
+          {!hasPlan && !hitTarget && deficitProgress > 0 && (
             <Text style={styles.progressHintNeutral}>
               {t('panel.deficitRemaining', { remaining: targetDeficit - deficit })}
             </Text>

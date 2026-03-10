@@ -506,6 +506,14 @@ export class OrchestratorService {
         }
       }
 
+      // Inject dailyCalorieTarget from coaching plan into daily summary
+      if (coachingContext && dailySummary) {
+        const planCals = (coachingContext.plan.goals as any).dailyCalories;
+        if (planCals) {
+          (dailySummary as any).dailyCalorieTarget = planCals;
+        }
+      }
+
       // Step 10: Integrate responses
       // Profile is incomplete if user hasn't set a goalWeight
       const isProfileIncomplete = !context.profile?.goalWeight;
