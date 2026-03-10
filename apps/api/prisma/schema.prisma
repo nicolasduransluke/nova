@@ -47,6 +47,11 @@ model User {
   patientCoaches  CoachPatient[]   @relation("PatientRelation")
   sentInvitations CoachInvitation[] @relation("InvitationCoach")
 
+  // Coaching plan relations
+  coachPlans       CoachingPlan[]    @relation("CoachPlans")
+  patientPlans     CoachingPlan[]    @relation("PatientPlans")
+  patientAIProfile PatientProfileAI? @relation("PatientAIProfile")
+
   // Indexes
   @@index([provider, providerId])
   @@index([role])
@@ -230,4 +235,47 @@ model CoachingLog {
   @@unique([userId, type, subtype, date])
   @@index([userId, date])
   @@map("coaching_logs")
+}
+
+// ============================================
+// Coaching Plan Domain
+// ============================================
+
+model CoachingPlan {
+  id           String   @id @default(uuid())
+  coachId      String   @map("coach_id")
+  patientId    String   @map("patient_id")
+  version      Int      @default(1)
+  weekStart    DateTime @map("week_start")
+  weekEnd      DateTime @map("week_end")
+  status       String   @default("active") // "active", "completed", "draft"
+  goals        Json     // { dailyCalories, weeklyWorkouts, weeklyWeightGoal, proteinTarget?, waterTarget?, customGoals[]? }
+  instructions String   @default("") // Free text instructions for the AI
+  coachNotes   String   @default("") @map("coach_notes") // Private, not sent to AI
+  results      Json?    // Snapshot on completion: { avgDailyCalories, daysOnTarget, totalWorkouts, weightChange, complianceRate }
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  coach   User @relation("CoachPlans", fields: [coachId], references: [id], onDelete: Cascade)
+  patient User @relation("PatientPlans", fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@unique([patientId, version])
+  @@index([patientId, status])
+  @@index([coachId])
+  @@map("coaching_plans")
+}
+
+model PatientProfileAI {
+  id             String    @id @default(uuid())
+  patientId      String    @unique @map("patient_id")
+  behavioralData Json      @default("{}") @map("behavioral_data") // Layer 1: auto-generated weekly
+  coachInsights  Json      @default("[]") @map("coach_insights")  // Layer 3: explicit coach knowledge
+  coachLearnings Json      @default("{}") @map("coach_learnings") // Layer 2: auto from plan history
+  lastAnalyzedAt DateTime? @map("last_analyzed_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  patient User @relation("PatientAIProfile", fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@map("patient_profiles_ai")
 }

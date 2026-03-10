@@ -395,3 +395,73 @@ export interface CoachPatientSummary {
 export interface InvitePatientDto {
   patientEmail: string;
 }
+
+// Coaching Plan Domain
+export type CoachingPlanStatus = 'active' | 'completed' | 'draft';
+
+export interface CoachingPlanGoals {
+  dailyCalories?: number;
+  weeklyWorkouts?: number;
+  weeklyWeightGoal?: number;
+  proteinTarget?: number;
+  waterTarget?: number;
+  customGoals?: { label: string; target: string; unit: string }[];
+}
+
+export interface CoachingPlanResults {
+  avgDailyCalories: number;
+  daysOnTarget: number;
+  totalWorkouts: number;
+  weightChange: number;
+  complianceRate: number;
+}
+
+export interface CoachingPlan {
+  id: string;
+  coachId: string;
+  patientId: string;
+  version: number;
+  weekStart: string;
+  weekEnd: string;
+  status: CoachingPlanStatus;
+  goals: CoachingPlanGoals;
+  instructions: string;
+  coachNotes: string;
+  results?: CoachingPlanResults;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateCoachingPlanDto {
+  goals: CoachingPlanGoals;
+  instructions?: string;
+  coachNotes?: string;
+  weekStart?: string; // defaults to current week Monday
+}
+
+export interface UpdateCoachingPlanDto {
+  goals?: CoachingPlanGoals;
+  instructions?: string;
+  coachNotes?: string;
+  status?: CoachingPlanStatus;
+}
+
+export interface CoachingPlanProgress {
+  plan: CoachingPlan;
+  today: {
+    date: string;
+    caloriesConsumed: number;
+    caloriesBurned: number;
+    remaining: number;
+    mealCount: number;
+    hasWorkout: boolean;
+  };
+  week: {
+    daysTracked: number;
+    daysOnTarget: number;
+    avgDailyCalories: number;
+    workoutsCompleted: number;
+    complianceRate: number;
+    weightChange: number | null;
+  };
+}

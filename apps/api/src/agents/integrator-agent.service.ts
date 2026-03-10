@@ -18,6 +18,38 @@ export interface LastWeightLogInfo {
   daysSince: number;
 }
 
+export interface CoachingContext {
+  plan: {
+    version: number;
+    weekStart: string;
+    weekEnd: string;
+    goals: Record<string, unknown>;
+    instructions: string;
+  };
+  today: {
+    caloriesConsumed: number;
+    remaining: number;
+    mealCount: number;
+    hasWorkout: boolean;
+  };
+  week: {
+    daysTracked: number;
+    daysOnTarget: number;
+    avgDailyCalories: number;
+    workoutsCompleted: number;
+    workoutsTarget: number;
+    complianceRate: number;
+    weightChange: number | null;
+  };
+  history: Array<{
+    version: number;
+    weekStart: string;
+    goals: Record<string, unknown>;
+    results: Record<string, unknown> | null;
+  }>;
+  coachInsights?: unknown;
+}
+
 export interface IntegratorInput extends AgentInput {
   intent: MessageIntent;
   agentOutputs: AgentOutput[];
@@ -29,6 +61,7 @@ export interface IntegratorInput extends AgentInput {
   isNewUser?: boolean;
   hasDefaultProfileData?: boolean; // true if height=170, age=30 (default values)
   language?: string; // explicit language from client ('es' | 'en')
+  coachingContext?: CoachingContext;
 }
 
 @Injectable()
@@ -156,6 +189,19 @@ Be calm, data-driven, brief. No hype language.`;
         : `Today: ${dailySummary.intake} kcal consumed | ${dailySummary.burn} kcal burned | Deficit: ${dailySummary.deficit} kcal`);
     }
 
+    // Add coaching plan context to meal/activity responses
+    if (input.coachingContext) {
+      const cc = input.coachingContext;
+      const goalCal = (cc.plan.goals as any).dailyCalories;
+      if (goalCal && dailySummary) {
+        const remaining = goalCal - dailySummary.intake;
+        lines.push('');
+        lines.push(isSpanish
+          ? `Plan: ${dailySummary.intake}/${goalCal} kcal (${remaining > 0 ? `te quedan ${remaining}` : `pasaste por ${Math.abs(remaining)}`})`
+          : `Plan: ${dailySummary.intake}/${goalCal} kcal (${remaining > 0 ? `${remaining} remaining` : `${Math.abs(remaining)} over`})`);
+      }
+    }
+
     return lines.join('\n');
   }
 
@@ -246,6 +292,23 @@ ${intent}
 ## Weight Info
 - Last weight: ${lastWeightLog.weight} kg (${lastWeightLog.daysSince} days ago)
 `;
+    }
+
+    // Coaching plan context
+    if (input.coachingContext) {
+      const cc = input.coachingContext;
+      prompt += `\n<coaching_context>\n${JSON.stringify(cc)}\n</coaching_context>\n`;
+      prompt += `\nYou have a coaching_context JSON with the coach's plan, today's progress, weekly progress, and plan history.
+Use the numeric data for precise calculations (e.g. plan.goals.dailyCalories - today.caloriesConsumed = remaining).
+Incorporate the plan naturally. Don't say "tu coach dice" in every message.
+If the patient is close to their limit or off track, guide them. Compare with previous weeks when relevant.
+You are an ally of both the patient AND the coach.\n`;
+      if (cc.plan.instructions) {
+        prompt += `\nCoach instructions (follow these naturally, don't quote them): "${cc.plan.instructions}"\n`;
+      }
+      if (cc.coachInsights && Array.isArray(cc.coachInsights) && cc.coachInsights.length > 0) {
+        prompt += `\nCoach insights about this patient (use naturally): ${JSON.stringify(cc.coachInsights)}\n`;
+      }
     }
 
     if (agentOutputs.length > 0) {

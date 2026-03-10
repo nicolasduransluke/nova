@@ -15,7 +15,7 @@ import type {
   WeightLog,
 } from '@nova/types';
 import { ClaudeClientService } from '../claude-client/claude-client.service';
-import { IntegratorAgentService, IntegratorInput, LastWeightLogInfo } from './integrator-agent.service';
+import { IntegratorAgentService, IntegratorInput, LastWeightLogInfo, CoachingContext } from './integrator-agent.service';
 import { AgentRegistryService } from './agent-registry.service';
 import { MetabolicAgentService } from './metabolic-agent.service';
 import { WhoopService } from '../whoop/whoop.service';
@@ -54,6 +54,24 @@ export interface OrchestratorDependencies {
   deleteCalorieEntry: (entryId: string) => Promise<void>;
   getLastCalorieEntry: (userId: string) => Promise<CalorieEntry | null>;
   getWhoopToken: (userId: string) => Promise<{ accessToken: string } | null>;
+  getActiveCoachingPlan?: (userId: string) => Promise<{
+    version: number;
+    weekStart: Date;
+    weekEnd: Date;
+    goals: Record<string, unknown>;
+    instructions: string;
+  } | null>;
+  getCompletedCoachingPlans?: (userId: string, limit: number) => Promise<Array<{
+    version: number;
+    weekStart: Date;
+    goals: Record<string, unknown>;
+    results: Record<string, unknown> | null;
+  }>>;
+  getPatientAIProfile?: (userId: string) => Promise<{
+    coachInsights: unknown;
+    coachLearnings: unknown;
+    behavioralData: unknown;
+  } | null>;
 }
 
 @Injectable()
@@ -423,6 +441,71 @@ export class OrchestratorService {
         startOfWeekWeight,
       );
 
+      // Step 9b: Build coaching context if patient has an active plan
+      let coachingContext: CoachingContext | undefined;
+      if (deps.getActiveCoachingPlan) {
+        try {
+          const activePlan = await deps.getActiveCoachingPlan(request.userId);
+          if (activePlan) {
+            const goals = activePlan.goals as any;
+            const planWeekStart = activePlan.weekStart;
+            const planWeekEnd = activePlan.weekEnd;
+
+            // Today's progress from already-fetched entries
+            const todayConsumed = todayIntake;
+            const todayMeals = todayEntries.filter(e => e.type === 'intake').length;
+            const todayHasWorkout = todayEntries.some(e => e.type === 'burn');
+
+            // Week progress - fetch entries for plan week
+            const weekEntries = await deps.getTodayCalorieEntries(request.userId);
+            // We already have todayEntries, but for weekly we need the broader range
+            // Use the simplified data we have
+
+            const previousPlans = deps.getCompletedCoachingPlans
+              ? await deps.getCompletedCoachingPlans(request.userId, 4)
+              : [];
+
+            const aiProfile = deps.getPatientAIProfile
+              ? await deps.getPatientAIProfile(request.userId)
+              : null;
+
+            coachingContext = {
+              plan: {
+                version: activePlan.version,
+                weekStart: planWeekStart.toISOString().split('T')[0],
+                weekEnd: planWeekEnd.toISOString().split('T')[0],
+                goals: activePlan.goals,
+                instructions: activePlan.instructions,
+              },
+              today: {
+                caloriesConsumed: todayConsumed,
+                remaining: (goals.dailyCalories || 0) - todayConsumed,
+                mealCount: todayMeals,
+                hasWorkout: todayHasWorkout,
+              },
+              week: {
+                daysTracked: 0, // simplified for MVP — full calculation in progress endpoint
+                daysOnTarget: 0,
+                avgDailyCalories: todayConsumed,
+                workoutsCompleted: todayHasWorkout ? 1 : 0,
+                workoutsTarget: goals.weeklyWorkouts || 0,
+                complianceRate: 0,
+                weightChange: null,
+              },
+              history: previousPlans.map(p => ({
+                version: p.version,
+                weekStart: p.weekStart.toISOString().split('T')[0],
+                goals: p.goals,
+                results: p.results,
+              })),
+              coachInsights: aiProfile?.coachInsights,
+            };
+          }
+        } catch (error) {
+          this.logger.debug(`Coaching context not available: ${error}`);
+        }
+      }
+
       // Step 10: Integrate responses
       // Profile is incomplete if user hasn't set a goalWeight
       const isProfileIncomplete = !context.profile?.goalWeight;
@@ -445,6 +528,7 @@ export class OrchestratorService {
         isNewUser,
         hasDefaultProfileData,
         language: request.language,
+        coachingContext,
       };
 
       const response = await this.integratorAgent.integrate(integratorInput);

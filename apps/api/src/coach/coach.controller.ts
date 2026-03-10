@@ -16,6 +16,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser, JwtPayload } from '../auth/decorators/current-user.decorator';
 import { InvitePatientDto } from './dto/invite-patient.dto';
 import { UpdateRelationshipDto } from './dto/update-relationship.dto';
+import { CreatePlanDto, UpdatePlanDto } from './dto/create-plan.dto';
 
 function ok(data: unknown) {
   return { success: true, data };
@@ -96,6 +97,77 @@ export class CoachController {
     @Body() dto: UpdateRelationshipDto,
   ) {
     return ok(await this.coachService.updateRelationship(user.sub, patientId, dto));
+  }
+
+  // ─── Coaching Plans ──────────────────────────────────────
+
+  @Post('patients/:patientId/plans')
+  @Roles('coach')
+  async createPlan(
+    @CurrentUser() user: JwtPayload,
+    @Param('patientId') patientId: string,
+    @Body() dto: CreatePlanDto,
+  ) {
+    return ok(await this.coachService.createPlan(user.sub, patientId, dto));
+  }
+
+  @Get('patients/:patientId/plans')
+  @Roles('coach')
+  async getPlans(
+    @CurrentUser() user: JwtPayload,
+    @Param('patientId') patientId: string,
+  ) {
+    return ok(await this.coachService.getPlans(user.sub, patientId));
+  }
+
+  @Get('patients/:patientId/plans/active')
+  @Roles('coach')
+  async getActivePlan(
+    @CurrentUser() user: JwtPayload,
+    @Param('patientId') patientId: string,
+  ) {
+    return ok(await this.coachService.getActivePlan(user.sub, patientId));
+  }
+
+  @Get('patients/:patientId/plans/progress')
+  @Roles('coach')
+  async getPlanProgress(
+    @CurrentUser() user: JwtPayload,
+    @Param('patientId') patientId: string,
+  ) {
+    return ok(await this.coachService.getPlanProgress(user.sub, patientId));
+  }
+
+  @Patch('patients/:patientId/plans/:planId')
+  @Roles('coach')
+  async updatePlan(
+    @CurrentUser() user: JwtPayload,
+    @Param('patientId') patientId: string,
+    @Param('planId') planId: string,
+    @Body() dto: UpdatePlanDto,
+  ) {
+    return ok(await this.coachService.updatePlan(user.sub, patientId, planId, dto));
+  }
+
+  // ─── Coach Insights ─────────────────────────────────────
+
+  @Get('patients/:patientId/insights')
+  @Roles('coach')
+  async getInsights(
+    @CurrentUser() user: JwtPayload,
+    @Param('patientId') patientId: string,
+  ) {
+    return ok(await this.coachService.getCoachInsights(user.sub, patientId));
+  }
+
+  @Patch('patients/:patientId/insights')
+  @Roles('coach')
+  async updateInsights(
+    @CurrentUser() user: JwtPayload,
+    @Param('patientId') patientId: string,
+    @Body() body: { insights: string[] },
+  ) {
+    return ok(await this.coachService.updateCoachInsights(user.sub, patientId, body.insights));
   }
 
   // ─── Patient endpoints ────────────────────────────────────

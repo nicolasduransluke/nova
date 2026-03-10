@@ -343,6 +343,46 @@ export class MessageProcessorService {
         if (!result) return null;
         return { accessToken: result.accessToken };
       },
+
+      getActiveCoachingPlan: async (userId: string) => {
+        const plan = await this.prisma.coachingPlan.findFirst({
+          where: { patientId: userId, status: 'active' },
+        });
+        if (!plan) return null;
+        return {
+          version: plan.version,
+          weekStart: plan.weekStart,
+          weekEnd: plan.weekEnd,
+          goals: plan.goals as Record<string, unknown>,
+          instructions: plan.instructions,
+        };
+      },
+
+      getCompletedCoachingPlans: async (userId: string, limit: number) => {
+        const plans = await this.prisma.coachingPlan.findMany({
+          where: { patientId: userId, status: 'completed' },
+          orderBy: { version: 'desc' },
+          take: limit,
+        });
+        return plans.map(p => ({
+          version: p.version,
+          weekStart: p.weekStart,
+          goals: p.goals as Record<string, unknown>,
+          results: p.results as Record<string, unknown> | null,
+        }));
+      },
+
+      getPatientAIProfile: async (userId: string) => {
+        const profile = await this.prisma.patientProfileAI.findUnique({
+          where: { patientId: userId },
+        });
+        if (!profile) return null;
+        return {
+          coachInsights: profile.coachInsights,
+          coachLearnings: profile.coachLearnings,
+          behavioralData: profile.behavioralData,
+        };
+      },
     };
   }
 

@@ -411,6 +411,311 @@ export class CoachService {
     return { message: 'Coach removed' };
   }
 
+  // ─── Coaching Plans ──────────────────────────────────────
+
+  async createPlan(
+    coachId: string,
+    patientId: string,
+    data: {
+      goals: Record<string, unknown>;
+      instructions?: string;
+      coachNotes?: string;
+      weekStart?: string;
+    },
+  ) {
+    await this.verifyCoachAccess(coachId, patientId);
+
+    // Calculate week boundaries (Monday-Sunday)
+    let weekStart: Date;
+    if (data.weekStart) {
+      weekStart = new Date(data.weekStart);
+    } else {
+      const now = new Date();
+      const day = now.getDay();
+      const mondayOffset = day === 0 ? 6 : day - 1;
+      weekStart = new Date(now);
+      weekStart.setDate(now.getDate() - mondayOffset);
+    }
+    weekStart.setHours(0, 0, 0, 0);
+
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
+
+    // Mark any existing active plan as completed
+    const existingActive = await this.prisma.coachingPlan.findFirst({
+      where: { coachId, patientId, status: 'active' },
+    });
+
+    if (existingActive) {
+      // Generate results snapshot before completing
+      const results = await this.calculatePlanResults(existingActive);
+      await this.prisma.coachingPlan.update({
+        where: { id: existingActive.id },
+        data: { status: 'completed', results },
+      });
+    }
+
+    // Get next version number
+    const lastPlan = await this.prisma.coachingPlan.findFirst({
+      where: { patientId },
+      orderBy: { version: 'desc' },
+    });
+    const version = (lastPlan?.version ?? 0) + 1;
+
+    const plan = await this.prisma.coachingPlan.create({
+      data: {
+        coachId,
+        patientId,
+        version,
+        weekStart,
+        weekEnd,
+        goals: data.goals as any,
+        instructions: data.instructions || '',
+        coachNotes: data.coachNotes || '',
+      },
+    });
+
+    this.logger.log(`Coach ${coachId} created plan v${version} for patient ${patientId}`);
+    return plan;
+  }
+
+  async getPlans(coachId: string, patientId: string) {
+    await this.verifyCoachAccess(coachId, patientId);
+    return this.prisma.coachingPlan.findMany({
+      where: { patientId },
+      orderBy: { version: 'desc' },
+    });
+  }
+
+  async getActivePlan(coachId: string, patientId: string) {
+    await this.verifyCoachAccess(coachId, patientId);
+    return this.prisma.coachingPlan.findFirst({
+      where: { patientId, status: 'active' },
+    });
+  }
+
+  async updatePlan(
+    coachId: string,
+    patientId: string,
+    planId: string,
+    data: {
+      goals?: Record<string, unknown>;
+      instructions?: string;
+      coachNotes?: string;
+      status?: string;
+    },
+  ) {
+    await this.verifyCoachAccess(coachId, patientId);
+
+    const plan = await this.prisma.coachingPlan.findUnique({
+      where: { id: planId },
+    });
+
+    if (!plan || plan.patientId !== patientId) {
+      throw new NotFoundException('Plan not found');
+    }
+
+    // If completing, generate results snapshot
+    if (data.status === 'completed' && plan.status === 'active') {
+      const results = await this.calculatePlanResults(plan);
+      return this.prisma.coachingPlan.update({
+        where: { id: planId },
+        data: { ...data, goals: data.goals as any, results },
+      });
+    }
+
+    return this.prisma.coachingPlan.update({
+      where: { id: planId },
+      data: { ...data, goals: data.goals ? (data.goals as any) : undefined },
+    });
+  }
+
+  async getPlanProgress(coachId: string, patientId: string) {
+    await this.verifyCoachAccess(coachId, patientId);
+
+    const plan = await this.prisma.coachingPlan.findFirst({
+      where: { patientId, status: 'active' },
+    });
+
+    if (!plan) return null;
+
+    const goals = plan.goals as any;
+    const now = new Date();
+
+    // Today's data
+    const todayStart = new Date(now);
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(now);
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const todayEntries = await this.prisma.calorieEntry.findMany({
+      where: {
+        userId: patientId,
+        date: { gte: todayStart, lte: todayEnd },
+      },
+    });
+
+    const caloriesConsumed = todayEntries
+      .filter((e) => e.type === 'intake')
+      .reduce((sum, e) => sum + e.calories, 0);
+    const caloriesBurned = todayEntries
+      .filter((e) => e.type === 'burn')
+      .reduce((sum, e) => sum + e.calories, 0);
+    const mealCount = todayEntries.filter((e) => e.type === 'intake').length;
+    const hasWorkout = todayEntries.some((e) => e.type === 'burn');
+
+    // Week data
+    const weekEntries = await this.prisma.calorieEntry.findMany({
+      where: {
+        userId: patientId,
+        date: { gte: plan.weekStart, lte: plan.weekEnd },
+      },
+    });
+
+    // Group by day
+    const dayMap = new Map<string, { intake: number; hasBurn: boolean }>();
+    for (const entry of weekEntries) {
+      const dayKey = entry.date.toISOString().split('T')[0];
+      const day = dayMap.get(dayKey) || { intake: 0, hasBurn: false };
+      if (entry.type === 'intake') day.intake += entry.calories;
+      if (entry.type === 'burn') day.hasBurn = true;
+      dayMap.set(dayKey, day);
+    }
+
+    const daysTracked = dayMap.size;
+    const daysOnTarget = [...dayMap.values()].filter(
+      (d) => goals.dailyCalories && d.intake <= goals.dailyCalories * 1.05,
+    ).length;
+    const totalIntake = [...dayMap.values()].reduce((s, d) => s + d.intake, 0);
+    const avgDailyCalories = daysTracked > 0 ? Math.round(totalIntake / daysTracked) : 0;
+    const workoutsCompleted = [...dayMap.values()].filter((d) => d.hasBurn).length;
+
+    // Weight change during plan
+    const weightLogs = await this.prisma.weightLog.findMany({
+      where: {
+        userId: patientId,
+        date: { gte: plan.weekStart, lte: plan.weekEnd },
+      },
+      orderBy: { date: 'asc' },
+    });
+    let weightChange: number | null = null;
+    if (weightLogs.length >= 2) {
+      weightChange = weightLogs[weightLogs.length - 1].weight - weightLogs[0].weight;
+    }
+
+    const complianceRate = daysTracked > 0 ? Math.round((daysOnTarget / daysTracked) * 100) : 0;
+
+    return {
+      plan,
+      today: {
+        date: todayStart.toISOString().split('T')[0],
+        caloriesConsumed,
+        caloriesBurned,
+        remaining: (goals.dailyCalories || 0) - caloriesConsumed,
+        mealCount,
+        hasWorkout,
+      },
+      week: {
+        daysTracked,
+        daysOnTarget,
+        avgDailyCalories,
+        workoutsCompleted,
+        complianceRate,
+        weightChange,
+      },
+    };
+  }
+
+  // Get active plan for AI injection (no coach auth needed — called by orchestrator)
+  async getActivePlanForPatient(patientId: string) {
+    return this.prisma.coachingPlan.findFirst({
+      where: { patientId, status: 'active' },
+    });
+  }
+
+  async getCompletedPlansForPatient(patientId: string, limit: number = 4) {
+    return this.prisma.coachingPlan.findMany({
+      where: { patientId, status: 'completed' },
+      orderBy: { version: 'desc' },
+      take: limit,
+    });
+  }
+
+  async getPatientAIProfile(patientId: string) {
+    return this.prisma.patientProfileAI.findUnique({
+      where: { patientId },
+    });
+  }
+
+  async updateCoachInsights(coachId: string, patientId: string, insights: string[]) {
+    await this.verifyCoachAccess(coachId, patientId);
+
+    return this.prisma.patientProfileAI.upsert({
+      where: { patientId },
+      update: { coachInsights: insights },
+      create: {
+        patientId,
+        coachInsights: insights,
+      },
+    });
+  }
+
+  async getCoachInsights(coachId: string, patientId: string) {
+    await this.verifyCoachAccess(coachId, patientId);
+    const profile = await this.prisma.patientProfileAI.findUnique({
+      where: { patientId },
+    });
+    return (profile?.coachInsights as string[]) || [];
+  }
+
+  private async calculatePlanResults(plan: any) {
+    const goals = plan.goals as any;
+
+    const entries = await this.prisma.calorieEntry.findMany({
+      where: {
+        userId: plan.patientId,
+        date: { gte: plan.weekStart, lte: plan.weekEnd },
+      },
+    });
+
+    const dayMap = new Map<string, { intake: number; hasBurn: boolean }>();
+    for (const entry of entries) {
+      const dayKey = entry.date.toISOString().split('T')[0];
+      const day = dayMap.get(dayKey) || { intake: 0, hasBurn: false };
+      if (entry.type === 'intake') day.intake += entry.calories;
+      if (entry.type === 'burn') day.hasBurn = true;
+      dayMap.set(dayKey, day);
+    }
+
+    const daysTracked = dayMap.size;
+    const totalIntake = [...dayMap.values()].reduce((s, d) => s + d.intake, 0);
+    const daysOnTarget = [...dayMap.values()].filter(
+      (d) => goals.dailyCalories && d.intake <= goals.dailyCalories * 1.05,
+    ).length;
+
+    const weightLogs = await this.prisma.weightLog.findMany({
+      where: {
+        userId: plan.patientId,
+        date: { gte: plan.weekStart, lte: plan.weekEnd },
+      },
+      orderBy: { date: 'asc' },
+    });
+
+    let weightChange = 0;
+    if (weightLogs.length >= 2) {
+      weightChange = weightLogs[weightLogs.length - 1].weight - weightLogs[0].weight;
+    }
+
+    return {
+      avgDailyCalories: daysTracked > 0 ? Math.round(totalIntake / daysTracked) : 0,
+      daysOnTarget,
+      totalWorkouts: [...dayMap.values()].filter((d) => d.hasBurn).length,
+      weightChange: Number(weightChange.toFixed(2)),
+      complianceRate: daysTracked > 0 ? Math.round((daysOnTarget / daysTracked) * 100) : 0,
+    };
+  }
+
   // ─── Helpers ──────────────────────────────────────────────
 
   private async verifyCoachAccess(coachId: string, patientId: string) {

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
-import type { HistoryDay, WeightEntry } from '@nova/types';
+import type { HistoryDay, WeightEntry, CoachingPlan, CoachingPlanGoals, CoachingPlanProgress } from '@nova/types';
 
 interface PatientDetail {
   patient: { id: string; name: string; email: string; createdAt: string; timezone: string | null };
@@ -32,7 +32,7 @@ interface ChatMsg {
   createdAt: string;
 }
 
-type Tab = 'overview' | 'history' | 'weight' | 'chat';
+type Tab = 'overview' | 'plan' | 'history' | 'weight' | 'chat';
 
 export default function PatientDetailPage() {
   const { patientId } = useParams<{ patientId: string }>();
@@ -97,6 +97,7 @@ export default function PatientDetailPage() {
   const { patient, profile, latestWeight } = detail;
   const tabs: { key: Tab; label: string }[] = [
     { key: 'overview', label: 'Overview' },
+    { key: 'plan', label: 'Plan' },
     { key: 'history', label: 'Calorie History' },
     { key: 'weight', label: 'Weight' },
     { key: 'chat', label: 'Chat Log' },
@@ -142,6 +143,7 @@ export default function PatientDetailPage() {
 
       {/* Tab content */}
       {tab === 'overview' && <OverviewTab profile={profile} latestWeight={latestWeight} patient={patient} />}
+      {tab === 'plan' && <PlanTab patientId={patientId} />}
       {tab === 'history' && <HistoryTab history={history} />}
       {tab === 'weight' && <WeightTab weightHistory={weightHistory} profile={profile} />}
       {tab === 'chat' && <ChatTab messages={messages} />}
@@ -358,6 +360,386 @@ function ChatTab({ messages }: { messages: ChatMsg[] }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// ─── Plan Tab ───────────────────────────────────────────────
+
+function PlanTab({ patientId }: { patientId: string }) {
+  const [progress, setProgress] = useState<CoachingPlanProgress | null>(null);
+  const [plans, setPlans] = useState<CoachingPlan[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [insights, setInsights] = useState<string[]>([]);
+  const [newInsight, setNewInsight] = useState('');
+  const [savingInsights, setSavingInsights] = useState(false);
+
+  // Smart Command Bar state
+  const [commandText, setCommandText] = useState('');
+  const [parsedGoals, setParsedGoals] = useState<CoachingPlanGoals | null>(null);
+  const [parsedInstructions, setParsedInstructions] = useState('');
+  const [showPreview, setShowPreview] = useState(false);
+
+  useEffect(() => {
+    loadData();
+  }, [patientId]);
+
+  async function loadData() {
+    setLoading(true);
+    const [progressRes, plansRes, insightsRes] = await Promise.all([
+      api.get<CoachingPlanProgress>(`/api/coach/patients/${patientId}/plans/progress`),
+      api.get<CoachingPlan[]>(`/api/coach/patients/${patientId}/plans`),
+      api.get<string[]>(`/api/coach/patients/${patientId}/insights`),
+    ]);
+    if (progressRes.success && progressRes.data) setProgress(progressRes.data);
+    if (plansRes.success && plansRes.data) setPlans(plansRes.data);
+    if (insightsRes.success && insightsRes.data) setInsights(insightsRes.data);
+    setLoading(false);
+  }
+
+  function parseCommand(text: string) {
+    const goals: CoachingPlanGoals = {};
+    const instructionParts: string[] = [];
+
+    // Parse calories
+    const calMatch = text.match(/(\d{3,4})\s*(?:kcal|cal|calorias|calorías)/i);
+    if (calMatch) goals.dailyCalories = parseInt(calMatch[1]);
+
+    // Parse workouts
+    const workoutMatch = text.match(/(\d+)\s*(?:cardio|entreno|entrenamiento|sesion|sesiones|workout|ejercicio)/i);
+    if (workoutMatch) goals.weeklyWorkouts = parseInt(workoutMatch[1]);
+
+    // Parse weight goal
+    const weightMatch = text.match(/(?:bajar|perder|meta)\s*(?:de\s*)?(-?[\d.]+)\s*(?:kg|kilo)/i);
+    if (weightMatch) goals.weeklyWeightGoal = parseFloat(weightMatch[1]);
+
+    // Parse protein
+    const proteinMatch = text.match(/(\d+)\s*(?:g|gr|gramos)?\s*(?:de\s*)?prote[ií]na/i);
+    if (proteinMatch) goals.proteinTarget = parseInt(proteinMatch[1]);
+
+    // Everything that wasn't captured as goals becomes instructions
+    let remaining = text;
+    [calMatch, workoutMatch, weightMatch, proteinMatch].forEach((m) => {
+      if (m) remaining = remaining.replace(m[0], '');
+    });
+
+    // Remove patient name prefix (e.g., "Paulina:" or "para Paulina,")
+    remaining = remaining.replace(/^[\w]+\s*[:,-]\s*/i, '');
+
+    const cleaned = remaining.replace(/[,;]+/g, ',').split(',').map(s => s.trim()).filter(Boolean);
+    cleaned.forEach(part => {
+      if (part.length > 3) instructionParts.push(part);
+    });
+
+    setParsedGoals(Object.keys(goals).length > 0 ? goals : null);
+    setParsedInstructions(instructionParts.join('. '));
+    setShowPreview(Object.keys(goals).length > 0);
+  }
+
+  async function createPlan() {
+    if (!parsedGoals) return;
+    setCreating(true);
+    const res = await api.post(`/api/coach/patients/${patientId}/plans`, {
+      goals: parsedGoals,
+      instructions: parsedInstructions,
+    });
+    if (res.success) {
+      setCommandText('');
+      setParsedGoals(null);
+      setParsedInstructions('');
+      setShowPreview(false);
+      await loadData();
+    }
+    setCreating(false);
+  }
+
+  async function saveInsights() {
+    setSavingInsights(true);
+    await api.patch(`/api/coach/patients/${patientId}/insights`, { insights });
+    setSavingInsights(false);
+  }
+
+  function addInsight() {
+    if (!newInsight.trim()) return;
+    setInsights([...insights, newInsight.trim()]);
+    setNewInsight('');
+  }
+
+  function removeInsight(index: number) {
+    setInsights(insights.filter((_, i) => i !== index));
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-32">
+        <div className="h-6 w-6 border-2 border-nova-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Smart Command Bar */}
+      <div className="rounded-xl bg-white/5 border border-white/10 p-4">
+        <label className="block text-sm font-medium text-white/60 mb-2">
+          Crear Plan Semanal
+        </label>
+        <input
+          type="text"
+          value={commandText}
+          onChange={(e) => {
+            setCommandText(e.target.value);
+            parseCommand(e.target.value);
+          }}
+          placeholder='Ej: "2000 kcal, 3 cardio, no comer tras 9pm"'
+          className="w-full px-4 py-3 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-nova-primary focus:border-transparent"
+        />
+
+        {/* Live Preview */}
+        {showPreview && parsedGoals && (
+          <div className="mt-4 rounded-lg bg-white/5 border border-nova-primary/30 p-4">
+            <p className="text-sm text-nova-primary font-medium mb-3">Plan detectado:</p>
+            <div className="grid grid-cols-2 gap-3">
+              {parsedGoals.dailyCalories != null && (
+                <div className="flex items-center justify-between">
+                  <span className="text-white/60 text-sm">Calorías/día</span>
+                  <input
+                    type="number"
+                    value={parsedGoals.dailyCalories}
+                    onChange={(e) => setParsedGoals({ ...parsedGoals, dailyCalories: parseInt(e.target.value) || 0 })}
+                    className="w-24 px-2 py-1 bg-white/10 border border-white/20 rounded text-white text-sm text-right"
+                  />
+                </div>
+              )}
+              {parsedGoals.weeklyWorkouts != null && (
+                <div className="flex items-center justify-between">
+                  <span className="text-white/60 text-sm">Entrenamientos/sem</span>
+                  <input
+                    type="number"
+                    value={parsedGoals.weeklyWorkouts}
+                    onChange={(e) => setParsedGoals({ ...parsedGoals, weeklyWorkouts: parseInt(e.target.value) || 0 })}
+                    className="w-24 px-2 py-1 bg-white/10 border border-white/20 rounded text-white text-sm text-right"
+                  />
+                </div>
+              )}
+              {parsedGoals.weeklyWeightGoal != null && (
+                <div className="flex items-center justify-between">
+                  <span className="text-white/60 text-sm">Meta peso/sem</span>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={parsedGoals.weeklyWeightGoal}
+                    onChange={(e) => setParsedGoals({ ...parsedGoals, weeklyWeightGoal: parseFloat(e.target.value) || 0 })}
+                    className="w-24 px-2 py-1 bg-white/10 border border-white/20 rounded text-white text-sm text-right"
+                  />
+                </div>
+              )}
+              {parsedGoals.proteinTarget != null && (
+                <div className="flex items-center justify-between">
+                  <span className="text-white/60 text-sm">Proteína/día (g)</span>
+                  <input
+                    type="number"
+                    value={parsedGoals.proteinTarget}
+                    onChange={(e) => setParsedGoals({ ...parsedGoals, proteinTarget: parseInt(e.target.value) || 0 })}
+                    className="w-24 px-2 py-1 bg-white/10 border border-white/20 rounded text-white text-sm text-right"
+                  />
+                </div>
+              )}
+            </div>
+            {parsedInstructions && (
+              <div className="mt-3">
+                <span className="text-white/60 text-sm">Instrucciones:</span>
+                <textarea
+                  value={parsedInstructions}
+                  onChange={(e) => setParsedInstructions(e.target.value)}
+                  className="w-full mt-1 px-3 py-2 bg-white/5 border border-white/20 rounded text-white text-sm resize-none"
+                  rows={2}
+                />
+              </div>
+            )}
+            <button
+              onClick={createPlan}
+              disabled={creating}
+              className="mt-4 w-full py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 text-white font-semibold rounded-lg transition-all"
+            >
+              {creating ? 'Creando...' : 'Activar Plan'}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Active Plan Progress */}
+      {progress && (
+        <div className="rounded-xl bg-white/5 border border-white/10 p-4">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-white">
+              Plan v{progress.plan.version} — Semana {progress.plan.weekStart.split('T')[0]}
+            </h3>
+            <span className="text-xs px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-400">
+              Activo
+            </span>
+          </div>
+
+          {/* Goals progress */}
+          <div className="space-y-3">
+            {(progress.plan.goals as CoachingPlanGoals).dailyCalories != null && (
+              <div>
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-white/60">Calorías hoy</span>
+                  <span className="text-white">
+                    {progress.today.caloriesConsumed} / {(progress.plan.goals as CoachingPlanGoals).dailyCalories} kcal
+                  </span>
+                </div>
+                <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      progress.today.caloriesConsumed <= ((progress.plan.goals as CoachingPlanGoals).dailyCalories || 0)
+                        ? 'bg-emerald-500'
+                        : 'bg-red-500'
+                    }`}
+                    style={{
+                      width: `${Math.min(100, (progress.today.caloriesConsumed / ((progress.plan.goals as CoachingPlanGoals).dailyCalories || 1)) * 100)}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {(progress.plan.goals as CoachingPlanGoals).weeklyWorkouts != null && (
+              <div>
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-white/60">Entrenamientos esta semana</span>
+                  <span className="text-white">
+                    {progress.week.workoutsCompleted} / {(progress.plan.goals as CoachingPlanGoals).weeklyWorkouts}
+                  </span>
+                </div>
+                <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-purple-500 rounded-full transition-all"
+                    style={{
+                      width: `${Math.min(100, (progress.week.workoutsCompleted / ((progress.plan.goals as CoachingPlanGoals).weeklyWorkouts || 1)) * 100)}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-3 gap-3 mt-4">
+              <div className="text-center">
+                <p className="text-2xl font-bold text-white">{progress.week.complianceRate}%</p>
+                <p className="text-xs text-white/40">Cumplimiento</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold text-white">{progress.week.daysOnTarget}/{progress.week.daysTracked}</p>
+                <p className="text-xs text-white/40">Días en meta</p>
+              </div>
+              <div className="text-center">
+                <p className={`text-2xl font-bold ${progress.week.weightChange != null && progress.week.weightChange <= 0 ? 'text-emerald-400' : 'text-white'}`}>
+                  {progress.week.weightChange != null ? `${progress.week.weightChange > 0 ? '+' : ''}${progress.week.weightChange.toFixed(1)}` : '—'}
+                </p>
+                <p className="text-xs text-white/40">Peso (kg)</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Instructions */}
+          {progress.plan.instructions && (
+            <div className="mt-4 pt-3 border-t border-white/10">
+              <p className="text-xs text-white/40 mb-1">Instrucciones al AI:</p>
+              <p className="text-sm text-white/70">{progress.plan.instructions}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* No active plan */}
+      {!progress && plans.length === 0 && (
+        <div className="text-center py-12">
+          <p className="text-white/40 mb-2">Sin plan activo</p>
+          <p className="text-white/30 text-sm">Usa la barra de arriba para crear el primer plan</p>
+        </div>
+      )}
+
+      {/* Coach Insights */}
+      <div className="rounded-xl bg-white/5 border border-white/10 p-4">
+        <h3 className="font-semibold text-white mb-3">Insights del Coach</h3>
+        <p className="text-xs text-white/40 mb-3">Conocimiento que Nova usará para guiar a este paciente</p>
+
+        <div className="space-y-2 mb-3">
+          {insights.map((insight, i) => (
+            <div key={i} className="flex items-start gap-2 bg-white/5 rounded-lg px-3 py-2">
+              <p className="text-sm text-white/70 flex-1">{insight}</p>
+              <button
+                onClick={() => removeInsight(i)}
+                className="text-white/30 hover:text-red-400 transition-colors shrink-0"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={newInsight}
+            onChange={(e) => setNewInsight(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && addInsight()}
+            placeholder='Ej: "No le gustan los batidos de proteína"'
+            className="flex-1 px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white text-sm placeholder-white/30 focus:outline-none focus:ring-1 focus:ring-nova-primary"
+          />
+          <button
+            onClick={addInsight}
+            className="px-4 py-2 bg-white/10 hover:bg-white/20 border border-white/20 text-white text-sm rounded-lg transition-colors"
+          >
+            +
+          </button>
+        </div>
+
+        {insights.length > 0 && (
+          <button
+            onClick={saveInsights}
+            disabled={savingInsights}
+            className="mt-3 w-full py-2 bg-white/10 hover:bg-white/20 border border-white/20 text-white text-sm rounded-lg transition-colors disabled:opacity-50"
+          >
+            {savingInsights ? 'Guardando...' : 'Guardar Insights'}
+          </button>
+        )}
+      </div>
+
+      {/* Plan History */}
+      {plans.filter(p => p.status === 'completed').length > 0 && (
+        <div className="rounded-xl bg-white/5 border border-white/10 p-4">
+          <h3 className="font-semibold text-white mb-3">Historial de Planes</h3>
+          <div className="space-y-2">
+            {plans.filter(p => p.status === 'completed').map((plan) => (
+              <div key={plan.id} className="flex items-center justify-between bg-white/5 rounded-lg px-3 py-2">
+                <div>
+                  <span className="text-sm text-white">v{plan.version}</span>
+                  <span className="text-xs text-white/40 ml-2">
+                    {plan.weekStart.split('T')[0]}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 text-sm">
+                  {plan.results && (
+                    <>
+                      <span className="text-white/60">
+                        {(plan.results as CoachingPlan['results'] & { complianceRate: number })?.complianceRate ?? 0}% cumpl.
+                      </span>
+                      <span className={`${((plan.results as any)?.weightChange ?? 0) <= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {((plan.results as any)?.weightChange ?? 0) > 0 ? '+' : ''}{((plan.results as any)?.weightChange ?? 0).toFixed(1)} kg
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
