@@ -523,15 +523,17 @@ function PlanTab({ patientId }: { patientId: string }) {
         <label className="block text-sm font-medium text-white/60 mb-2">
           {progress ? 'Crear Nuevo Plan (reemplaza el actual)' : 'Crear Plan Semanal'}
         </label>
-        <input
-          type="text"
+        <textarea
           value={commandText}
           onChange={(e) => {
             setCommandText(e.target.value);
             parseCommand(e.target.value);
+            e.target.style.height = 'auto';
+            e.target.style.height = e.target.scrollHeight + 'px';
           }}
           placeholder='Ej: "2000 kcal, 3 cardio, no comer tras 9pm"'
-          className="w-full px-4 py-3 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-nova-primary focus:border-transparent"
+          className="w-full px-4 py-3 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-nova-primary focus:border-transparent resize-none overflow-hidden"
+          rows={1}
         />
 
         {/* Live Preview */}
@@ -590,8 +592,13 @@ function PlanTab({ patientId }: { patientId: string }) {
                 <span className="text-white/60 text-sm">Instrucciones:</span>
                 <textarea
                   value={parsedInstructions}
-                  onChange={(e) => setParsedInstructions(e.target.value)}
-                  className="w-full mt-1 px-3 py-2 bg-white/5 border border-white/20 rounded text-white text-sm resize-none"
+                  onChange={(e) => {
+                    setParsedInstructions(e.target.value);
+                    e.target.style.height = 'auto';
+                    e.target.style.height = e.target.scrollHeight + 'px';
+                  }}
+                  onFocus={(e) => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
+                  className="w-full mt-1 px-3 py-2 bg-white/5 border border-white/20 rounded text-white text-sm resize-none overflow-hidden"
                   rows={2}
                 />
               </div>
@@ -680,8 +687,13 @@ function PlanTab({ patientId }: { patientId: string }) {
                 <label className="text-xs text-white/40 block mb-1">Instrucciones al AI</label>
                 <textarea
                   value={editInstructions}
-                  onChange={(e) => setEditInstructions(e.target.value)}
-                  className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white text-sm resize-none"
+                  onChange={(e) => {
+                    setEditInstructions(e.target.value);
+                    e.target.style.height = 'auto';
+                    e.target.style.height = e.target.scrollHeight + 'px';
+                  }}
+                  onFocus={(e) => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
+                  className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white text-sm resize-none overflow-hidden"
                   rows={3}
                 />
               </div>
