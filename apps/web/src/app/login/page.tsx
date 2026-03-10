@@ -2,15 +2,18 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { login, loginWithGoogle, loginWithApple, isLoading, error, setError } = useAuthStore();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+
+  const redirect = searchParams.get('redirect');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,8 +21,12 @@ export default function LoginPage() {
 
     try {
       await login(email, password);
-      const user = useAuthStore.getState().user;
-      router.push(user?.role === 'coach' ? '/coach' : '/chat');
+      if (redirect) {
+        router.push(redirect);
+      } else {
+        const user = useAuthStore.getState().user;
+        router.push(user?.role === 'coach' ? '/coach' : '/chat');
+      }
     } catch {
       // Error is handled in the store
     }

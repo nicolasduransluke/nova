@@ -36,11 +36,12 @@ export function middleware(request: NextRequest) {
     (route) => pathname === route || pathname.startsWith(route + '/')
   );
 
-  // Allow auth callback and forgot/reset password routes without auth
+  // Allow auth callback, forgot/reset password, and invite routes without auth
   const isPublicAuthRoute =
     pathname.startsWith('/auth/callback') ||
     pathname.startsWith('/forgot-password') ||
-    pathname.startsWith('/reset-password');
+    pathname.startsWith('/reset-password') ||
+    pathname.startsWith('/invite/');
 
   if (isPublicAuthRoute) {
     return NextResponse.next();
