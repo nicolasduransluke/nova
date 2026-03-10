@@ -381,6 +381,12 @@ function PlanTab({ patientId }: { patientId: string }) {
   const [parsedInstructions, setParsedInstructions] = useState('');
   const [showPreview, setShowPreview] = useState(false);
 
+  // Edit mode for active plan
+  const [editing, setEditing] = useState(false);
+  const [editGoals, setEditGoals] = useState<CoachingPlanGoals>({});
+  const [editInstructions, setEditInstructions] = useState('');
+  const [saving, setSaving] = useState(false);
+
   useEffect(() => {
     loadData();
   }, [patientId]);
@@ -460,6 +466,28 @@ function PlanTab({ patientId }: { patientId: string }) {
     setSavingInsights(false);
   }
 
+  function startEditing() {
+    if (!progress) return;
+    const goals = progress.plan.goals as CoachingPlanGoals;
+    setEditGoals({ ...goals });
+    setEditInstructions(progress.plan.instructions || '');
+    setEditing(true);
+  }
+
+  async function saveEdit() {
+    if (!progress) return;
+    setSaving(true);
+    const res = await api.patch(`/api/coach/patients/${patientId}/plans/${progress.plan.id}`, {
+      goals: editGoals,
+      instructions: editInstructions,
+    });
+    if (res.success) {
+      setEditing(false);
+      await loadData();
+    }
+    setSaving(false);
+  }
+
   function addInsight() {
     if (!newInsight.trim()) return;
     setInsights([...insights, newInsight.trim()]);
@@ -483,7 +511,7 @@ function PlanTab({ patientId }: { patientId: string }) {
       {/* Smart Command Bar */}
       <div className="rounded-xl bg-white/5 border border-white/10 p-4">
         <label className="block text-sm font-medium text-white/60 mb-2">
-          Crear Plan Semanal
+          {progress ? 'Crear Nuevo Plan (reemplaza el actual)' : 'Crear Plan Semanal'}
         </label>
         <input
           type="text"
@@ -576,79 +604,165 @@ function PlanTab({ patientId }: { patientId: string }) {
             <h3 className="font-semibold text-white">
               Plan v{progress.plan.version} — Semana {progress.plan.weekStart.split('T')[0]}
             </h3>
-            <span className="text-xs px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-400">
-              Activo
-            </span>
-          </div>
-
-          {/* Goals progress */}
-          <div className="space-y-3">
-            {(progress.plan.goals as CoachingPlanGoals).dailyCalories != null && (
-              <div>
-                <div className="flex justify-between text-sm mb-1">
-                  <span className="text-white/60">Calorías hoy</span>
-                  <span className="text-white">
-                    {progress.today.caloriesConsumed} / {(progress.plan.goals as CoachingPlanGoals).dailyCalories} kcal
-                  </span>
-                </div>
-                <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all ${
-                      progress.today.caloriesConsumed <= ((progress.plan.goals as CoachingPlanGoals).dailyCalories || 0)
-                        ? 'bg-emerald-500'
-                        : 'bg-red-500'
-                    }`}
-                    style={{
-                      width: `${Math.min(100, (progress.today.caloriesConsumed / ((progress.plan.goals as CoachingPlanGoals).dailyCalories || 1)) * 100)}%`,
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {(progress.plan.goals as CoachingPlanGoals).weeklyWorkouts != null && (
-              <div>
-                <div className="flex justify-between text-sm mb-1">
-                  <span className="text-white/60">Entrenamientos esta semana</span>
-                  <span className="text-white">
-                    {progress.week.workoutsCompleted} / {(progress.plan.goals as CoachingPlanGoals).weeklyWorkouts}
-                  </span>
-                </div>
-                <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-purple-500 rounded-full transition-all"
-                    style={{
-                      width: `${Math.min(100, (progress.week.workoutsCompleted / ((progress.plan.goals as CoachingPlanGoals).weeklyWorkouts || 1)) * 100)}%`,
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-
-            <div className="grid grid-cols-3 gap-3 mt-4">
-              <div className="text-center">
-                <p className="text-2xl font-bold text-white">{progress.week.complianceRate}%</p>
-                <p className="text-xs text-white/40">Cumplimiento</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold text-white">{progress.week.daysOnTarget}/{progress.week.daysTracked}</p>
-                <p className="text-xs text-white/40">Días en meta</p>
-              </div>
-              <div className="text-center">
-                <p className={`text-2xl font-bold ${progress.week.weightChange != null && progress.week.weightChange <= 0 ? 'text-emerald-400' : 'text-white'}`}>
-                  {progress.week.weightChange != null ? `${progress.week.weightChange > 0 ? '+' : ''}${progress.week.weightChange.toFixed(1)}` : '—'}
-                </p>
-                <p className="text-xs text-white/40">Peso (kg)</p>
-              </div>
+            <div className="flex items-center gap-2">
+              {!editing && (
+                <button
+                  onClick={startEditing}
+                  className="text-xs px-2.5 py-1 rounded-full bg-white/10 text-white/60 hover:bg-white/20 hover:text-white transition-all"
+                >
+                  Editar
+                </button>
+              )}
+              <span className="text-xs px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-400">
+                Activo
+              </span>
             </div>
           </div>
 
-          {/* Instructions */}
-          {progress.plan.instructions && (
-            <div className="mt-4 pt-3 border-t border-white/10">
-              <p className="text-xs text-white/40 mb-1">Instrucciones al AI:</p>
-              <p className="text-sm text-white/70">{progress.plan.instructions}</p>
+          {editing ? (
+            /* ── Edit Mode ── */
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-white/40 block mb-1">Calorías/día</label>
+                  <input
+                    type="number"
+                    value={editGoals.dailyCalories ?? ''}
+                    onChange={(e) => setEditGoals({ ...editGoals, dailyCalories: e.target.value ? parseInt(e.target.value) : undefined })}
+                    placeholder="ej: 1500"
+                    className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-white/40 block mb-1">Entrenamientos/sem</label>
+                  <input
+                    type="number"
+                    value={editGoals.weeklyWorkouts ?? ''}
+                    onChange={(e) => setEditGoals({ ...editGoals, weeklyWorkouts: e.target.value ? parseInt(e.target.value) : undefined })}
+                    placeholder="ej: 4"
+                    className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-white/40 block mb-1">Proteína/día (g)</label>
+                  <input
+                    type="number"
+                    value={editGoals.proteinTarget ?? ''}
+                    onChange={(e) => setEditGoals({ ...editGoals, proteinTarget: e.target.value ? parseInt(e.target.value) : undefined })}
+                    placeholder="ej: 120"
+                    className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-white/40 block mb-1">Meta peso/sem (kg)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={editGoals.weeklyWeightGoal ?? ''}
+                    onChange={(e) => setEditGoals({ ...editGoals, weeklyWeightGoal: e.target.value ? parseFloat(e.target.value) : undefined })}
+                    placeholder="ej: 0.5"
+                    className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white text-sm"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-white/40 block mb-1">Instrucciones al AI</label>
+                <textarea
+                  value={editInstructions}
+                  onChange={(e) => setEditInstructions(e.target.value)}
+                  className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white text-sm resize-none"
+                  rows={3}
+                />
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={saveEdit}
+                  disabled={saving}
+                  className="flex-1 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 text-white font-semibold rounded-lg text-sm transition-all"
+                >
+                  {saving ? 'Guardando...' : 'Guardar cambios'}
+                </button>
+                <button
+                  onClick={() => setEditing(false)}
+                  className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white/60 rounded-lg text-sm transition-all"
+                >
+                  Cancelar
+                </button>
+              </div>
             </div>
+          ) : (
+            /* ── View Mode ── */
+            <>
+              <div className="space-y-3">
+                {(progress.plan.goals as CoachingPlanGoals).dailyCalories != null && (
+                  <div>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="text-white/60">Calorías hoy</span>
+                      <span className="text-white">
+                        {progress.today.caloriesConsumed} / {(progress.plan.goals as CoachingPlanGoals).dailyCalories} kcal
+                      </span>
+                    </div>
+                    <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${
+                          progress.today.caloriesConsumed <= ((progress.plan.goals as CoachingPlanGoals).dailyCalories || 0)
+                            ? 'bg-emerald-500'
+                            : 'bg-red-500'
+                        }`}
+                        style={{
+                          width: `${Math.min(100, (progress.today.caloriesConsumed / ((progress.plan.goals as CoachingPlanGoals).dailyCalories || 1)) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {(progress.plan.goals as CoachingPlanGoals).weeklyWorkouts != null && (
+                  <div>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="text-white/60">Entrenamientos esta semana</span>
+                      <span className="text-white">
+                        {progress.week.workoutsCompleted} / {(progress.plan.goals as CoachingPlanGoals).weeklyWorkouts}
+                      </span>
+                    </div>
+                    <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-purple-500 rounded-full transition-all"
+                        style={{
+                          width: `${Math.min(100, (progress.week.workoutsCompleted / ((progress.plan.goals as CoachingPlanGoals).weeklyWorkouts || 1)) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-3 gap-3 mt-4">
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-white">{progress.week.complianceRate}%</p>
+                    <p className="text-xs text-white/40">Cumplimiento</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-white">{progress.week.daysOnTarget}/{progress.week.daysTracked}</p>
+                    <p className="text-xs text-white/40">Días en meta</p>
+                  </div>
+                  <div className="text-center">
+                    <p className={`text-2xl font-bold ${progress.week.weightChange != null && progress.week.weightChange <= 0 ? 'text-emerald-400' : 'text-white'}`}>
+                      {progress.week.weightChange != null ? `${progress.week.weightChange > 0 ? '+' : ''}${progress.week.weightChange.toFixed(1)}` : '—'}
+                    </p>
+                    <p className="text-xs text-white/40">Peso (kg)</p>
+                  </div>
+                </div>
+              </div>
+
+              {progress.plan.instructions && (
+                <div className="mt-4 pt-3 border-t border-white/10">
+                  <p className="text-xs text-white/40 mb-1">Instrucciones al AI:</p>
+                  <p className="text-sm text-white/70">{progress.plan.instructions}</p>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
