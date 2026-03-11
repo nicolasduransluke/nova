@@ -25,19 +25,52 @@ interface CoachingUser {
   } | null;
 }
 
+// Parsed protocol rule
+interface ProtocolRule {
+  type: 'scheduled' | 'conditional' | 'event';
+  hour?: number;           // for scheduled rules
+  dayOfWeek?: number;      // 0=Sun..6=Sat, for weekly rules
+  condition?: string;      // 'no_intake_by_14', 'streak_milestone', 'weight_milestone', etc.
+  instruction: string;     // what to tell the AI to do
+  messageType: string;     // for coaching log dedup
+  subtype: string;
+}
+
+const DEFAULT_PROTOCOL = `08:30 - Pregúntale cómo va su día y si tiene algún plan de actividad física. Recomienda estrategia de alimentación.
+11:00 - Si no ha registrado comida, recuérdale registrar su desayuno/almuerzo.
+15:00 - Si no ha registrado comida desde las 11, recuérdale registrar su almuerzo/merienda.
+21:00 - Resumen diario con balance calórico, déficit y proyección semanal.
+lunes 09:00 - Revisar metas de la semana, preguntar objetivos.
+streak - Celebrar streaks en días 3, 7, 14, 21, 30, 60, 90.
+pattern - Analizar patrones de calorías de las últimas 2 semanas (lunes).`;
+
 const COACHING_TITLES: Record<string, Record<string, string>> = {
   es: {
+    morning_checkin: 'NOVA - Buenos días',
     meal_reminder: 'NOVA - Recordatorio',
     daily_summary: 'NOVA - Resumen del día',
     streak: 'NOVA - Racha',
     pattern_insight: 'NOVA - Insight semanal',
+    protocol_message: 'NOVA - Coach',
   },
   en: {
+    morning_checkin: 'NOVA - Good morning',
     meal_reminder: 'NOVA - Reminder',
     daily_summary: 'NOVA - Daily Summary',
     streak: 'NOVA - Streak',
     pattern_insight: 'NOVA - Weekly Insight',
+    protocol_message: 'NOVA - Coach',
   },
+};
+
+const DAY_MAP: Record<string, number> = {
+  domingo: 0, sunday: 0, dom: 0, sun: 0,
+  lunes: 1, monday: 1, lun: 1, mon: 1,
+  martes: 2, tuesday: 2, mar: 2, tue: 2,
+  miércoles: 3, miercoles: 3, wednesday: 3, mie: 3, wed: 3,
+  jueves: 4, thursday: 4, jue: 4, thu: 4,
+  viernes: 5, friday: 5, vie: 5, fri: 5,
+  sábado: 6, sabado: 6, saturday: 6, sab: 6, sat: 6,
 };
 
 @Injectable()
@@ -52,127 +85,262 @@ export class CoachingService {
   ) {}
 
   // ==========================================
-  // 1. Meal Reminders — every hour, check local time
+  // Single unified cron — runs every hour
   // ==========================================
   @Cron('0 * * * *')
-  async handleMealReminders(): Promise<void> {
-    this.logger.debug('Running meal reminder cron');
+  async handleProtocolEngine(): Promise<void> {
+    this.logger.debug('Running protocol engine');
     const users = await this.getCoachingUsers();
 
     for (const user of users) {
       try {
-        const localHour = this.getLocalHour(user.timezone);
+        await this.executeProtocolForUser(user);
+      } catch (error) {
+        this.logger.error(`Protocol engine error for user ${user.id}: ${error}`);
+      }
+    }
+  }
 
-        // breakfast=11, lunch=15, dinner=21
-        let mealType: string | null = null;
-        let threshold: number;
-        if (localHour === 11) {
-          mealType = 'breakfast';
-          threshold = 200;
-        } else if (localHour === 15) {
-          mealType = 'lunch';
-          threshold = 500;
-        } else if (localHour === 21) {
-          // 21 is shared with daily summary — skip meal reminder at 21
-          continue;
-        } else {
-          continue;
-        }
+  private async executeProtocolForUser(user: CoachingUser): Promise<void> {
+    const localHour = this.getLocalHour(user.timezone);
+    const localDayOfWeek = this.getLocalDayOfWeek(user.timezone);
+    const today = this.getTodayDateForUser(user.timezone);
+    const lang = user.language;
+    const isSpanish = lang !== 'en';
 
-        // Check if already sent today
-        const today = this.getTodayDateForUser(user.timezone);
-        const alreadySent = await this.hasCoachingLog(user.id, 'meal_reminder', mealType, today);
-        if (alreadySent) continue;
+    // Load protocol + style + plan
+    const [{ style, protocol: rawProtocol }, planInstructions] = await Promise.all([
+      this.getPatientAIProfile(user.id),
+      this.getActivePlanInstructions(user.id),
+    ]);
 
-        // Check today's intake
+    const protocolText = rawProtocol || DEFAULT_PROTOCOL;
+    const rules = this.parseProtocol(protocolText);
+
+    for (const rule of rules) {
+      try {
+        await this.executeRule(user, rule, localHour, localDayOfWeek, today, isSpanish, style, planInstructions, protocolText);
+      } catch (error) {
+        this.logger.error(`Rule execution error for user ${user.id}, rule ${rule.messageType}/${rule.subtype}: ${error}`);
+      }
+    }
+  }
+
+  private async executeRule(
+    user: CoachingUser,
+    rule: ProtocolRule,
+    localHour: number,
+    localDayOfWeek: number,
+    today: Date,
+    isSpanish: boolean,
+    style: string,
+    planInstructions: string | undefined,
+    protocolText: string,
+  ): Promise<void> {
+    const lang = user.language;
+
+    if (rule.type === 'scheduled') {
+      // Time-based rule — check if hour matches
+      if (rule.hour !== localHour) return;
+      // Weekly rules — check day of week
+      if (rule.dayOfWeek !== undefined && rule.dayOfWeek !== localDayOfWeek) return;
+
+      const alreadySent = await this.hasCoachingLog(user.id, rule.messageType, rule.subtype, today);
+      if (alreadySent) return;
+
+      // Special handling for daily_summary (needs data)
+      if (rule.messageType === 'daily_summary') {
+        await this.executeDailySummary(user, today, isSpanish, style, planInstructions, protocolText, rule);
+        return;
+      }
+
+      // Special handling for meal reminders with intake condition
+      if (rule.messageType === 'meal_reminder') {
         const todayIntake = await this.getTodayIntake(user.id, user.timezone);
-        if (todayIntake >= threshold) continue;
+        const threshold = localHour <= 12 ? 200 : 500;
+        if (todayIntake >= threshold) return;
 
-        // Get coach style + active plan
-        const [{ style, protocol }, planInstructions] = await Promise.all([
-          this.getPatientAIProfile(user.id),
-          this.getActivePlanInstructions(user.id),
-        ]);
-
-        // Generate message
-        const lang = user.language;
-        const isSpanish = lang !== 'en';
-        const mealLabel = isSpanish
-          ? (mealType === 'breakfast' ? 'desayuno' : 'almuerzo')
-          : (mealType === 'breakfast' ? 'breakfast' : 'lunch');
-        const timeLabel = isSpanish
-          ? (mealType === 'breakfast' ? 'media mañana' : 'media tarde')
-          : (mealType === 'breakfast' ? 'late morning' : 'mid-afternoon');
-        const prompt = `Generate a brief, friendly meal reminder in ${isSpanish ? 'Spanish' : 'English'} for ${user.name}.
-It's ${timeLabel} and they've only logged ${todayIntake} kcal so far today.
-Remind them to log their ${mealLabel}.
-IMPORTANT: If the coaching plan includes fasting or specific meal timing, adapt your message accordingly. Do NOT tell the patient to eat if their plan says they should be fasting at this hour. Instead, acknowledge their fasting and encourage them to stay on track.
+        const prompt = `Generate a brief coaching message in ${isSpanish ? 'Spanish' : 'English'} for ${user.name}.
+Current time: ${localHour}:00. They've logged ${todayIntake} kcal so far today.
+Instruction from their coach: "${rule.instruction}"
+IMPORTANT: If the coaching plan includes fasting or specific meal timing, adapt accordingly. Do NOT tell them to eat if they should be fasting.
 Keep it under 2 sentences, warm and motivating. Don't use emojis.`;
 
-        const systemPrompt = this.buildSystemPrompt(isSpanish, style, planInstructions, protocol);
+        const systemPrompt = this.buildSystemPrompt(isSpanish, style, planInstructions, protocolText);
+        const message = await this.claudeClient.generateResponse(prompt, { systemPrompt, maxTokens: 150, temperature: 0.8 });
+        const triggerData = { hour: localHour, intake: todayIntake, threshold, instruction: rule.instruction };
+        await this.saveAndSend(user.id, user.pushToken, rule.messageType, rule.subtype, today, message, lang, triggerData);
+        return;
+      }
 
-        const message = await this.claudeClient.generateResponse(prompt, {
-          systemPrompt,
-          maxTokens: 150,
-          temperature: 0.8,
-        });
+      // Generic scheduled message (morning_checkin, weekly review, custom)
+      const todayIntake = await this.getTodayIntake(user.id, user.timezone);
+      const prompt = `Generate a brief coaching message in ${isSpanish ? 'Spanish' : 'English'} for ${user.name}.
+Current time: ${localHour}:00. Today's intake so far: ${todayIntake} kcal.
+Instruction from their coach: "${rule.instruction}"
+Keep it under 2-3 sentences. Be warm, specific, and actionable. Don't use emojis.`;
 
-        const triggerData = { condition: `intake < ${threshold}`, observed: todayIntake, threshold, mealType };
-        await this.saveAndSend(user.id, user.pushToken, 'meal_reminder', mealType, today, message, lang, triggerData);
-      } catch (error) {
-        this.logger.error(`Meal reminder error for user ${user.id}: ${error}`);
+      const systemPrompt = this.buildSystemPrompt(isSpanish, style, planInstructions, protocolText);
+      const message = await this.claudeClient.generateResponse(prompt, { systemPrompt, maxTokens: 200, temperature: 0.8 });
+      const triggerData = { hour: localHour, dayOfWeek: localDayOfWeek, instruction: rule.instruction };
+      await this.saveAndSend(user.id, user.pushToken, rule.messageType, rule.subtype, today, message, lang, triggerData);
+
+    } else if (rule.type === 'event') {
+      // Event-based rules (streaks, patterns, weight milestones)
+      if (rule.condition === 'streak_milestone') {
+        await this.executeStreakRule(user, today, isSpanish, style, planInstructions, protocolText);
+      } else if (rule.condition === 'pattern_insight') {
+        // Only run on Mondays
+        if (localDayOfWeek !== 1 || localHour !== 10) return;
+        await this.executePatternRule(user, today, isSpanish, style, planInstructions, protocolText);
+      } else if (rule.condition === 'weight_milestone') {
+        await this.executeWeightMilestone(user, today, isSpanish, style, planInstructions, protocolText);
+        await this.executeWeightNudge(user, today, isSpanish, style, planInstructions, protocolText);
       }
     }
   }
 
   // ==========================================
-  // 2. Daily Summary — every hour, fires at 9pm local
+  // Protocol parser
   // ==========================================
-  @Cron('0 * * * *')
-  async handleDailySummary(): Promise<void> {
-    this.logger.debug('Running daily summary cron');
-    const users = await this.getCoachingUsers();
+  parseProtocol(text: string): ProtocolRule[] {
+    const rules: ProtocolRule[] = [];
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+    let ruleIndex = 0;
 
-    for (const user of users) {
-      try {
-        const localHour = this.getLocalHour(user.timezone);
-        if (localHour !== 21) continue;
+    for (const line of lines) {
+      // Event-based: "streak - ..."
+      if (/^streak\s*[-–—]/i.test(line)) {
+        rules.push({
+          type: 'event',
+          condition: 'streak_milestone',
+          instruction: line.replace(/^streak\s*[-–—]\s*/i, ''),
+          messageType: 'streak',
+          subtype: 'milestone',
+        });
+        continue;
+      }
 
-        const today = this.getTodayDateForUser(user.timezone);
-        const alreadySent = await this.hasCoachingLog(user.id, 'daily_summary', '', today);
-        if (alreadySent) continue;
+      // Event-based: "pattern - ..."
+      if (/^pattern\s*[-–—]/i.test(line)) {
+        rules.push({
+          type: 'event',
+          condition: 'pattern_insight',
+          instruction: line.replace(/^pattern\s*[-–—]\s*/i, ''),
+          messageType: 'pattern_insight',
+          subtype: '',
+        });
+        continue;
+      }
 
-        // Get today's data
-        const todayIntake = await this.getTodayIntake(user.id, user.timezone);
-        const todayBurn = await this.getTodayBurn(user.id, user.timezone);
+      // Event-based: "weight - ..."
+      if (/^(weight|peso)\s*[-–—]/i.test(line)) {
+        rules.push({
+          type: 'event',
+          condition: 'weight_milestone',
+          instruction: line.replace(/^(weight|peso)\s*[-–—]\s*/i, ''),
+          messageType: 'streak',
+          subtype: 'weight',
+        });
+        continue;
+      }
 
-        // Skip if no intake logged at all
-        if (todayIntake === 0) continue;
+      // Weekly: "lunes 09:00 - ..." or "monday 9:00 - ..."
+      const weeklyMatch = line.match(/^(\w+)\s+(\d{1,2})[:\.]?(\d{2})?\s*[-–—]\s*(.+)/i);
+      if (weeklyMatch) {
+        const dayStr = weeklyMatch[1].toLowerCase();
+        const dayOfWeek = DAY_MAP[dayStr];
+        if (dayOfWeek !== undefined) {
+          const hour = parseInt(weeklyMatch[2], 10);
+          rules.push({
+            type: 'scheduled',
+            hour,
+            dayOfWeek,
+            instruction: weeklyMatch[4],
+            messageType: 'protocol_message',
+            subtype: `weekly_${dayStr}_${hour}`,
+          });
+          continue;
+        }
+      }
 
-        // Build profile for TDEE calculation
-        const profile = user.profile ? {
-          weight: user.profile.weight,
-          height: user.profile.height,
-          age: user.profile.age,
-          sex: user.profile.sex as Profile['sex'],
-          activityLevel: (user.profile.activityLevel || 'moderate') as Profile['activityLevel'],
-          goalWeight: user.profile.goalWeight ?? undefined,
-          weeklyGoal: user.profile.weeklyGoal ?? undefined,
-        } as Profile : undefined;
+      // Time-based: "08:30 - ..." or "8:30 - ..." or "21:00 - ..."
+      const timeMatch = line.match(/^(\d{1,2})[:\.](\d{2})\s*[-–—]\s*(.+)/);
+      if (timeMatch) {
+        const hour = parseInt(timeMatch[1], 10);
+        const instruction = timeMatch[3];
 
-        const summary = this.metabolicAgent.calculateDailySummary(
-          profile,
-          todayIntake,
-          todayBurn,
-        );
+        // Detect type from content
+        let messageType = 'protocol_message';
+        let subtype = `h${hour}_${ruleIndex}`;
 
-        const [{ style, protocol }, planInstructions] = await Promise.all([
-          this.getPatientAIProfile(user.id),
-          this.getActivePlanInstructions(user.id),
-        ]);
-        const lang = user.language;
-        const isSpanish = lang !== 'en';
-        const prompt = `Generate a brief daily summary in ${isSpanish ? 'Spanish' : 'English'} for ${user.name}. Here are today's numbers:
+        const lowerInstr = instruction.toLowerCase();
+        if (lowerInstr.includes('resumen') || lowerInstr.includes('summary') || lowerInstr.includes('balance')) {
+          messageType = 'daily_summary';
+          subtype = '';
+        } else if (lowerInstr.includes('registr') || lowerInstr.includes('log') || lowerInstr.includes('recuérd') || lowerInstr.includes('recuerd') || lowerInstr.includes('remind')) {
+          messageType = 'meal_reminder';
+          subtype = `h${hour}`;
+        } else if (hour <= 10) {
+          messageType = 'morning_checkin';
+          subtype = '';
+        }
+
+        rules.push({
+          type: 'scheduled',
+          hour,
+          instruction,
+          messageType,
+          subtype,
+        });
+        ruleIndex++;
+        continue;
+      }
+
+      // Bullet point without time: "- Si no ha registrado..." (becomes a condition hint injected into protocol text, not a standalone rule)
+      // These are handled by the protocol text being injected into system prompts
+    }
+
+    // Always ensure weight milestone check exists
+    if (!rules.some(r => r.condition === 'weight_milestone')) {
+      rules.push({
+        type: 'event',
+        condition: 'weight_milestone',
+        instruction: 'Celebrate weight milestones and nudge if no weight log in 7+ days',
+        messageType: 'streak',
+        subtype: 'weight',
+      });
+    }
+
+    return rules;
+  }
+
+  // ==========================================
+  // Specialized execution methods
+  // ==========================================
+
+  private async executeDailySummary(
+    user: CoachingUser, today: Date, isSpanish: boolean,
+    style: string, planInstructions: string | undefined, protocolText: string,
+    rule: ProtocolRule,
+  ): Promise<void> {
+    const todayIntake = await this.getTodayIntake(user.id, user.timezone);
+    const todayBurn = await this.getTodayBurn(user.id, user.timezone);
+    if (todayIntake === 0) return;
+
+    const profile = user.profile ? {
+      weight: user.profile.weight,
+      height: user.profile.height,
+      age: user.profile.age,
+      sex: user.profile.sex as Profile['sex'],
+      activityLevel: (user.profile.activityLevel || 'moderate') as Profile['activityLevel'],
+      goalWeight: user.profile.goalWeight ?? undefined,
+      weeklyGoal: user.profile.weeklyGoal ?? undefined,
+    } as Profile : undefined;
+
+    const summary = this.metabolicAgent.calculateDailySummary(profile, todayIntake, todayBurn);
+
+    const prompt = `Generate a brief daily summary in ${isSpanish ? 'Spanish' : 'English'} for ${user.name}. Here are today's numbers:
 - Consumed: ${todayIntake} kcal
 - Exercise burn: ${todayBurn} kcal
 - TDEE: ${summary.tdee} kcal
@@ -181,123 +349,61 @@ Keep it under 2 sentences, warm and motivating. Don't use emojis.`;
 - Projected weekly loss: ${summary.projectedWeeklyLoss} kg/week
 
 ${summary.deficit >= summary.targetDeficit ? 'They met their deficit goal today.' : 'They fell short of their deficit goal.'}
+Coach instruction: "${rule.instruction}"
 Keep it under 3 sentences. Be encouraging and data-focused. Don't use emojis.`;
 
-        const systemPrompt = this.buildSystemPrompt(isSpanish, style, planInstructions, protocol);
-
-        const message = await this.claudeClient.generateResponse(prompt, {
-          systemPrompt,
-          maxTokens: 200,
-          temperature: 0.7,
-        });
-
-        const triggerData = { intake: todayIntake, burn: todayBurn, tdee: summary.tdee, deficit: summary.deficit, targetDeficit: summary.targetDeficit };
-        await this.saveAndSend(user.id, user.pushToken, 'daily_summary', '', today, message, lang, triggerData);
-      } catch (error) {
-        this.logger.error(`Daily summary error for user ${user.id}: ${error}`);
-      }
-    }
+    const systemPrompt = this.buildSystemPrompt(isSpanish, style, planInstructions, protocolText);
+    const message = await this.claudeClient.generateResponse(prompt, { systemPrompt, maxTokens: 200, temperature: 0.7 });
+    const triggerData = { intake: todayIntake, burn: todayBurn, tdee: summary.tdee, deficit: summary.deficit, targetDeficit: summary.targetDeficit };
+    await this.saveAndSend(user.id, user.pushToken, 'daily_summary', '', today, message, user.language, triggerData);
   }
 
-  // ==========================================
-  // 3. Progress & Streaks — daily at 2pm UTC
-  // ==========================================
-  @Cron('0 14 * * *')
-  async handleStreaksAndProgress(): Promise<void> {
-    this.logger.debug('Running streaks cron');
-    const users = await this.getCoachingUsers();
+  private async executeStreakRule(
+    user: CoachingUser, today: Date, isSpanish: boolean,
+    style: string, planInstructions: string | undefined, protocolText: string,
+  ): Promise<void> {
+    const streak = await this.calculateStreak(user.id);
+    const milestones = [3, 7, 14, 21, 30, 60, 90];
 
-    for (const user of users) {
-      try {
-        const today = this.getTodayDateForUser(user.timezone);
+    if (!milestones.includes(streak)) return;
 
-        // Calculate logging streak
-        const streak = await this.calculateStreak(user.id);
-        const milestones = [3, 7, 14, 21, 30, 60, 90];
+    const alreadySent = await this.hasCoachingLog(user.id, 'streak', `day_${streak}`, today);
+    if (alreadySent) return;
 
-        if (milestones.includes(streak)) {
-          const alreadySent = await this.hasCoachingLog(user.id, 'streak', `day_${streak}`, today);
-          if (!alreadySent) {
-            const [{ style, protocol }, planInstructions] = await Promise.all([
-          this.getPatientAIProfile(user.id),
-          this.getActivePlanInstructions(user.id),
-        ]);
-            const lang = user.language;
-            const isSpanish = lang !== 'en';
-            const prompt = `Generate a streak celebration message in ${isSpanish ? 'Spanish' : 'English'} for ${user.name}.
+    const prompt = `Generate a streak celebration message in ${isSpanish ? 'Spanish' : 'English'} for ${user.name}.
 They have logged their meals for ${streak} consecutive days!
 Keep it under 2 sentences. Be enthusiastic but not over-the-top. Don't use emojis.`;
 
-            const systemPrompt = this.buildSystemPrompt(isSpanish, style, planInstructions, protocol);
-
-            const message = await this.claudeClient.generateResponse(prompt, {
-              systemPrompt,
-              maxTokens: 150,
-              temperature: 0.8,
-            });
-
-            const triggerData = { streak, milestone: `day_${streak}` };
-            await this.saveAndSend(user.id, user.pushToken, 'streak', `day_${streak}`, today, message, lang, triggerData);
-          }
-        }
-
-        // Check for weight milestones
-        if (user.profile?.goalWeight) {
-          await this.checkWeightMilestone(user, today);
-        }
-
-        // Nudge if no weight log in 7+ days
-        await this.checkWeightNudge(user, today);
-      } catch (error) {
-        this.logger.error(`Streak error for user ${user.id}: ${error}`);
-      }
-    }
+    const systemPrompt = this.buildSystemPrompt(isSpanish, style, planInstructions, protocolText);
+    const message = await this.claudeClient.generateResponse(prompt, { systemPrompt, maxTokens: 150, temperature: 0.8 });
+    const triggerData = { streak, milestone: `day_${streak}` };
+    await this.saveAndSend(user.id, user.pushToken, 'streak', `day_${streak}`, today, message, user.language, triggerData);
   }
 
-  // ==========================================
-  // 4. Pattern Insights — Mondays 10am UTC
-  // ==========================================
-  @Cron('0 10 * * 1')
-  async handlePatternInsights(): Promise<void> {
-    this.logger.debug('Running pattern insights cron');
-    const users = await this.getCoachingUsers();
+  private async executePatternRule(
+    user: CoachingUser, today: Date, isSpanish: boolean,
+    style: string, planInstructions: string | undefined, protocolText: string,
+  ): Promise<void> {
+    const alreadySent = await this.hasCoachingLog(user.id, 'pattern_insight', '', today);
+    if (alreadySent) return;
 
-    for (const user of users) {
-      try {
-        const today = this.getTodayDateForUser(user.timezone);
-        const alreadySent = await this.hasCoachingLog(user.id, 'pattern_insight', '', today);
-        if (alreadySent) continue;
+    const twoWeeksAgo = new Date();
+    twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
 
-        // Get last 14 days of entries
-        const twoWeeksAgo = new Date();
-        twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+    const entries = await this.prisma.calorieEntry.findMany({
+      where: { userId: user.id, type: 'intake', date: { gte: twoWeeksAgo } },
+      orderBy: { date: 'asc' },
+    });
 
-        const entries = await this.prisma.calorieEntry.findMany({
-          where: {
-            userId: user.id,
-            type: 'intake',
-            date: { gte: twoWeeksAgo },
-          },
-          orderBy: { date: 'asc' },
-        });
+    if (entries.length < 7) return;
 
-        // Need at least 7 data points
-        if (entries.length < 7) continue;
+    const dailyMap: Record<string, number> = {};
+    for (const entry of entries) {
+      const dateKey = entry.date.toISOString().split('T')[0];
+      dailyMap[dateKey] = (dailyMap[dateKey] || 0) + entry.calories;
+    }
 
-        // Build daily intake map
-        const dailyMap: Record<string, number> = {};
-        for (const entry of entries) {
-          const dateKey = entry.date.toISOString().split('T')[0];
-          dailyMap[dateKey] = (dailyMap[dateKey] || 0) + entry.calories;
-        }
-
-        const [{ style, protocol }, planInstructions] = await Promise.all([
-          this.getPatientAIProfile(user.id),
-          this.getActivePlanInstructions(user.id),
-        ]);
-        const lang = user.language;
-        const isSpanish = lang !== 'en';
-        const prompt = `Analyze this 2-week daily calorie intake data and find patterns.
+    const prompt = `Analyze this 2-week daily calorie intake data and find patterns.
 Data (date: calories): ${JSON.stringify(dailyMap)}
 
 Look for:
@@ -310,22 +416,80 @@ If there's NO interesting pattern, respond with exactly: NO_PATTERN
 Otherwise, generate a brief insight message in ${isSpanish ? 'Spanish' : 'English'} (2-3 sentences).
 Be specific with numbers. Don't use emojis.`;
 
-        const systemPrompt = this.buildSystemPrompt(isSpanish, style, planInstructions, protocol);
+    const systemPrompt = this.buildSystemPrompt(isSpanish, style, planInstructions, protocolText);
+    const message = await this.claudeClient.generateResponse(prompt, { systemPrompt, maxTokens: 200, temperature: 0.7 });
+    if (message.trim() === 'NO_PATTERN') return;
 
-        const message = await this.claudeClient.generateResponse(prompt, {
-          systemPrompt,
-          maxTokens: 200,
-          temperature: 0.7,
-        });
+    const triggerData = { dataPoints: Object.keys(dailyMap).length, dailyMap };
+    await this.saveAndSend(user.id, user.pushToken, 'pattern_insight', '', today, message, user.language, triggerData);
+  }
 
-        if (message.trim() === 'NO_PATTERN') continue;
+  private async executeWeightMilestone(
+    user: CoachingUser, today: Date, isSpanish: boolean,
+    style: string, planInstructions: string | undefined, protocolText: string,
+  ): Promise<void> {
+    if (!user.profile?.goalWeight) return;
 
-        const triggerData = { dataPoints: Object.keys(dailyMap).length, dailyMap };
-        await this.saveAndSend(user.id, user.pushToken, 'pattern_insight', '', today, message, lang, triggerData);
-      } catch (error) {
-        this.logger.error(`Pattern insight error for user ${user.id}: ${error}`);
-      }
+    const recentLogs = await this.prisma.weightLog.findMany({
+      where: { userId: user.id },
+      orderBy: { date: 'desc' },
+      take: 2,
+    });
+
+    if (recentLogs.length < 2) return;
+
+    const current = recentLogs[0].weight;
+    const previous = recentLogs[1].weight;
+    const goal = user.profile.goalWeight;
+
+    const currentFloor = Math.floor(current);
+    const previousFloor = Math.floor(previous);
+
+    if (current < previous && currentFloor < previousFloor && current > goal) {
+      const alreadySent = await this.hasCoachingLog(user.id, 'streak', `weight_${currentFloor}`, today);
+      if (alreadySent) return;
+
+      const remaining = (current - goal).toFixed(1);
+      const prompt = `Generate a weight milestone celebration in ${isSpanish ? 'Spanish' : 'English'} for ${user.name}.
+They just crossed below ${previousFloor} kg and are now at ${current} kg.
+Their goal is ${goal} kg (${remaining} kg remaining).
+Keep it under 2 sentences. Don't use emojis.`;
+
+      const systemPrompt = this.buildSystemPrompt(isSpanish, style, planInstructions, protocolText);
+      const message = await this.claudeClient.generateResponse(prompt, { systemPrompt, maxTokens: 150, temperature: 0.8 });
+      const triggerData = { previous, current, goal, crossedBelow: previousFloor };
+      await this.saveAndSend(user.id, user.pushToken, 'streak', `weight_${currentFloor}`, today, message, user.language, triggerData);
     }
+  }
+
+  private async executeWeightNudge(
+    user: CoachingUser, today: Date, isSpanish: boolean,
+    style: string, planInstructions: string | undefined, protocolText: string,
+  ): Promise<void> {
+    const alreadySent = await this.hasCoachingLog(user.id, 'streak', 'weight_nudge', today);
+    if (alreadySent) return;
+
+    const lastWeightLog = await this.prisma.weightLog.findFirst({
+      where: { userId: user.id },
+      orderBy: { date: 'desc' },
+    });
+
+    if (!lastWeightLog) return;
+
+    const daysSinceLastLog = Math.floor(
+      (Date.now() - lastWeightLog.date.getTime()) / (1000 * 60 * 60 * 24),
+    );
+
+    if (daysSinceLastLog < 7) return;
+
+    const prompt = `Generate a gentle weight logging reminder in ${isSpanish ? 'Spanish' : 'English'} for ${user.name}.
+They haven't logged their weight in ${daysSinceLastLog} days.
+Keep it under 2 sentences. Be encouraging, not pushy. Don't use emojis.`;
+
+    const systemPrompt = this.buildSystemPrompt(isSpanish, style, planInstructions, protocolText);
+    const message = await this.claudeClient.generateResponse(prompt, { systemPrompt, maxTokens: 150, temperature: 0.8 });
+    const triggerData = { daysSinceLastLog, lastLogDate: lastWeightLog.date.toISOString() };
+    await this.saveAndSend(user.id, user.pushToken, 'streak', 'weight_nudge', today, message, user.language, triggerData);
   }
 
   // ==========================================
@@ -441,6 +605,20 @@ Be specific with numbers. Don't use emojis.`;
     }
   }
 
+  private getLocalDayOfWeek(timezone: string): number {
+    try {
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        weekday: 'short',
+      });
+      const day = formatter.format(new Date());
+      const map: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+      return map[day] ?? new Date().getDay();
+    } catch {
+      return new Date().getDay();
+    }
+  }
+
   private getTodayDateForUser(timezone: string): Date {
     try {
       const formatter = new Intl.DateTimeFormat('en-CA', {
@@ -526,93 +704,6 @@ Be specific with numbers. Don't use emojis.`;
     }
 
     return streak;
-  }
-
-  private async checkWeightMilestone(user: CoachingUser, today: Date): Promise<void> {
-    if (!user.profile?.goalWeight) return;
-
-    const recentLogs = await this.prisma.weightLog.findMany({
-      where: { userId: user.id },
-      orderBy: { date: 'desc' },
-      take: 2,
-    });
-
-    if (recentLogs.length < 2) return;
-
-    const current = recentLogs[0].weight;
-    const previous = recentLogs[1].weight;
-    const goal = user.profile.goalWeight;
-
-    // Check if crossed a whole kg toward goal
-    const currentFloor = Math.floor(current);
-    const previousFloor = Math.floor(previous);
-
-    if (current < previous && currentFloor < previousFloor && current > goal) {
-      const alreadySent = await this.hasCoachingLog(user.id, 'streak', `weight_${currentFloor}`, today);
-      if (alreadySent) return;
-
-      const [{ style, protocol }, planInstructions] = await Promise.all([
-          this.getPatientAIProfile(user.id),
-          this.getActivePlanInstructions(user.id),
-        ]);
-      const remaining = (current - goal).toFixed(1);
-      const lang = user.language;
-      const isSpanish = lang !== 'en';
-      const prompt = `Generate a weight milestone celebration in ${isSpanish ? 'Spanish' : 'English'} for ${user.name}.
-They just crossed below ${previousFloor} kg and are now at ${current} kg.
-Their goal is ${goal} kg (${remaining} kg remaining).
-Keep it under 2 sentences. Don't use emojis.`;
-
-      const systemPrompt = this.buildSystemPrompt(isSpanish, style, planInstructions, protocol);
-
-      const message = await this.claudeClient.generateResponse(prompt, {
-        systemPrompt,
-        maxTokens: 150,
-        temperature: 0.8,
-      });
-
-      const triggerData = { previous, current, goal, crossedBelow: previousFloor };
-      await this.saveAndSend(user.id, user.pushToken, 'streak', `weight_${currentFloor}`, today, message, lang, triggerData);
-    }
-  }
-
-  private async checkWeightNudge(user: CoachingUser, today: Date): Promise<void> {
-    const alreadySent = await this.hasCoachingLog(user.id, 'streak', 'weight_nudge', today);
-    if (alreadySent) return;
-
-    const lastWeightLog = await this.prisma.weightLog.findFirst({
-      where: { userId: user.id },
-      orderBy: { date: 'desc' },
-    });
-
-    if (!lastWeightLog) return;
-
-    const daysSinceLastLog = Math.floor(
-      (Date.now() - lastWeightLog.date.getTime()) / (1000 * 60 * 60 * 24),
-    );
-
-    if (daysSinceLastLog < 7) return;
-
-    const [{ style, protocol }, planInstructions] = await Promise.all([
-          this.getPatientAIProfile(user.id),
-          this.getActivePlanInstructions(user.id),
-        ]);
-    const lang = user.language;
-    const isSpanish = lang !== 'en';
-    const prompt = `Generate a gentle weight logging reminder in ${isSpanish ? 'Spanish' : 'English'} for ${user.name}.
-They haven't logged their weight in ${daysSinceLastLog} days.
-Keep it under 2 sentences. Be encouraging, not pushy. Don't use emojis.`;
-
-    const systemPrompt = this.buildSystemPrompt(isSpanish, style, planInstructions, protocol);
-
-    const message = await this.claudeClient.generateResponse(prompt, {
-      systemPrompt,
-      maxTokens: 150,
-      temperature: 0.8,
-    });
-
-    const triggerData = { daysSinceLastLog, lastLogDate: lastWeightLog.date.toISOString() };
-    await this.saveAndSend(user.id, user.pushToken, 'streak', 'weight_nudge', today, message, lang, triggerData);
   }
 
   // ==========================================

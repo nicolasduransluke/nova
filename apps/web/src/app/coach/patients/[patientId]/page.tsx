@@ -970,17 +970,21 @@ interface CoachingLogEntry {
 }
 
 const TYPE_LABELS: Record<string, { label: string; schedule: string }> = {
-  meal_reminder: { label: 'Meal Reminder', schedule: '11:00 / 15:00 local' },
-  daily_summary: { label: 'Daily Summary', schedule: '21:00 local' },
-  streak: { label: 'Streak / Milestone', schedule: 'Milestone-based' },
-  pattern_insight: { label: 'Pattern Insight', schedule: 'Monday 10:00 UTC' },
+  morning_checkin: { label: 'Morning Check-in', schedule: 'Definido en protocolo' },
+  meal_reminder: { label: 'Meal Reminder', schedule: 'Definido en protocolo' },
+  daily_summary: { label: 'Daily Summary', schedule: 'Definido en protocolo' },
+  streak: { label: 'Streak / Milestone', schedule: 'Evento automático' },
+  pattern_insight: { label: 'Pattern Insight', schedule: 'Lunes (evento)' },
+  protocol_message: { label: 'Protocolo', schedule: 'Definido en protocolo' },
 };
 
-const DEFAULT_PROTOCOL = `- Recordatorio de comidas a las 11:00 y 15:00
-- Resumen diario a las 21:00 con balance calórico
-- Si no ha registrado comida antes de las 14:00, enviar check-in amigable
-- Celebrar streaks (3, 7, 14, 30 días consecutivos)
-- Los lunes revisar metas de la semana`;
+const DEFAULT_PROTOCOL = `08:30 - Pregúntale cómo va su día y si tiene algún plan de actividad física. Recomienda estrategia de alimentación.
+11:00 - Si no ha registrado comida, recuérdale registrar su desayuno/almuerzo.
+15:00 - Si no ha registrado comida desde las 11, recuérdale registrar su almuerzo/merienda.
+21:00 - Resumen diario con balance calórico, déficit y proyección semanal.
+lunes 09:00 - Revisar metas de la semana, preguntar objetivos.
+streak - Celebrar streaks en días 3, 7, 14, 21, 30, 60, 90.
+pattern - Analizar patrones de calorías de las últimas 2 semanas.`;
 
 function CoachingTab({ patientId }: { patientId: string }) {
   const [logs, setLogs] = useState<CoachingLogEntry[]>([]);
@@ -1225,16 +1229,16 @@ function CoachingTab({ patientId }: { patientId: string }) {
         )}
       </div>
 
-      {/* Schedule reference */}
+      {/* Format reference */}
       <div className="rounded-xl bg-white/5 border border-white/10 p-5">
-        <h3 className="font-semibold mb-3">Horarios de mensajes</h3>
-        <div className="grid grid-cols-2 gap-2 text-sm">
-          {Object.entries(TYPE_LABELS).map(([, info]) => (
-            <div key={info.label} className="flex justify-between">
-              <span className="text-white/60">{info.label}</span>
-              <span className="text-white/40">{info.schedule}</span>
-            </div>
-          ))}
+        <h3 className="font-semibold mb-2">Formato del protocolo</h3>
+        <p className="text-xs text-white/40 mb-3">El protocolo controla qué mensajes envía Nova y cuándo. Usa este formato:</p>
+        <div className="space-y-1 text-xs font-mono text-white/50">
+          <p><span className="text-nova-primary">08:30</span> - Mensaje diario a las 8:30am</p>
+          <p><span className="text-nova-primary">lunes 09:00</span> - Mensaje solo los lunes a las 9am</p>
+          <p><span className="text-nova-primary">streak</span> - Celebrar rachas de días consecutivos</p>
+          <p><span className="text-nova-primary">pattern</span> - Análisis semanal de patrones</p>
+          <p><span className="text-nova-primary">weight</span> - Celebrar hitos de peso</p>
         </div>
       </div>
     </div>
