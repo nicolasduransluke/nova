@@ -978,6 +978,67 @@ const TYPE_LABELS: Record<string, { label: string; schedule: string }> = {
   protocol_message: { label: 'Protocolo', schedule: 'Definido en protocolo' },
 };
 
+const DAY_NAMES: Record<string, string> = {
+  domingo: 'Dom', sunday: 'Dom', dom: 'Dom', sun: 'Dom',
+  lunes: 'Lun', monday: 'Lun', lun: 'Lun', mon: 'Lun',
+  martes: 'Mar', tuesday: 'Mar', mar: 'Mar', tue: 'Mar',
+  miércoles: 'Mie', miercoles: 'Mie', wednesday: 'Mie', mie: 'Mie', wed: 'Mie',
+  jueves: 'Jue', thursday: 'Jue', jue: 'Jue', thu: 'Jue',
+  viernes: 'Vie', friday: 'Vie', vie: 'Vie', fri: 'Vie',
+  sábado: 'Sab', sabado: 'Sab', saturday: 'Sab', sab: 'Sab', sat: 'Sab',
+};
+
+function parseProtocolPreview(text: string): { type: string; badge: string; description: string }[] {
+  const rules: { type: string; badge: string; description: string }[] = [];
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+
+  for (const line of lines) {
+    if (/^streak\s*[-–—]/i.test(line)) {
+      rules.push({ type: 'event', badge: 'STREAK', description: line.replace(/^streak\s*[-–—]\s*/i, '') });
+      continue;
+    }
+    if (/^pattern\s*[-–—]/i.test(line)) {
+      rules.push({ type: 'event', badge: 'PATTERN', description: line.replace(/^pattern\s*[-–—]\s*/i, '') });
+      continue;
+    }
+    if (/^(weight|peso)\s*[-–—]/i.test(line)) {
+      rules.push({ type: 'event', badge: 'WEIGHT', description: line.replace(/^(weight|peso)\s*[-–—]\s*/i, '') });
+      continue;
+    }
+
+    const weeklyMatch = line.match(/^(\w+)\s+(\d{1,2})[:\.]?(\d{2})?\s*[-–—]\s*(.+)/i);
+    if (weeklyMatch) {
+      const dayStr = weeklyMatch[1].toLowerCase();
+      const dayName = DAY_NAMES[dayStr];
+      if (dayName) {
+        const h = parseInt(weeklyMatch[2], 10);
+        const m = weeklyMatch[3] || '00';
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        const h12 = h > 12 ? h - 12 : h === 0 ? 12 : h;
+        rules.push({ type: 'weekly', badge: `${dayName} ${h12}:${m} ${ampm}`, description: weeklyMatch[4] });
+        continue;
+      }
+    }
+
+    const timeMatch = line.match(/^(\d{1,2})[:\.](\d{2})\s*[-–—]\s*(.+)/);
+    if (timeMatch) {
+      const h = parseInt(timeMatch[1], 10);
+      const m = timeMatch[2];
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      const h12 = h > 12 ? h - 12 : h === 0 ? 12 : h;
+      rules.push({ type: 'scheduled', badge: `${h12}:${m} ${ampm}`, description: timeMatch[3] });
+      continue;
+    }
+
+    // Unrecognized line — show as context rule
+    if (line.startsWith('-')) {
+      rules.push({ type: 'event', badge: 'REGLA', description: line.replace(/^-\s*/, '') });
+    }
+  }
+
+  return rules;
+}
+
 const DEFAULT_PROTOCOL = `08:30 - Pregúntale cómo va su día y si tiene algún plan de actividad física. Recomienda estrategia de alimentación.
 11:00 - Si no ha registrado comida, recuérdale registrar su desayuno/almuerzo.
 15:00 - Si no ha registrado comida desde las 11, recuérdale registrar su almuerzo/merienda.
@@ -1095,7 +1156,7 @@ function CoachingTab({ patientId }: { patientId: string }) {
           )}
         </div>
         <p className="text-xs text-white/40 mb-3">
-          Reglas de comportamiento para los mensajes automaticos. Define cuando y como Nova debe interactuar con este paciente.
+          Define cuando y como Nova interactua con este paciente. Una regla por linea.
         </p>
         <textarea
           value={protocol}
@@ -1105,8 +1166,8 @@ function CoachingTab({ patientId }: { patientId: string }) {
             e.target.style.height = e.target.scrollHeight + 'px';
           }}
           onFocus={(e) => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
-          placeholder={`Ej:\n- Si es su primera semana, pregúntale cómo se está adaptando\n- Tiene fasting hasta la 1pm, no mencionar desayuno\n- Los miércoles tiene entrenamiento, pregúntale cómo le fue\n- Si lleva 2 días sin registrar, enviar motivación extra`}
-          className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white text-sm placeholder-white/30 resize-none overflow-hidden focus:outline-none focus:ring-1 focus:ring-nova-primary"
+          placeholder={`08:30 - Pregúntale su plan del día y recomienda alimentación\n11:00 - Si no ha registrado comida, recordatorio\n15:00 - Check-in de almuerzo/merienda\n21:00 - Resumen diario con balance calórico\nlunes 09:00 - Revisar metas de la semana\nstreak - Celebrar rachas consecutivas\npattern - Análisis semanal de patrones`}
+          className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white text-sm placeholder-white/30 resize-none overflow-hidden focus:outline-none focus:ring-1 focus:ring-nova-primary font-mono"
           rows={5}
         />
         <div className="flex items-center gap-2 mt-2">
@@ -1128,6 +1189,27 @@ function CoachingTab({ patientId }: { patientId: string }) {
             </button>
           )}
         </div>
+
+        {/* Parsed preview */}
+        {savedProtocol && protocol === savedProtocol && (
+          <div className="mt-4 pt-3 border-t border-white/10">
+            <p className="text-xs text-white/40 mb-2">Reglas activas:</p>
+            <div className="space-y-1">
+              {parseProtocolPreview(savedProtocol).map((rule, i) => (
+                <div key={i} className="flex items-center gap-2 text-xs">
+                  <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                    rule.type === 'scheduled' ? 'bg-nova-primary/20 text-nova-primary' :
+                    rule.type === 'weekly' ? 'bg-blue-500/20 text-blue-400' :
+                    'bg-amber-500/20 text-amber-400'
+                  }`}>
+                    {rule.badge}
+                  </span>
+                  <span className="text-white/60">{rule.description}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Automated Messages */}
