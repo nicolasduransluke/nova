@@ -1074,8 +1074,9 @@ function CoachingTab({ patientId }: { patientId: string }) {
       setSavedStyle(styleRes.data);
     }
     if (protocolRes.success && protocolRes.data != null) {
-      setProtocol(protocolRes.data);
-      setSavedProtocol(protocolRes.data);
+      const p = protocolRes.data || DEFAULT_PROTOCOL;
+      setProtocol(p);
+      setSavedProtocol(p);
     }
     setLoadingLogs(false);
   }
@@ -1146,14 +1147,6 @@ function CoachingTab({ patientId }: { patientId: string }) {
       <div className="rounded-xl bg-white/5 border border-white/10 p-5">
         <div className="flex items-center justify-between mb-1">
           <h3 className="font-semibold">Protocolo de coaching</h3>
-          {!protocol && (
-            <button
-              onClick={loadTemplate}
-              className="text-xs text-nova-primary hover:text-nova-primary/80 transition-colors"
-            >
-              Cargar template base
-            </button>
-          )}
         </div>
         <p className="text-xs text-white/40 mb-3">
           Define cuando y como Nova interactua con este paciente. Una regla por linea.
@@ -1180,14 +1173,12 @@ function CoachingTab({ patientId }: { patientId: string }) {
               {savingProtocol ? 'Guardando...' : 'Guardar protocolo'}
             </button>
           )}
-          {protocol && (
-            <button
-              onClick={loadTemplate}
-              className="text-xs text-white/30 hover:text-white/50 transition-colors"
-            >
-              + Agregar template base
-            </button>
-          )}
+          <button
+            onClick={() => setProtocol(DEFAULT_PROTOCOL)}
+            className="text-xs text-white/30 hover:text-white/50 transition-colors"
+          >
+            Restaurar template base
+          </button>
         </div>
 
         {/* Parsed preview */}
