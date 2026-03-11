@@ -226,6 +226,25 @@ export class CoachController {
     return ok(await this.coachService.updatePatientStyle(user.sub, patientId, body.styleInstructions));
   }
 
+  @Get('patients/:patientId/protocol')
+  @Roles('coach')
+  async getPatientProtocol(
+    @CurrentUser() user: JwtPayload,
+    @Param('patientId') patientId: string,
+  ) {
+    return ok(await this.coachService.getPatientProtocol(user.sub, patientId));
+  }
+
+  @Patch('patients/:patientId/protocol')
+  @Roles('coach')
+  async updatePatientProtocol(
+    @CurrentUser() user: JwtPayload,
+    @Param('patientId') patientId: string,
+    @Body() body: { coachingProtocol: string },
+  ) {
+    return ok(await this.coachService.updatePatientProtocol(user.sub, patientId, body.coachingProtocol));
+  }
+
   // ─── Patient endpoints ────────────────────────────────────
 
   @Get('my-coach')

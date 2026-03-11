@@ -89,8 +89,8 @@ export class CoachingService {
         if (todayIntake >= threshold) continue;
 
         // Get coach style + active plan
-        const [style, planInstructions] = await Promise.all([
-          this.getStyleInstructions(user.id),
+        const [{ style, protocol }, planInstructions] = await Promise.all([
+          this.getPatientAIProfile(user.id),
           this.getActivePlanInstructions(user.id),
         ]);
 
@@ -109,7 +109,7 @@ Remind them to log their ${mealLabel}.
 IMPORTANT: If the coaching plan includes fasting or specific meal timing, adapt your message accordingly. Do NOT tell the patient to eat if their plan says they should be fasting at this hour. Instead, acknowledge their fasting and encourage them to stay on track.
 Keep it under 2 sentences, warm and motivating. Don't use emojis.`;
 
-        const systemPrompt = this.buildSystemPrompt(isSpanish, style, planInstructions);
+        const systemPrompt = this.buildSystemPrompt(isSpanish, style, planInstructions, protocol);
 
         const message = await this.claudeClient.generateResponse(prompt, {
           systemPrompt,
@@ -166,8 +166,8 @@ Keep it under 2 sentences, warm and motivating. Don't use emojis.`;
           todayBurn,
         );
 
-        const [style, planInstructions] = await Promise.all([
-          this.getStyleInstructions(user.id),
+        const [{ style, protocol }, planInstructions] = await Promise.all([
+          this.getPatientAIProfile(user.id),
           this.getActivePlanInstructions(user.id),
         ]);
         const lang = user.language;
@@ -183,7 +183,7 @@ Keep it under 2 sentences, warm and motivating. Don't use emojis.`;
 ${summary.deficit >= summary.targetDeficit ? 'They met their deficit goal today.' : 'They fell short of their deficit goal.'}
 Keep it under 3 sentences. Be encouraging and data-focused. Don't use emojis.`;
 
-        const systemPrompt = this.buildSystemPrompt(isSpanish, style, planInstructions);
+        const systemPrompt = this.buildSystemPrompt(isSpanish, style, planInstructions, protocol);
 
         const message = await this.claudeClient.generateResponse(prompt, {
           systemPrompt,
@@ -218,8 +218,8 @@ Keep it under 3 sentences. Be encouraging and data-focused. Don't use emojis.`;
         if (milestones.includes(streak)) {
           const alreadySent = await this.hasCoachingLog(user.id, 'streak', `day_${streak}`, today);
           if (!alreadySent) {
-            const [style, planInstructions] = await Promise.all([
-          this.getStyleInstructions(user.id),
+            const [{ style, protocol }, planInstructions] = await Promise.all([
+          this.getPatientAIProfile(user.id),
           this.getActivePlanInstructions(user.id),
         ]);
             const lang = user.language;
@@ -228,7 +228,7 @@ Keep it under 3 sentences. Be encouraging and data-focused. Don't use emojis.`;
 They have logged their meals for ${streak} consecutive days!
 Keep it under 2 sentences. Be enthusiastic but not over-the-top. Don't use emojis.`;
 
-            const systemPrompt = this.buildSystemPrompt(isSpanish, style, planInstructions);
+            const systemPrompt = this.buildSystemPrompt(isSpanish, style, planInstructions, protocol);
 
             const message = await this.claudeClient.generateResponse(prompt, {
               systemPrompt,
@@ -291,8 +291,8 @@ Keep it under 2 sentences. Be enthusiastic but not over-the-top. Don't use emoji
           dailyMap[dateKey] = (dailyMap[dateKey] || 0) + entry.calories;
         }
 
-        const [style, planInstructions] = await Promise.all([
-          this.getStyleInstructions(user.id),
+        const [{ style, protocol }, planInstructions] = await Promise.all([
+          this.getPatientAIProfile(user.id),
           this.getActivePlanInstructions(user.id),
         ]);
         const lang = user.language;
@@ -310,7 +310,7 @@ If there's NO interesting pattern, respond with exactly: NO_PATTERN
 Otherwise, generate a brief insight message in ${isSpanish ? 'Spanish' : 'English'} (2-3 sentences).
 Be specific with numbers. Don't use emojis.`;
 
-        const systemPrompt = this.buildSystemPrompt(isSpanish, style, planInstructions);
+        const systemPrompt = this.buildSystemPrompt(isSpanish, style, planInstructions, protocol);
 
         const message = await this.claudeClient.generateResponse(prompt, {
           systemPrompt,
@@ -551,8 +551,8 @@ Be specific with numbers. Don't use emojis.`;
       const alreadySent = await this.hasCoachingLog(user.id, 'streak', `weight_${currentFloor}`, today);
       if (alreadySent) return;
 
-      const [style, planInstructions] = await Promise.all([
-          this.getStyleInstructions(user.id),
+      const [{ style, protocol }, planInstructions] = await Promise.all([
+          this.getPatientAIProfile(user.id),
           this.getActivePlanInstructions(user.id),
         ]);
       const remaining = (current - goal).toFixed(1);
@@ -563,7 +563,7 @@ They just crossed below ${previousFloor} kg and are now at ${current} kg.
 Their goal is ${goal} kg (${remaining} kg remaining).
 Keep it under 2 sentences. Don't use emojis.`;
 
-      const systemPrompt = this.buildSystemPrompt(isSpanish, style, planInstructions);
+      const systemPrompt = this.buildSystemPrompt(isSpanish, style, planInstructions, protocol);
 
       const message = await this.claudeClient.generateResponse(prompt, {
         systemPrompt,
@@ -593,8 +593,8 @@ Keep it under 2 sentences. Don't use emojis.`;
 
     if (daysSinceLastLog < 7) return;
 
-    const [style, planInstructions] = await Promise.all([
-          this.getStyleInstructions(user.id),
+    const [{ style, protocol }, planInstructions] = await Promise.all([
+          this.getPatientAIProfile(user.id),
           this.getActivePlanInstructions(user.id),
         ]);
     const lang = user.language;
@@ -603,7 +603,7 @@ Keep it under 2 sentences. Don't use emojis.`;
 They haven't logged their weight in ${daysSinceLastLog} days.
 Keep it under 2 sentences. Be encouraging, not pushy. Don't use emojis.`;
 
-    const systemPrompt = this.buildSystemPrompt(isSpanish, style, planInstructions);
+    const systemPrompt = this.buildSystemPrompt(isSpanish, style, planInstructions, protocol);
 
     const message = await this.claudeClient.generateResponse(prompt, {
       systemPrompt,
@@ -619,8 +619,11 @@ Keep it under 2 sentences. Be encouraging, not pushy. Don't use emojis.`;
   // Style & prompt helpers
   // ==========================================
 
-  private buildSystemPrompt(isSpanish: boolean, style: string, planInstructions?: string): string {
+  private buildSystemPrompt(isSpanish: boolean, style: string, planInstructions?: string, protocol?: string): string {
     let base = `You are NOVA, a calorie deficit coach. Generate brief coaching messages in ${isSpanish ? 'Spanish' : 'English'}.`;
+    if (protocol) {
+      base += `\n\nCOACHING PROTOCOL (behavioral rules set by the patient's human coach — ALWAYS follow these):\n${protocol}`;
+    }
     if (planInstructions) {
       base += `\n\nACTIVE COACHING PLAN INSTRUCTIONS (set by the patient's human coach — ALWAYS respect these):\n${planInstructions}`;
     }
@@ -630,11 +633,14 @@ Keep it under 2 sentences. Be encouraging, not pushy. Don't use emojis.`;
     return base;
   }
 
-  private async getStyleInstructions(userId: string): Promise<string> {
+  private async getPatientAIProfile(userId: string): Promise<{ style: string; protocol: string }> {
     const profile = await this.prisma.patientProfileAI.findUnique({
       where: { patientId: userId },
     });
-    return profile?.styleInstructions || '';
+    return {
+      style: profile?.styleInstructions || '',
+      protocol: profile?.coachingProtocol || '',
+    };
   }
 
   private async getActivePlanInstructions(userId: string): Promise<string | undefined> {

@@ -976,12 +976,21 @@ const TYPE_LABELS: Record<string, { label: string; schedule: string }> = {
   pattern_insight: { label: 'Pattern Insight', schedule: 'Monday 10:00 UTC' },
 };
 
+const DEFAULT_PROTOCOL = `- Recordatorio de comidas a las 11:00 y 15:00
+- Resumen diario a las 21:00 con balance calórico
+- Si no ha registrado comida antes de las 14:00, enviar check-in amigable
+- Celebrar streaks (3, 7, 14, 30 días consecutivos)
+- Los lunes revisar metas de la semana`;
+
 function CoachingTab({ patientId }: { patientId: string }) {
   const [logs, setLogs] = useState<CoachingLogEntry[]>([]);
   const [style, setStyle] = useState('');
   const [savedStyle, setSavedStyle] = useState('');
+  const [protocol, setProtocol] = useState('');
+  const [savedProtocol, setSavedProtocol] = useState('');
   const [loadingLogs, setLoadingLogs] = useState(true);
   const [savingStyle, setSavingStyle] = useState(false);
+  const [savingProtocol, setSavingProtocol] = useState(false);
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
 
   useEffect(() => {
@@ -989,14 +998,19 @@ function CoachingTab({ patientId }: { patientId: string }) {
   }, [patientId]);
 
   async function loadData() {
-    const [logsRes, styleRes] = await Promise.all([
+    const [logsRes, styleRes, protocolRes] = await Promise.all([
       api.get<CoachingLogEntry[]>(`/api/coach/patients/${patientId}/coaching-logs?days=30`),
       api.get<string>(`/api/coach/patients/${patientId}/style`),
+      api.get<string>(`/api/coach/patients/${patientId}/protocol`),
     ]);
     if (logsRes.success && logsRes.data) setLogs(logsRes.data);
     if (styleRes.success && styleRes.data != null) {
       setStyle(styleRes.data);
       setSavedStyle(styleRes.data);
+    }
+    if (protocolRes.success && protocolRes.data != null) {
+      setProtocol(protocolRes.data);
+      setSavedProtocol(protocolRes.data);
     }
     setLoadingLogs(false);
   }
@@ -1006,6 +1020,17 @@ function CoachingTab({ patientId }: { patientId: string }) {
     const res = await api.patch(`/api/coach/patients/${patientId}/style`, { styleInstructions: style });
     if (res.success) setSavedStyle(style);
     setSavingStyle(false);
+  }
+
+  async function saveProtocol() {
+    setSavingProtocol(true);
+    const res = await api.patch(`/api/coach/patients/${patientId}/protocol`, { coachingProtocol: protocol });
+    if (res.success) setSavedProtocol(protocol);
+    setSavingProtocol(false);
+  }
+
+  function loadTemplate() {
+    setProtocol((prev) => prev ? prev + '\n' + DEFAULT_PROTOCOL : DEFAULT_PROTOCOL);
   }
 
   async function handleDislike(logId: string) {
@@ -1050,6 +1075,55 @@ function CoachingTab({ patientId }: { patientId: string }) {
             {savingStyle ? 'Guardando...' : 'Guardar estilo'}
           </button>
         )}
+      </div>
+
+      {/* Coaching Protocol */}
+      <div className="rounded-xl bg-white/5 border border-white/10 p-5">
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="font-semibold">Protocolo de coaching</h3>
+          {!protocol && (
+            <button
+              onClick={loadTemplate}
+              className="text-xs text-nova-primary hover:text-nova-primary/80 transition-colors"
+            >
+              Cargar template base
+            </button>
+          )}
+        </div>
+        <p className="text-xs text-white/40 mb-3">
+          Reglas de comportamiento para los mensajes automaticos. Define cuando y como Nova debe interactuar con este paciente.
+        </p>
+        <textarea
+          value={protocol}
+          onChange={(e) => {
+            setProtocol(e.target.value);
+            e.target.style.height = 'auto';
+            e.target.style.height = e.target.scrollHeight + 'px';
+          }}
+          onFocus={(e) => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
+          placeholder={`Ej:\n- Si es su primera semana, pregúntale cómo se está adaptando\n- Tiene fasting hasta la 1pm, no mencionar desayuno\n- Los miércoles tiene entrenamiento, pregúntale cómo le fue\n- Si lleva 2 días sin registrar, enviar motivación extra`}
+          className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white text-sm placeholder-white/30 resize-none overflow-hidden focus:outline-none focus:ring-1 focus:ring-nova-primary"
+          rows={5}
+        />
+        <div className="flex items-center gap-2 mt-2">
+          {protocol !== savedProtocol && (
+            <button
+              onClick={saveProtocol}
+              disabled={savingProtocol}
+              className="px-4 py-1.5 bg-nova-primary hover:bg-nova-primary/90 disabled:opacity-50 rounded-lg text-sm font-medium transition-colors"
+            >
+              {savingProtocol ? 'Guardando...' : 'Guardar protocolo'}
+            </button>
+          )}
+          {protocol && (
+            <button
+              onClick={loadTemplate}
+              className="text-xs text-white/30 hover:text-white/50 transition-colors"
+            >
+              + Agregar template base
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Automated Messages */}

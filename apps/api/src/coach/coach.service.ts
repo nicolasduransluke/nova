@@ -1056,6 +1056,23 @@ export class CoachService {
     return profile?.styleInstructions || '';
   }
 
+  async getPatientProtocol(coachId: string, patientId: string) {
+    await this.verifyCoachAccess(coachId, patientId);
+    const profile = await this.prisma.patientProfileAI.findUnique({
+      where: { patientId },
+    });
+    return profile?.coachingProtocol || '';
+  }
+
+  async updatePatientProtocol(coachId: string, patientId: string, coachingProtocol: string) {
+    await this.verifyCoachAccess(coachId, patientId);
+    return this.prisma.patientProfileAI.upsert({
+      where: { patientId },
+      update: { coachingProtocol },
+      create: { patientId, coachingProtocol },
+    });
+  }
+
   private async calculatePlanResults(plan: any) {
     const goals = plan.goals as any;
 

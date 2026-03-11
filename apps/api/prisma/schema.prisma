@@ -273,7 +273,8 @@ model PatientProfileAI {
   behavioralData    Json      @default("{}") @map("behavioral_data") // Layer 1: auto-generated weekly
   coachInsights     Json      @default("[]") @map("coach_insights")  // Layer 3: explicit coach knowledge
   coachLearnings    Json      @default("{}") @map("coach_learnings") // Layer 2: auto from plan history
-  styleInstructions String    @default("") @map("style_instructions") // Coach's AI communication style for this patient
+  styleInstructions    String    @default("") @map("style_instructions") // Coach's AI communication style for this patient
+  coachingProtocol     String    @default("") @map("coaching_protocol")  // Coach's behavioral rules for automated messages
   lastAnalyzedAt    DateTime? @map("last_analyzed_at")
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
