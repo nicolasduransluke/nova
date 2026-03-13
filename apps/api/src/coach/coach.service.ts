@@ -1238,9 +1238,13 @@ Respond in the same language the coach uses. Be analytical, specific with number
 
     // Recent calorie history
     if (recentHistory.length > 0) {
-      const historyLines = recentHistory.slice(0, 7).map((d: any) =>
-        `${d.date}: ${d.totalIntake ?? 0} kcal intake, ${d.totalBurn ?? 0} kcal burn`
-      );
+      const historyLines = recentHistory.slice(0, 7).map((d: any) => {
+        const intake = d.summary?.intake ?? 0;
+        const burn = d.summary?.burn ?? 0;
+        const deficit = d.summary?.deficit ?? 0;
+        const target = d.summary?.targetDeficit ?? 0;
+        return `${d.date}: ${intake} kcal intake, ${burn} kcal burn, deficit ${deficit}/${target} kcal`;
+      });
       parts.push(`## Last 7 Days\n${historyLines.join('\n')}`);
     }
 
