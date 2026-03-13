@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
@@ -32,7 +32,7 @@ interface ChatMsg {
   createdAt: string;
 }
 
-type Tab = 'overview' | 'plan' | 'history' | 'weight' | 'chat' | 'coaching';
+type Tab = 'overview' | 'plan' | 'history' | 'weight' | 'chat' | 'coaching' | 'coach-chat';
 
 export default function PatientDetailPage() {
   const { patientId } = useParams<{ patientId: string }>();
@@ -102,6 +102,7 @@ export default function PatientDetailPage() {
     { key: 'weight', label: 'Weight' },
     { key: 'chat', label: 'Chat Log' },
     { key: 'coaching', label: 'Coaching AI' },
+    { key: 'coach-chat', label: 'Chat con Nova' },
   ];
 
   return (
@@ -149,6 +150,7 @@ export default function PatientDetailPage() {
       {tab === 'weight' && <WeightTab weightHistory={weightHistory} profile={profile} />}
       {tab === 'chat' && <ChatTab messages={messages} />}
       {tab === 'coaching' && <CoachingTab patientId={patientId} />}
+      {tab === 'coach-chat' && <CoachChatTab patientId={patientId} />}
     </div>
   );
 }
@@ -1313,6 +1315,135 @@ function CoachingTab({ patientId }: { patientId: string }) {
           <p><span className="text-nova-primary">pattern</span> - Análisis semanal de patrones</p>
           <p><span className="text-nova-primary">weight</span> - Celebrar hitos de peso</p>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Coach <> AI Chat Tab ────────────────────────────────
+
+interface CoachChatMsg {
+  id: string;
+  role: 'coach' | 'ai';
+  content: string;
+  createdAt: string;
+}
+
+function CoachChatTab({ patientId }: { patientId: string }) {
+  const [messages, setMessages] = useState<CoachChatMsg[]>([]);
+  const [input, setInput] = useState('');
+  const [sending, setSending] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    loadHistory();
+  }, [patientId]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  async function loadHistory() {
+    const res = await api.get<CoachChatMsg[]>(`/api/coach/patients/${patientId}/chat?limit=50`);
+    if (res.success && res.data) setMessages(res.data.reverse());
+    setLoading(false);
+  }
+
+  async function send() {
+    if (!input.trim() || sending) return;
+    const text = input.trim();
+    setInput('');
+    setSending(true);
+
+    // Optimistic: add coach message
+    const tempId = `temp-${Date.now()}`;
+    setMessages((prev) => [...prev, { id: tempId, role: 'coach', content: text, createdAt: new Date().toISOString() }]);
+
+    const res = await api.post<{ message: string }>(`/api/coach/patients/${patientId}/chat`, { message: text });
+    if (res.success && res.data) {
+      setMessages((prev) => [...prev, { id: `ai-${Date.now()}`, role: 'ai', content: res.data!.message, createdAt: new Date().toISOString() }]);
+    }
+    setSending(false);
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-32">
+        <div className="h-6 w-6 border-2 border-nova-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-[calc(100vh-220px)]">
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto space-y-3 mb-4 pr-1">
+        {messages.length === 0 && (
+          <div className="text-center py-12">
+            <p className="text-white/40 text-sm mb-2">Chatea con Nova sobre este paciente.</p>
+            <p className="text-white/30 text-xs">
+              Pregunta sobre su progreso, pide análisis, o da instrucciones para personalizar el coaching.
+            </p>
+          </div>
+        )}
+        {messages.map((msg) => (
+          <div
+            key={msg.id}
+            className={`flex ${msg.role === 'coach' ? 'justify-end' : 'justify-start'}`}
+          >
+            <div
+              className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm ${
+                msg.role === 'coach'
+                  ? 'bg-nova-primary text-white rounded-br-sm'
+                  : 'bg-white/10 text-white/90 rounded-bl-sm'
+              }`}
+            >
+              <p className="whitespace-pre-wrap">{msg.content}</p>
+              <p className={`text-[10px] mt-1 ${msg.role === 'coach' ? 'text-white/50' : 'text-white/30'}`}>
+                {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </p>
+            </div>
+          </div>
+        ))}
+        {sending && (
+          <div className="flex justify-start">
+            <div className="bg-white/10 rounded-2xl rounded-bl-sm px-4 py-3">
+              <div className="flex gap-1">
+                <div className="h-2 w-2 bg-white/30 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                <div className="h-2 w-2 bg-white/30 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                <div className="h-2 w-2 bg-white/30 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+              </div>
+            </div>
+          </div>
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Input */}
+      <div className="flex gap-2">
+        <textarea
+          value={input}
+          onChange={(e) => {
+            setInput(e.target.value);
+            e.target.style.height = 'auto';
+            e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+          }}
+          placeholder="Pregunta sobre el paciente, pide análisis, da instrucciones..."
+          className="flex-1 px-4 py-3 bg-white/5 border border-white/20 rounded-xl text-white text-sm placeholder-white/30 resize-none overflow-hidden focus:outline-none focus:ring-1 focus:ring-nova-primary"
+          rows={1}
+          disabled={sending}
+        />
+        <button
+          onClick={send}
+          disabled={sending || !input.trim()}
+          className="px-4 py-3 bg-nova-primary hover:bg-nova-primary/90 disabled:opacity-50 rounded-xl text-sm font-medium transition-colors"
+        >
+          Enviar
+        </button>
       </div>
     </div>
   );

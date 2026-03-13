@@ -245,6 +245,28 @@ export class CoachController {
     return ok(await this.coachService.updatePatientProtocol(user.sub, patientId, body.coachingProtocol));
   }
 
+  // ─── Coach <> AI Chat ───────────────────────────────────
+
+  @Get('patients/:patientId/chat')
+  @Roles('coach')
+  async getCoachChat(
+    @CurrentUser() user: JwtPayload,
+    @Param('patientId') patientId: string,
+    @Query('limit') limit?: string,
+  ) {
+    return ok(await this.coachService.getCoachChatHistory(user.sub, patientId, Number(limit) || 50));
+  }
+
+  @Post('patients/:patientId/chat')
+  @Roles('coach')
+  async sendCoachChat(
+    @CurrentUser() user: JwtPayload,
+    @Param('patientId') patientId: string,
+    @Body() body: { message: string },
+  ) {
+    return ok(await this.coachService.sendCoachChat(user.sub, patientId, body.message));
+  }
+
   // ─── Patient endpoints ────────────────────────────────────
 
   @Get('my-coach')

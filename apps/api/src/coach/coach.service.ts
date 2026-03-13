@@ -12,6 +12,7 @@ import { generateId } from '@nova/utils';
 import { PrismaService } from '../infrastructure/database/prisma.service';
 import { HistoryService } from '../history/history.service';
 import { PushNotificationService } from '../coaching/push-notification.service';
+import { ClaudeClientService, ClaudeMessage } from '../claude-client/claude-client.service';
 
 @Injectable()
 export class CoachService {
@@ -21,6 +22,7 @@ export class CoachService {
     private readonly prisma: PrismaService,
     private readonly historyService: HistoryService,
     private readonly pushNotificationService: PushNotificationService,
+    private readonly claudeClient: ClaudeClientService,
   ) {}
 
   // ─── Invitations ───────────────────────────────────────────
@@ -1121,6 +1123,137 @@ export class CoachService {
   }
 
   // ─── Helpers ──────────────────────────────────────────────
+
+  // ─── Coach <> AI Chat ─────────────────────────────────────
+
+  async getCoachChatHistory(coachId: string, patientId: string, limit: number = 50) {
+    await this.verifyCoachAccess(coachId, patientId);
+    return this.prisma.coachChat.findMany({
+      where: { coachId, patientId },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+  }
+
+  async sendCoachChat(coachId: string, patientId: string, message: string) {
+    await this.verifyCoachAccess(coachId, patientId);
+
+    // Save coach message
+    await this.prisma.coachChat.create({
+      data: { id: generateId(), coachId, patientId, role: 'coach', content: message },
+    });
+
+    // Build context for AI
+    const [patient, profile, plan, aiProfile, recentHistory, recentMessages, chatHistory] = await Promise.all([
+      this.prisma.user.findUnique({ where: { id: patientId }, select: { name: true, email: true, createdAt: true } }),
+      this.prisma.profile.findUnique({ where: { userId: patientId } }),
+      this.prisma.coachingPlan.findFirst({ where: { patientId, status: 'active' } }),
+      this.prisma.patientProfileAI.findUnique({ where: { patientId } }),
+      this.historyService.getDailyHistory(patientId, 7),
+      this.prisma.chatMessage.findMany({
+        where: { userId: patientId },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+        select: { content: true, sender: true, createdAt: true },
+      }),
+      this.prisma.coachChat.findMany({
+        where: { coachId, patientId },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }),
+    ]);
+
+    // Build system prompt with full patient context
+    const systemPrompt = this.buildCoachChatSystemPrompt(patient, profile, plan, aiProfile, recentHistory, recentMessages);
+
+    // Build conversation history
+    const conversationHistory: ClaudeMessage[] = chatHistory
+      .reverse()
+      .slice(0, -1) // exclude the message we just saved (it's the current prompt)
+      .map((m) => ({
+        role: m.role === 'coach' ? 'user' as const : 'assistant' as const,
+        content: m.content,
+      }));
+
+    // Generate AI response
+    const aiResponse = await this.claudeClient.generateResponse(message, {
+      systemPrompt,
+      maxTokens: 800,
+      temperature: 0.7,
+      conversationHistory,
+    });
+
+    // Save AI response
+    await this.prisma.coachChat.create({
+      data: { id: generateId(), coachId, patientId, role: 'ai', content: aiResponse },
+    });
+
+    return { message: aiResponse };
+  }
+
+  private buildCoachChatSystemPrompt(
+    patient: any, profile: any, plan: any, aiProfile: any,
+    recentHistory: any[], recentMessages: any[],
+  ): string {
+    const parts: string[] = [
+      `You are NOVA, an AI coaching assistant. You are speaking with a HUMAN COACH about their patient.
+Help the coach understand their patient's progress, suggest strategies, and answer questions about the patient's data.
+Respond in the same language the coach uses. Be analytical, specific with numbers, and actionable.`,
+    ];
+
+    // Patient info
+    if (patient) {
+      parts.push(`\n## Patient: ${patient.name}`);
+    }
+
+    // Profile
+    if (profile) {
+      parts.push(`## Profile
+- Weight: ${profile.weight} kg | Goal: ${profile.goalWeight ?? '—'} kg
+- Height: ${profile.height} cm | Age: ${profile.age} | Sex: ${profile.sex}
+- Activity: ${profile.activityLevel} | Objective: ${profile.objective}
+- Weekly goal: ${profile.weeklyGoal ?? '—'} kg/week`);
+    }
+
+    // Active plan
+    if (plan) {
+      const goals = plan.goals as Record<string, any>;
+      const planParts: string[] = [];
+      if (goals.dailyCalories) planParts.push(`Calories: ${goals.dailyCalories} kcal`);
+      if (goals.weeklyWorkouts) planParts.push(`Workouts: ${goals.weeklyWorkouts}/week`);
+      if (goals.proteinGrams) planParts.push(`Protein: ${goals.proteinGrams}g`);
+      if (plan.instructions) planParts.push(`Instructions: ${plan.instructions}`);
+      parts.push(`## Active Plan\n${planParts.join(' | ')}`);
+    }
+
+    // Current protocol & style
+    if (aiProfile) {
+      if (aiProfile.coachingProtocol) {
+        parts.push(`## Current Protocol\n${aiProfile.coachingProtocol}`);
+      }
+      if (aiProfile.styleInstructions) {
+        parts.push(`## Communication Style\n${aiProfile.styleInstructions}`);
+      }
+    }
+
+    // Recent calorie history
+    if (recentHistory.length > 0) {
+      const historyLines = recentHistory.slice(0, 7).map((d: any) =>
+        `${d.date}: ${d.totalIntake ?? 0} kcal intake, ${d.totalBurn ?? 0} kcal burn`
+      );
+      parts.push(`## Last 7 Days\n${historyLines.join('\n')}`);
+    }
+
+    // Recent patient messages (last 10)
+    if (recentMessages.length > 0) {
+      const msgLines = recentMessages.slice(0, 10).reverse().map((m: any) =>
+        `[${m.sender}] ${m.content.substring(0, 150)}`
+      );
+      parts.push(`## Recent Patient Chat\n${msgLines.join('\n')}`);
+    }
+
+    return parts.join('\n\n');
+  }
 
   private async verifyCoachAccess(coachId: string, patientId: string) {
     const relationship = await this.prisma.coachPatient.findUnique({

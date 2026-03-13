@@ -6,9 +6,10 @@ import { PushNotificationService } from '../coaching/push-notification.service';
 import { DatabaseModule } from '../infrastructure/database/database.module';
 import { HistoryModule } from '../history/history.module';
 import { AuthModule } from '../auth/auth.module';
+import { ClaudeClientModule } from '../claude-client/claude-client.module';
 
 @Module({
-  imports: [DatabaseModule, HistoryModule, AuthModule],
+  imports: [DatabaseModule, HistoryModule, AuthModule, ClaudeClientModule],
   controllers: [CoachController, CoachPublicController],
   providers: [CoachService, PushNotificationService],
   exports: [CoachService],

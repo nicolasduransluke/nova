@@ -51,6 +51,8 @@ model User {
   coachPlans       CoachingPlan[]    @relation("CoachPlans")
   patientPlans     CoachingPlan[]    @relation("PatientPlans")
   patientAIProfile PatientProfileAI? @relation("PatientAIProfile")
+  coachChats        CoachChat[]       @relation("CoachChats")
+  coachChatPatient  CoachChat[]       @relation("CoachChatPatient")
 
   // Indexes
   @@index([provider, providerId])
@@ -282,4 +284,24 @@ model PatientProfileAI {
   patient User @relation("PatientAIProfile", fields: [patientId], references: [id], onDelete: Cascade)
 
   @@map("patient_profiles_ai")
+}
+
+// ============================================
+// Coach <> AI Chat Domain
+// ============================================
+
+model CoachChat {
+  id        String   @id @default(uuid())
+  coachId   String   @map("coach_id")
+  patientId String   @map("patient_id")
+  role      String   // coach, ai
+  content   String
+  metadata  Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  coach   User @relation("CoachChats", fields: [coachId], references: [id], onDelete: Cascade)
+  patient User @relation("CoachChatPatient", fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([coachId, patientId, createdAt])
+  @@map("coach_chats")
 }
