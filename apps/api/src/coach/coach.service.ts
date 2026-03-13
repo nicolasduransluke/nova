@@ -1144,12 +1144,19 @@ export class CoachService {
     });
 
     // Build context for AI
-    const [patient, profile, plan, aiProfile, recentHistory, recentMessages, chatHistory] = await Promise.all([
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const [patient, profile, plan, aiProfile, recentHistory, recentEntries, recentMessages, chatHistory] = await Promise.all([
       this.prisma.user.findUnique({ where: { id: patientId }, select: { name: true, email: true, createdAt: true } }),
       this.prisma.profile.findUnique({ where: { userId: patientId } }),
       this.prisma.coachingPlan.findFirst({ where: { patientId, status: 'active' } }),
       this.prisma.patientProfileAI.findUnique({ where: { patientId } }),
       this.historyService.getDailyHistory(patientId, 7),
+      this.prisma.calorieEntry.findMany({
+        where: { userId: patientId, type: 'intake', date: { gte: sevenDaysAgo } },
+        orderBy: { date: 'desc' },
+        take: 30,
+        select: { date: true, description: true, calories: true, items: true },
+      }),
       this.prisma.chatMessage.findMany({
         where: { userId: patientId },
         orderBy: { createdAt: 'desc' },
@@ -1164,7 +1171,7 @@ export class CoachService {
     ]);
 
     // Build system prompt with full patient context
-    const systemPrompt = this.buildCoachChatSystemPrompt(patient, profile, plan, aiProfile, recentHistory, recentMessages);
+    const systemPrompt = this.buildCoachChatSystemPrompt(patient, profile, plan, aiProfile, recentHistory, recentMessages, recentEntries);
 
     // Build conversation history
     const conversationHistory: ClaudeMessage[] = chatHistory
@@ -1193,7 +1200,7 @@ export class CoachService {
 
   private buildCoachChatSystemPrompt(
     patient: any, profile: any, plan: any, aiProfile: any,
-    recentHistory: any[], recentMessages: any[],
+    recentHistory: any[], recentMessages: any[], recentEntries?: any[],
   ): string {
     const parts: string[] = [
       `You are NOVA, an AI coaching assistant. You are speaking with a HUMAN COACH about their patient.
@@ -1246,6 +1253,23 @@ Respond in the same language the coach uses. Be analytical, specific with number
         return `${d.date}: ${intake} kcal intake, ${burn} kcal burn, deficit ${deficit}/${target} kcal`;
       });
       parts.push(`## Last 7 Days\n${historyLines.join('\n')}`);
+    }
+
+    // Food entries with macros
+    if (recentEntries && recentEntries.length > 0) {
+      const entryLines = recentEntries.slice(0, 20).map((e: any) => {
+        const date = new Date(e.date).toISOString().split('T')[0];
+        const items = (e.items as any[]) || [];
+        const macros = items.reduce((acc: any, item: any) => {
+          acc.protein += item.protein || 0;
+          acc.carbs += item.carbs || 0;
+          acc.fat += item.fat || 0;
+          return acc;
+        }, { protein: 0, carbs: 0, fat: 0 });
+        const itemNames = items.map((i: any) => i.name).join(', ');
+        return `${date}: ${e.description || itemNames} (${e.calories} kcal | P:${Math.round(macros.protein)}g C:${Math.round(macros.carbs)}g F:${Math.round(macros.fat)}g)`;
+      });
+      parts.push(`## Recent Food Entries (with macros)\n${entryLines.join('\n')}`);
     }
 
     // Recent patient messages (last 10)
