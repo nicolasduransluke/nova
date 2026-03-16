@@ -62,6 +62,7 @@ export interface IntegratorInput extends AgentInput {
   hasDefaultProfileData?: boolean; // true if height=170, age=30 (default values)
   language?: string; // explicit language from client ('es' | 'en')
   coachingContext?: CoachingContext;
+  daysAgo?: number; // retroactive entry: 1=yesterday, 2=day before, etc.
 }
 
 @Injectable()
@@ -181,7 +182,14 @@ A professional coach has set a specific plan for this patient${dailyCal ? ` with
     const lines: string[] = [];
 
     if (intent === 'meal_log') {
-      lines.push(isSpanish ? 'Registrado:' : 'Logged:');
+      if (input.daysAgo && input.daysAgo > 0) {
+        const pastDate = new Date();
+        pastDate.setDate(pastDate.getDate() - input.daysAgo);
+        const dateStr = pastDate.toLocaleDateString(isSpanish ? 'es' : 'en', { weekday: 'long', day: 'numeric', month: 'long' });
+        lines.push(isSpanish ? `Registrado para ${dateStr}:` : `Logged for ${dateStr}:`);
+      } else {
+        lines.push(isSpanish ? 'Registrado:' : 'Logged:');
+      }
       if (items.length > 0) {
         items.forEach((item) => {
           lines.push(`- ${item.name}: ~${item.calories} kcal`);
@@ -193,7 +201,14 @@ A professional coach has set a specific plan for this patient${dailyCal ? ` with
       }
     } else {
       // activity_log
-      lines.push(isSpanish ? 'Actividad registrada:' : 'Activity logged:');
+      if (input.daysAgo && input.daysAgo > 0) {
+        const pastDate = new Date();
+        pastDate.setDate(pastDate.getDate() - input.daysAgo);
+        const dateStr = pastDate.toLocaleDateString(isSpanish ? 'es' : 'en', { weekday: 'long', day: 'numeric', month: 'long' });
+        lines.push(isSpanish ? `Actividad registrada para ${dateStr}:` : `Activity logged for ${dateStr}:`);
+      } else {
+        lines.push(isSpanish ? 'Actividad registrada:' : 'Activity logged:');
+      }
       if (items.length > 0) {
         items.forEach((item) => {
           lines.push(`- ${item.name}: ~${item.calories} kcal`);
@@ -205,7 +220,8 @@ A professional coach has set a specific plan for this patient${dailyCal ? ` with
       }
     }
 
-    if (dailySummary) {
+    // Only show today's summary for current-day entries, not retroactive ones
+    if (dailySummary && (!input.daysAgo || input.daysAgo === 0)) {
       const planGoalCal = input.coachingContext
         ? (input.coachingContext.plan.goals as any).dailyCalories as number | undefined
         : undefined;

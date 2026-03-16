@@ -196,6 +196,9 @@ export class OrchestratorService {
         { context, message: request.content, extractedData },
       );
 
+      // Support retroactive logging: "ayer almorcé X" → daysAgo: 1
+      const daysAgo = Math.min(Math.max(Math.round(Number(extractedData.daysAgo) || 0), 0), 7);
+
       // Step 7: If meal_log or activity_log, create CalorieEntry (auto-confirmed)
       if (intent === 'meal_log' || intent === 'activity_log') {
         const items: CalorieEntryItem[] = (extractedData.items as CalorieEntryItem[]) ||
@@ -211,9 +214,14 @@ export class OrchestratorService {
           ? items.map(i => i.name).join(', ')
           : request.content;
 
+        const entryDate = new Date();
+        if (daysAgo > 0) {
+          entryDate.setDate(entryDate.getDate() - daysAgo);
+        }
+
         await deps.createCalorieEntry({
           userId: request.userId,
-          date: new Date(),
+          date: entryDate,
           type: entryType,
           description,
           calories: Math.round(totalCalories),
@@ -537,6 +545,7 @@ export class OrchestratorService {
         hasDefaultProfileData,
         language: request.language,
         coachingContext,
+        daysAgo,
       };
 
       const response = await this.integratorAgent.integrate(integratorInput);
