@@ -608,6 +608,9 @@ export class CoachService {
 
     this.logger.log(`Coach ${coachId} created plan v${version} for patient ${patientId}`);
 
+    // Sync plan goals to patient profile so deficit calculations use the correct targets
+    await this.syncPlanGoalsToProfile(patientId, data.goals);
+
     // Send a chat message to the patient notifying them of the new plan
     this.notifyPatientOfPlan(patientId, coachId, plan).catch((err) =>
       this.logger.error(`Failed to notify patient of new plan: ${err}`),
@@ -761,6 +764,11 @@ export class CoachService {
       where: { id: planId },
       data: { ...data, goals: data.goals ? (data.goals as any) : undefined },
     });
+
+    // Sync updated goals to patient profile
+    if (data.goals) {
+      await this.syncPlanGoalsToProfile(patientId, data.goals);
+    }
 
     // Notify patient if goals or instructions changed (not coachNotes-only edits)
     const goalsChanged = data.goals && JSON.stringify(data.goals) !== JSON.stringify(oldGoals);
@@ -1288,6 +1296,29 @@ RESPONSE RULES:
     }
 
     return parts.join('\n\n');
+  }
+
+  private async syncPlanGoalsToProfile(patientId: string, goals: Record<string, unknown>) {
+    const updates: Record<string, unknown> = {};
+
+    if (goals.weeklyWeightGoal != null) {
+      updates.weeklyGoal = Number(goals.weeklyWeightGoal);
+    }
+    if (goals.goalWeight != null) {
+      updates.goalWeight = Number(goals.goalWeight);
+    }
+
+    if (Object.keys(updates).length === 0) return;
+
+    const profile = await this.prisma.profile.findUnique({ where: { userId: patientId } });
+    if (!profile) return;
+
+    await this.prisma.profile.update({
+      where: { userId: patientId },
+      data: updates,
+    });
+
+    this.logger.log(`Synced plan goals to profile for patient ${patientId}: ${JSON.stringify(updates)}`);
   }
 
   private async verifyCoachAccess(coachId: string, patientId: string) {
