@@ -586,6 +586,23 @@ export class CoachService {
       });
     }
 
+    // Auto-derive weeklyWeightGoal from goalWeight if not explicitly set
+    const goals = { ...data.goals };
+    if (goals.goalWeight && !goals.weeklyWeightGoal) {
+      const [profile, latestWeight] = await Promise.all([
+        this.prisma.profile.findUnique({ where: { userId: patientId } }),
+        this.prisma.weightLog.findFirst({ where: { userId: patientId }, orderBy: { date: 'desc' } }),
+      ]);
+      const currentWeight = latestWeight?.weight ?? profile?.weight;
+      if (currentWeight && currentWeight > Number(goals.goalWeight)) {
+        const weightToLose = currentWeight - Number(goals.goalWeight);
+        // Default to 4 weeks if no explicit timeline
+        const weeksRemaining = goals.targetWeeks ? Number(goals.targetWeeks) : 4;
+        goals.weeklyWeightGoal = Math.round((weightToLose / weeksRemaining) * 10) / 10;
+        this.logger.log(`Auto-derived weeklyWeightGoal=${goals.weeklyWeightGoal} kg/wk from goalWeight=${goals.goalWeight}, current=${currentWeight}, weeks=${weeksRemaining}`);
+      }
+    }
+
     // Get next version number
     const lastPlan = await this.prisma.coachingPlan.findFirst({
       where: { patientId },
@@ -600,7 +617,7 @@ export class CoachService {
         version,
         weekStart,
         weekEnd,
-        goals: data.goals as any,
+        goals: goals as any,
         instructions: data.instructions || '',
         coachNotes: data.coachNotes || '',
       },
@@ -609,7 +626,7 @@ export class CoachService {
     this.logger.log(`Coach ${coachId} created plan v${version} for patient ${patientId}`);
 
     // Sync plan goals to patient profile so deficit calculations use the correct targets
-    await this.syncPlanGoalsToProfile(patientId, data.goals);
+    await this.syncPlanGoalsToProfile(patientId, goals);
 
     // Send a chat message to the patient notifying them of the new plan
     this.notifyPatientOfPlan(patientId, coachId, plan).catch((err) =>
@@ -879,6 +896,21 @@ export class CoachService {
     const goals = plan.goals as any;
     const now = new Date();
 
+    // Derive effective daily calorie target
+    let effectiveDailyCalories: number | null = goals.dailyCalories || null;
+
+    if (!effectiveDailyCalories) {
+      // Derive from patient profile TDEE and weekly weight goal
+      const profile = await this.prisma.profile.findUnique({ where: { userId: patientId } });
+      if (profile) {
+        const tdee = this.calculateTDEE(profile);
+        const weeklyGoal = goals.weeklyWeightGoal || profile.weeklyGoal || 0.5;
+        const dailyDeficit = Math.round((weeklyGoal * 7700) / 7);
+        effectiveDailyCalories = Math.round(tdee - dailyDeficit);
+        this.logger.debug(`Derived dailyCalories for patient ${patientId}: TDEE=${Math.round(tdee)} - deficit=${dailyDeficit} = ${effectiveDailyCalories}`);
+      }
+    }
+
     // Today's data
     const todayStart = new Date(now);
     todayStart.setHours(0, 0, 0, 0);
@@ -921,7 +953,7 @@ export class CoachService {
 
     const daysTracked = dayMap.size;
     const daysOnTarget = [...dayMap.values()].filter(
-      (d) => goals.dailyCalories && d.intake <= goals.dailyCalories * 1.05,
+      (d) => effectiveDailyCalories && d.intake <= effectiveDailyCalories * 1.05,
     ).length;
     const totalIntake = [...dayMap.values()].reduce((s, d) => s + d.intake, 0);
     const avgDailyCalories = daysTracked > 0 ? Math.round(totalIntake / daysTracked) : 0;
@@ -948,9 +980,10 @@ export class CoachService {
         date: todayStart.toISOString().split('T')[0],
         caloriesConsumed,
         caloriesBurned,
-        remaining: (goals.dailyCalories || 0) - caloriesConsumed,
+        remaining: (effectiveDailyCalories || 0) - caloriesConsumed,
         mealCount,
         hasWorkout,
+        dailyCalorieTarget: effectiveDailyCalories,
       },
       week: {
         daysTracked,
@@ -1296,6 +1329,19 @@ RESPONSE RULES:
     }
 
     return parts.join('\n\n');
+  }
+
+  private calculateTDEE(profile: { weight: number; height: number; age: number; sex: string; activityLevel: string }): number {
+    let bmr: number;
+    if (profile.sex === 'male') {
+      bmr = 10 * profile.weight + 6.25 * profile.height - 5 * profile.age + 5;
+    } else {
+      bmr = 10 * profile.weight + 6.25 * profile.height - 5 * profile.age - 161;
+    }
+    const multipliers: Record<string, number> = {
+      sedentary: 1.2, light: 1.375, moderate: 1.55, active: 1.725, very_active: 1.9,
+    };
+    return bmr * (multipliers[profile.activityLevel] || 1.55);
   }
 
   private async syncPlanGoalsToProfile(patientId: string, goals: Record<string, unknown>) {

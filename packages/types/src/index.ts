@@ -404,6 +404,8 @@ export interface CoachingPlanGoals {
   dailyCalories?: number;
   weeklyWorkouts?: number;
   weeklyWeightGoal?: number;
+  goalWeight?: number;
+  targetWeeks?: number;
   proteinTarget?: number;
   waterTarget?: number;
   customGoals?: { label: string; target: string; unit: string }[];
@@ -456,6 +458,7 @@ export interface CoachingPlanProgress {
     remaining: number;
     mealCount: number;
     hasWorkout: boolean;
+    dailyCalorieTarget?: number | null;
   };
   week: {
     daysTracked: number;

@@ -6,6 +6,8 @@ export class CreatePlanDto {
     dailyCalories?: number;
     weeklyWorkouts?: number;
     weeklyWeightGoal?: number;
+    goalWeight?: number;
+    targetWeeks?: number;
     proteinTarget?: number;
     waterTarget?: number;
     customGoals?: { label: string; target: string; unit: string }[];
@@ -31,6 +33,8 @@ export class UpdatePlanDto {
     dailyCalories?: number;
     weeklyWorkouts?: number;
     weeklyWeightGoal?: number;
+    goalWeight?: number;
+    targetWeeks?: number;
     proteinTarget?: number;
     waterTarget?: number;
     customGoals?: { label: string; target: string; unit: string }[];

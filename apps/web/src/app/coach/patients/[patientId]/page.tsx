@@ -503,9 +503,33 @@ function PlanTab({ patientId }: { patientId: string }) {
     const workoutMatch = text.match(/(\d+)\s*(?:cardio|entreno|entrenamiento|sesion|sesiones|workout|ejercicio)/i);
     if (workoutMatch) goals.weeklyWorkouts = parseInt(workoutMatch[1]);
 
-    // Parse weight goal
-    const weightMatch = text.match(/(?:bajar|perder|meta)\s*(?:de\s*)?(-?[\d.]+)\s*(?:kg|kilo)/i);
+    // Parse weekly weight goal (e.g., "bajar 0.5 kg", "perder 1 kg")
+    const weightMatch = text.match(/(?:bajar|perder|meta)\s*(?:de\s*)?(-?[\d.]+)\s*(?:kg|kilo)\s*(?:por\s*semana|\/sem|semanal)?/i);
     if (weightMatch) goals.weeklyWeightGoal = parseFloat(weightMatch[1]);
+
+    // Parse goal weight (e.g., "Pesa 102 kg", "llegar a 95 kg", "meta 80 kg al")
+    const goalWeightMatch = text.match(/(?:pesa|pesar|llegar\s*a|alcanzar|objetivo\s*(?:de)?)\s*(\d{2,3}(?:\.\d)?)\s*(?:kg|kilo)/i);
+    if (goalWeightMatch) goals.goalWeight = parseFloat(goalWeightMatch[1]);
+
+    // Parse target timeline (e.g., "en 4 semanas", "al terminar abril")
+    const weeksMatch = text.match(/(?:en\s*)(\d+)\s*semanas?/i);
+    if (weeksMatch) {
+      goals.targetWeeks = parseInt(weeksMatch[1]);
+    } else {
+      // Try to parse month targets like "al terminar abril", "para mayo"
+      const monthMatch = text.match(/(?:al\s*terminar|para\s*(?:fin(?:ales)?\s*(?:de)?\s*)?|antes\s*de)\s*(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)/i);
+      if (monthMatch) {
+        const months: Record<string, number> = { enero: 0, febrero: 1, marzo: 2, abril: 3, mayo: 4, junio: 5, julio: 6, agosto: 7, septiembre: 8, octubre: 9, noviembre: 10, diciembre: 11 };
+        const targetMonth = months[monthMatch[1].toLowerCase()];
+        if (targetMonth != null) {
+          const now = new Date();
+          let targetDate = new Date(now.getFullYear(), targetMonth + 1, 0); // last day of target month
+          if (targetDate <= now) targetDate = new Date(now.getFullYear() + 1, targetMonth + 1, 0);
+          const weeksRemaining = Math.max(1, Math.round((targetDate.getTime() - now.getTime()) / (7 * 24 * 60 * 60 * 1000)));
+          goals.targetWeeks = weeksRemaining;
+        }
+      }
+    }
 
     // Parse protein
     const proteinMatch = text.match(/(\d+)\s*(?:g|gr|gramos)?\s*(?:de\s*)?prote[ií]na/i);
@@ -513,7 +537,7 @@ function PlanTab({ patientId }: { patientId: string }) {
 
     // Everything that wasn't captured as goals becomes instructions
     let remaining = text;
-    [calMatch, workoutMatch, weightMatch, proteinMatch].forEach((m) => {
+    [calMatch, workoutMatch, weightMatch, goalWeightMatch, proteinMatch].forEach((m) => {
       if (m) remaining = remaining.replace(m[0], '');
     });
 
@@ -640,6 +664,29 @@ function PlanTab({ patientId }: { patientId: string }) {
                   />
                 </div>
               )}
+              {parsedGoals.goalWeight != null && (
+                <div className="flex items-center justify-between">
+                  <span className="text-white/60 text-sm">Peso meta (kg)</span>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={parsedGoals.goalWeight}
+                    onChange={(e) => setParsedGoals({ ...parsedGoals, goalWeight: parseFloat(e.target.value) || 0 })}
+                    className="w-24 px-2 py-1 bg-white/10 border border-white/20 rounded text-white text-sm text-right"
+                  />
+                </div>
+              )}
+              {parsedGoals.targetWeeks != null && (
+                <div className="flex items-center justify-between">
+                  <span className="text-white/60 text-sm">Plazo (semanas)</span>
+                  <input
+                    type="number"
+                    value={parsedGoals.targetWeeks}
+                    onChange={(e) => setParsedGoals({ ...parsedGoals, targetWeeks: parseInt(e.target.value) || 1 })}
+                    className="w-24 px-2 py-1 bg-white/10 border border-white/20 rounded text-white text-sm text-right"
+                  />
+                </div>
+              )}
               {parsedGoals.weeklyWeightGoal != null && (
                 <div className="flex items-center justify-between">
                   <span className="text-white/60 text-sm">Meta peso/sem</span>
@@ -748,6 +795,27 @@ function PlanTab({ patientId }: { patientId: string }) {
                   />
                 </div>
                 <div>
+                  <label className="text-xs text-white/40 block mb-1">Peso meta (kg)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={editGoals.goalWeight ?? ''}
+                    onChange={(e) => setEditGoals({ ...editGoals, goalWeight: e.target.value ? parseFloat(e.target.value) : undefined })}
+                    placeholder="ej: 102"
+                    className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-white/40 block mb-1">Plazo (semanas)</label>
+                  <input
+                    type="number"
+                    value={editGoals.targetWeeks ?? ''}
+                    onChange={(e) => setEditGoals({ ...editGoals, targetWeeks: e.target.value ? parseInt(e.target.value) : undefined })}
+                    placeholder="ej: 4"
+                    className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white text-sm"
+                  />
+                </div>
+                <div>
                   <label className="text-xs text-white/40 block mb-1">Meta peso/sem (kg)</label>
                   <input
                     type="number"
@@ -795,23 +863,28 @@ function PlanTab({ patientId }: { patientId: string }) {
             /* ── View Mode ── */
             <>
               <div className="space-y-3">
-                {(progress.plan.goals as CoachingPlanGoals).dailyCalories != null && (
+                {(progress.today.dailyCalorieTarget || (progress.plan.goals as CoachingPlanGoals).dailyCalories) && (
                   <div>
                     <div className="flex justify-between text-sm mb-1">
-                      <span className="text-white/60">Calorías hoy</span>
+                      <span className="text-white/60">
+                        Calorías hoy
+                        {!(progress.plan.goals as CoachingPlanGoals).dailyCalories && progress.today.dailyCalorieTarget && (
+                          <span className="text-white/30 text-xs ml-1">(derivado del TDEE)</span>
+                        )}
+                      </span>
                       <span className="text-white">
-                        {progress.today.caloriesConsumed} / {(progress.plan.goals as CoachingPlanGoals).dailyCalories} kcal
+                        {progress.today.caloriesConsumed} / {progress.today.dailyCalorieTarget || (progress.plan.goals as CoachingPlanGoals).dailyCalories} kcal
                       </span>
                     </div>
                     <div className="h-2 bg-white/10 rounded-full overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all ${
-                          progress.today.caloriesConsumed <= ((progress.plan.goals as CoachingPlanGoals).dailyCalories || 0)
+                          progress.today.caloriesConsumed <= (progress.today.dailyCalorieTarget || (progress.plan.goals as CoachingPlanGoals).dailyCalories || 0)
                             ? 'bg-emerald-500'
                             : 'bg-red-500'
                         }`}
                         style={{
-                          width: `${Math.min(100, (progress.today.caloriesConsumed / ((progress.plan.goals as CoachingPlanGoals).dailyCalories || 1)) * 100)}%`,
+                          width: `${Math.min(100, (progress.today.caloriesConsumed / (progress.today.dailyCalorieTarget || (progress.plan.goals as CoachingPlanGoals).dailyCalories || 1)) * 100)}%`,
                         }}
                       />
                     </div>
